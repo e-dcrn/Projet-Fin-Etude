@@ -1,0 +1,252 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+\definecolor{projectblue}{HTML}{17365D}
+\definecolor{projectteal}{HTML}{087E8B}
+\usetheme{Madrid}
+\usecolortheme{default}
+\setbeamercolor{structure}{fg=projectblue}
+\setbeamercolor{frametitle}{bg=projectblue,fg=white}
+\setbeamercolor{block title}{bg=projectteal,fg=white}
+\setbeamercolor{block body}{bg=projectteal!7}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.82\paperwidth,ht=2.7ex,dp=1.2ex,leftskip=1em]{author in head/foot}%
+      VAP SSR 2026--2027 \hfill Réunion de lancement -- 6 octobre 2026
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.18\paperwidth,ht=2.7ex,dp=1.2ex,center]{date in head/foot}%
+      \insertframenumber/\inserttotalframenumber
+    \end{beamercolorbox}}%
+}
+\setbeamertemplate{itemize items}[circle]
+
+\title[Démonstrateur ML-NIDS]{Démonstrateur d'attaques contre un ML-NIDS}
+\subtitle{Réunion de début de projet}
+\author{Projet VAP SSR 2026--2027}
+\institute{Encadrant : Gregory Blanc}
+\date{6 octobre 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Notre compréhension du projet}
+  \begin{block}{Objectif}
+    Un démonstrateur pédagogique pour comprendre les attaques contre un ML-NIDS
+    et observer leurs effets.
+  \end{block}
+  \textbf{Livrables attendus}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item Bref état de l'art des attaques contre les ML-NIDS.
+    \item Logiciel de démonstration en trois parties :
+      \begin{enumerate}
+        \setlength{\itemsep}{.5em}
+        \item Choix de l'environnement réseau, façon Packet Tracer.
+        \item Choix du ML-NIDS.
+        \item Choix de l'attaque effectuée.
+      \end{enumerate}
+  \end{itemize}
+  \vfill
+  \begin{block}{Une vue pour comprendre l'attaque}
+    Visualiser son déroulement en direct ou avec une comparaison avant/après.
+  \end{block}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering
+  {\fontsize{54}{64}\selectfont\bfseries\color{projectblue} JIRA\par}
+\end{frame}
+
+\begin{frame}{ML-NIDS et attaques concrètes identifiés}
+  \small
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabularx}{\textwidth}{@{}p{.24\textwidth}Xp{.26\textwidth}@{}}
+    \toprule
+    \textbf{Modèles ciblés} & \textbf{Manipulation adversariale} & \textbf{Papiers sources} \\
+    \midrule
+    KitNET / autoencodeurs, Isolation Forest
+      & Modifier les délais ; ajouter des paquets.
+      & Han (2021), Sharon (2022). \\
+    MLP
+      & Modifier le comportement TCP à partir des caractéristiques importantes.
+      & Okada (2025). \\
+    MLP, CNN, ResCNN, LSTM, attention
+      & Perturbations transférables ou guidées par des requêtes au détecteur.
+      & Mao (2025), Zhang (2022). \\
+    E-GraphSAGE, LineGraphSAGE
+      & Ajouter des communications pour modifier le graphe observé.
+      & Venturi (2024). \\
+    SVM, Random Forest, MLP
+      & Injecter des données mal étiquetées ou modifier les labels d'entraînement.
+      & Venkatesan (2021), Das (2025). \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \small Ces couples modèle--attaque sont des pistes bibliographiques : leur intégration
+  dans le démonstrateur reste à étudier.
+\end{frame}
+
+\begin{frame}{Changer le rythme du trafic pour passer inaperçu}
+  \textbf{Modèles concernés :} KitNET et d'autres détecteurs d'anomalies.
+  \vspace{1em}
+  \begin{block}{Principe}
+    Le détecteur observe la façon dont les paquets circulent.
+    L'attaquant change ce rythme pour que son trafic ressemble davantage
+    à une activité normale.
+  \end{block}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item \textbf{TrafficManipulator :} espacer les envois et ajouter des paquets.
+    \item \textbf{TANTRA :} modifier les délais entre les paquets sans changer leur contenu.
+  \end{itemize}
+  \vfill
+  \textbf{Idée de visualisation :} une chronologie des paquets avant / après,
+  accompagnée du score de détection.
+  \vfill
+  \footnotesize Papiers : \href{https://doi.org/10.1109/JSAC.2021.3087242}{Han et al. (2021), TrafficManipulator}
+  ; \href{https://doi.org/10.1109/TIFS.2022.3201377}{Sharon et al. (2022), TANTRA}.
+\end{frame}
+
+\begin{frame}{Repérer ce que regarde le détecteur, puis l'adapter}
+  \textbf{Modèle concerné :} un réseau de neurones classique (MLP).
+  \vspace{1em}
+  \begin{block}{Principe}
+    Chercher quels aspects d'une communication influencent la décision du modèle,
+    puis les modifier pour rendre l'attaque moins visible.
+  \end{block}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item Exemple étudié : une attaque qui essaie de nombreux mots de passe.
+    \item Changer la manière de se connecter, par exemple en ouvrant
+      une connexion différente à chaque tentative.
+    \item L'objectif reste le même, mais la communication vue par le détecteur change.
+  \end{itemize}
+  \vfill
+  \textbf{Idée de visualisation :} les connexions et les alertes avant / après.
+  \vfill
+  \footnotesize Papier : \href{https://doi.org/10.1007/s10207-025-01016-0}{Okada et al. (2025), Xai-driven black-box adversarial attacks on network intrusion detectors}.
+\end{frame}
+
+\begin{frame}{Chercher une modification qui trompe un réseau de neurones}
+  \textbf{Modèles concernés :} plusieurs types de réseaux de neurones.
+  \vspace{1em}
+  \begin{block}{Deux façons de chercher une évasion}
+    \begin{itemize}
+      \setlength{\itemsep}{.8em}
+      \item \textbf{Sur un autre modèle :} préparer l'attaque sur un modèle accessible,
+        puis essayer de tromper le détecteur cible avec la même modification.
+      \item \textbf{Par essais successifs :} tester des modifications et utiliser les
+        réponses du détecteur pour ajuster l'attaque.
+    \end{itemize}
+  \end{block}
+  \vfill
+  \textbf{Idée de visualisation :} suivre les essais et voir à quel moment
+  une activité malveillante est classée comme normale.
+  \vfill
+  \footnotesize Papiers : \href{https://doi.org/10.1016/j.jnca.2025.104255}{Mao et al. (2025), Exploring transferable adversarial attacks\ldots}
+  \\ \href{https://doi.org/10.1109/TNET.2021.3137084}{Zhang et al. (2022), Adversarial Attacks Against Deep Learning-Based NIDS\ldots}
+\end{frame}
+
+\begin{frame}{Ajouter des communications pour brouiller le contexte}
+  \textbf{Modèles concernés :} réseaux de neurones sur graphes.
+  \vspace{1em}
+  \begin{block}{Principe}
+    Ces modèles regardent aussi qui communique avec qui.
+    L'attaquant ajoute des échanges normaux autour d'une machine compromise
+    pour modifier le contexte observé par le détecteur.
+  \end{block}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item La communication malveillante reste présente.
+    \item De nouvelles communications modifient la représentation du réseau.
+    \item Le modèle peut alors moins bien reconnaître l'activité malveillante.
+  \end{itemize}
+  \vfill
+  \textbf{Idée de visualisation :} les machines et leurs liens avant / après
+  l'ajout des communications.
+  \vfill
+  \footnotesize Papier : \href{https://arxiv.org/abs/2403.11830}{Venturi et al. (2024), Problem space structural adversarial attacks for NIDS based on Graph Neural Networks}.
+\end{frame}
+
+\begin{frame}{Faire apprendre de mauvais exemples au détecteur}
+  \textbf{Modèles concernés :} SVM, forêts d'arbres et réseaux de neurones classiques.
+  \vspace{1em}
+  \begin{block}{Principe : l'empoisonnement}
+    L'attaquant fausse une partie des exemples utilisés pour apprendre.
+    Le détecteur risque alors d'apprendre de mauvaises règles de décision.
+  \end{block}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item Ajouter des exemples trompeurs dans les données d'entraînement.
+    \item Ou changer leur étiquette « normal » / « malveillant ».
+    \item L'effet apparaît après l'entraînement : il faut pouvoir agir sur ses données.
+  \end{itemize}
+  \vfill
+  \textbf{Idée de visualisation :} comparer les erreurs du détecteur entraîné
+  avec des données propres puis avec des données empoisonnées.
+  \vfill
+  \footnotesize Papiers : \href{https://doi.org/10.1109/MILCOM52596.2021.9652916}{Venkatesan et al. (2021), Poisoning Attacks and Data Sanitization Mitigations\ldots}
+  \\ \href{https://doi.org/10.1109/TNSE.2024.3492032}{Das et al. (2025), Poisoning the Well\ldots}
+\end{frame}
+
+\begin{frame}{Récapitulatif : ce qu'il reste à approfondir}
+  \begin{block}{Étudier les attaques trouvées}
+    Comprendre leur fonctionnement précis et leurs conditions d'application.
+  \end{block}
+  \begin{itemize}
+    \setlength{\itemsep}{.8em}
+    \item \textbf{Vérifier la faisabilité :} quels modèles, données et codes
+      peut-on utiliser dans notre démonstrateur ?
+    \item \textbf{Tester les scénarios :} l'attaque trompe-t-elle le détecteur
+      tout en conservant son effet sur le réseau ?
+    \item \textbf{Étoffer la sélection :} chercher d'autres attaques pour varier
+      les mécanismes et les modèles présentés.
+    \item \textbf{Choisir les visualisations :} rendre le principe et le résultat
+      de chaque attaque compréhensibles.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Suite du projet : les jalons prévus}
+  \begin{block}{Jalon actuel}
+    État de l'art des attaques contre les ML-NIDS : organiser les références
+    et rédiger une synthèse comparative.
+  \end{block}
+  \begin{center}
+    {\Large $\downarrow$}
+  \end{center}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{.48\textwidth}
+      \begin{block}{Clarification de l'utilisation de Concap}
+        Préciser son rôle et son utilisation dans le projet.
+      \end{block}
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \begin{block}{En parallèle : maquette de l'architecture logicielle}
+        Représenter les trois parties du logiciel et leurs interactions.
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Discussion avec l'encadrant}
+  \begin{enumerate}
+    \setlength{\itemsep}{1em}
+    \item Le corpus réuni couvre-t-il les principales attentes pour l'état de l'art ?
+    \item Quels articles ou quelles familles d'attaques approfondir en priorité ?
+    \item Quel niveau de détail et quel format attendre pour le bref état de l'art ?
+    %\item Quels points éclaircir sur l'utilisation de Concap ?
+    %\item Quel contenu attendre pour la première maquette de l'architecture logicielle ?
+  \end{enumerate}
+\end{frame}
+
+\end{document}
