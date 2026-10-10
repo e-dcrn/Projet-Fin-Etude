@@ -160,6 +160,7 @@ Rien n'est à configurer pour un usage local. Pour adapter :
 
 | Action                      | Comment                                                                  |
 | --------------------------- | ------------------------------------------------------------------------ |
+| Charger un exemple          | **📂 Exemples de topologies** : topologie prête à l'emploi (du simple switch au réseau d'entreprise avec DMZ et sonde IDS), qui remplace le canvas (confirmation s'il n'est pas vide) et reste entièrement modifiable |
 | Ajouter un équipement       | Glisser un élément de la palette (gauche) sur le canvas : l'icône se pose là où on la lâche |
 | Déplacer                    | Glisser l'équipement sur le canvas                                       |
 | Relier                      | Bouton **🔌 Câble**, puis clic sur un équipement, puis sur un **switch** (ou l'inverse) |
@@ -171,6 +172,7 @@ Rien n'est à configurer pour un usage local. Pour adapter :
 | Ouvrir un terminal          | Cliquer sur un **PC** ou un **serveur** allumé (pastille verte) : son terminal s'ouvre dans un onglet en bas de l'écran (`ping`, `traceroute`, `curl`, `ip route`…) |
 | Capturer le trafic d'un lien | Sélectionner un câble puis **Capturer le trafic** (ou double-clic sur le câble), réseau démarré : vue « Wireshark » dans un onglet du panneau du bas ; le câble capturé est animé |
 | Gérer les onglets du bas    | Un onglet par terminal ou capture, les sessions continuent en arrière-plan ; `×` ferme la session (et arrête ce qui y tourne) ; glisser le bord supérieur du panneau pour le redimensionner |
+| Afficher deux onglets côte à côte | Ouvrir une capture pendant qu'un terminal est affiché divise automatiquement le panneau (terminal à gauche, capture à droite) ; sinon **◫ Diviser**, ou glisser un onglet vers la moitié droite. `→` / `←` sur un onglet le change de volet, la séparation centrale se glisse ; les sessions continuent sans interruption |
 
 ### Modèle : nœuds, réseaux et interfaces
 
@@ -253,6 +255,24 @@ Le serveur refait les mêmes vérifications.
 moteur : vide, il est déduit des adresses des interfaces reliées. `port` (port du switch) est informatif. `position` (coordonnées du canvas, milieu du bord
 supérieur de l'équipement) ne sert qu'à l'affichage.
 
+### Topologies d'exemple
+
+Les exemples du menu **📂 Exemples de topologies** sont des fichiers de `examples/topologies/` : une
+topologie dans ce même format, plus un bloc de présentation ignoré au chargement.
+
+```json
+{
+  "example": { "name": "Deux PC sur un switch", "description": "…", "difficulty": "débutant" },
+  "version": 2, "nodes": [...], "networks": [...], "links": [...]
+}
+```
+
+`difficulty` : `débutant`, `intermédiaire` ou `avancé`. **Ajouter un exemple = déposer un fichier** (l'ordre
+du menu suit les noms de fichiers : `06-….json`). `backend/tests/test_examples.py` vérifie que chaque exemple
+est accepté par le moteur et que toute machine peut joindre toute autre (aller et retour) : lancer `pytest`
+après en avoir ajouté un. Au chargement (`src/utils/deserializeTopology.js`), les adresses et passerelles
+conformes à l'IPAM restent automatiques ; les autres passent en saisie manuelle.
+
 ## Moteur de simulation (backend)
 
 ### Correspondance équipements → Docker
@@ -327,12 +347,15 @@ Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l
 ```
 code/
 ├── index.html / package.json / vite.config.js …
+├── examples/topologies/              # Topologies d'exemple (un fichier JSON v2 par exemple)
 ├── src/
 │   ├── App.jsx, main.jsx, styles/app.css
 │   ├── config/deviceTypes.js         # Catalogue des équipements, valeurs par défaut, services proposés
+│   ├── config/exampleTopologies.js   # Chargement des topologies d'exemple (examples/topologies/*.json)
 │   ├── components/
 │   │   ├── TopologyEditor.jsx        # Assemblage
-│   │   ├── Toolbar.jsx               # Câble, Valider, état du réseau, Arrêter
+│   │   ├── Toolbar.jsx               # Exemples, Câble, Valider, état du réseau, Arrêter
+│   │   ├── ExamplesMenu.jsx          # Menu « Exemples de topologies »
 │   │   ├── Palette.jsx / TopologyCanvas.jsx / DeviceNode.jsx
 │   │   ├── PropertiesPanel.jsx       # Équipement ou câble sélectionné
 │   │   ├── properties/               # Sections du panneau : interfaces, routage, ports, champs
@@ -355,7 +378,8 @@ code/
 │   │   ├── pcap.js                   # Découpage du flux reçu, export .pcap
 │   │   ├── validators.js             # Contrôles par champ et de cohérence globale
 │   │   ├── topologyQueries.js        # Lectures dérivées (interfaces d'un nœud, sous-réseau d'un switch)
-│   │   └── serializeTopology.js      # État React Flow → JSON v2
+│   │   ├── serializeTopology.js      # État React Flow → JSON v2
+│   │   └── deserializeTopology.js    # JSON v2 → état React Flow (chargement d'un exemple)
 │   └── services/topologyApi.js       # Appels HTTP + suivi SSE + URL des terminaux et captures
 └── backend/
     ├── requirements.txt / requirements-dev.txt
@@ -371,7 +395,7 @@ code/
     │   ├── capture.py                # Sessions de capture (tcpdump ↔ WebSocket, découpage pcap)
     │   ├── sessions.py               # Registre des sessions WebSocket (fermeture à l'arrêt)
     │   └── settings.py               # Lecture de devices.toml
-    └── tests/                        # test_planner.py, test_capture.py, test_settings.py (pytest)
+    └── tests/                        # test_planner.py, test_examples.py, test_capture.py, test_settings.py (pytest)
 ```
 
 ### Points d'extension

@@ -1,0 +1,67 @@
+{
+  "example": {
+    "name": "Deux PC sur un switch",
+    "difficulty": "débutant",
+    "description": "Deux postes dans le même sous-réseau 10.0.1.0/24 : le point de départ pour un premier ping."
+  },
+  "version": 2,
+  "generatedAt": "2026-10-10T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "pc-1",
+      "type": "pc",
+      "name": "PC-1",
+      "position": {
+        "x": -240,
+        "y": 0
+      },
+      "config": {
+        "gateway": ""
+      }
+    },
+    {
+      "id": "pc-2",
+      "type": "pc",
+      "name": "PC-2",
+      "position": {
+        "x": 240,
+        "y": 0
+      },
+      "config": {
+        "gateway": ""
+      }
+    }
+  ],
+  "networks": [
+    {
+      "id": "switch-1",
+      "name": "Switch-1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.1.0/24"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-pc-1-switch-1",
+      "node": "pc-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/1",
+      "ip": "10.0.1.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-2-switch-1",
+      "node": "pc-2",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.1.11",
+      "mask": "255.255.255.0"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+  "example": {
+    "name": "Mini-entreprise : LAN, DMZ et sonde IDS",
+    "difficulty": "avancé",
+    "description": "LAN utilisateurs (10.0.10.0/24) et DMZ (10.0.20.0/24) avec un serveur web et un serveur de fichiers (FTP, SSH), reliés par un routeur. Une sonde IDS surveille la DMZ."
+  },
+  "version": 2,
+  "generatedAt": "2026-10-10T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "router-1",
+      "type": "router",
+      "name": "Routeur-1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "config": {
+        "routes": []
+      }
+    },
+    {
+      "id": "pc-1",
+      "type": "pc",
+      "name": "PC-1",
+      "position": {
+        "x": -600,
+        "y": -150
+      },
+      "config": {
+        "gateway": "10.0.10.1"
+      }
+    },
+    {
+      "id": "pc-2",
+      "type": "pc",
+      "name": "PC-2",
+      "position": {
+        "x": -600,
+        "y": 0
+      },
+      "config": {
+        "gateway": "10.0.10.1"
+      }
+    },
+    {
+      "id": "pc-3",
+      "type": "pc",
+      "name": "PC-3",
+      "position": {
+        "x": -600,
+        "y": 150
+      },
+      "config": {
+        "gateway": "10.0.10.1"
+      }
+    },
+    {
+      "id": "server-1",
+      "type": "server",
+      "name": "Serveur-Web",
+      "position": {
+        "x": 600,
+        "y": -150
+      },
+      "config": {
+        "gateway": "10.0.20.1",
+        "services": [
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "name": "http"
+          }
+        ]
+      }
+    },
+    {
+      "id": "server-2",
+      "type": "server",
+      "name": "Serveur-Fichiers",
+      "position": {
+        "x": 600,
+        "y": 150
+      },
+      "config": {
+        "gateway": "10.0.20.1",
+        "services": [
+          {
+            "port": 21,
+            "protocol": "tcp",
+            "name": "ftp"
+          },
+          {
+            "port": 22,
+            "protocol": "tcp",
+            "name": "ssh"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ids-1",
+      "type": "ids",
+      "name": "IDS-1",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "config": {
+        "monitoredSegment": "switch-2"
+      }
+    }
+  ],
+  "networks": [
+    {
+      "id": "switch-1",
+      "name": "Switch-LAN",
+      "position": {
+        "x": -300,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.10.0/24"
+    },
+    {
+      "id": "switch-2",
+      "name": "Switch-DMZ",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.20.0/24"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-router-1-switch-1",
+      "node": "router-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/1",
+      "ip": "10.0.10.1",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-router-1-switch-2",
+      "node": "router-1",
+      "network": "switch-2",
+      "interface": "eth1",
+      "port": "Fa0/1",
+      "ip": "10.0.20.1",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-1-switch-1",
+      "node": "pc-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.10.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-2-switch-1",
+      "node": "pc-2",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "10.0.10.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-3-switch-1",
+      "node": "pc-3",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/4",
+      "ip": "10.0.10.12",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-server-1-switch-2",
+      "node": "server-1",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.20.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-server-2-switch-2",
+      "node": "server-2",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "10.0.20.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-ids-1-switch-2",
+      "node": "ids-1",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/4",
+      "ip": "",
+      "mask": "255.255.255.0"
+    }
+  ]
+}

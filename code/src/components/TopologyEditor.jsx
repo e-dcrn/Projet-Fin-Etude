@@ -10,6 +10,7 @@ import { useCableTool } from '../hooks/useCableTool.js';
 import { useDeployment } from '../hooks/useDeployment.js';
 import { useDock } from '../hooks/useDock.js';
 import { serializeTopology } from '../utils/serializeTopology.js';
+import { deserializeTopology } from '../utils/deserializeTopology.js';
 import { validateTopology } from '../utils/validators.js';
 
 /**
@@ -60,6 +61,20 @@ export default function TopologyEditor() {
     }
   }, [topology, cableTool]);
 
+  const handleLoadExample = useCallback(
+    (example) => {
+      if (topology.nodes.length && !window.confirm(`Remplacer la topologie actuelle par l'exemple « ${example.name} » ?`)) return;
+      try {
+        topology.loadTopology(deserializeTopology(example.topology));
+        cableTool.cancel();
+        setToast(`Exemple « ${example.name} » chargé`);
+      } catch (err) {
+        setToast(err.message);
+      }
+    },
+    [topology, cableTool],
+  );
+
   const handleStopLab = useCallback(async () => {
     if (!window.confirm('Arrêter le réseau ? Tous les équipements seront éteints.')) return;
     try {
@@ -84,6 +99,7 @@ export default function TopologyEditor() {
         onToggleCableMode={cableTool.toggle}
         onValidate={handleValidate}
         onClear={handleClear}
+        onLoadExample={handleLoadExample}
         onStopLab={handleStopLab}
         nodeCount={topology.nodes.length}
         linkCount={topology.edges.length}
@@ -123,12 +139,15 @@ export default function TopologyEditor() {
 
       <Dock
         tabs={dock.tabs}
-        activeKey={dock.activeKey}
+        activeKeys={dock.activeKeys}
+        split={dock.split}
+        focusedPane={dock.focusedPane}
         requests={dock.requests}
         nodes={topology.nodes}
         edges={topology.edges}
         onSelect={dock.select}
         onClose={dock.close}
+        onMove={dock.move}
       />
 
       <DeployDialog run={deployment.run} onConfirm={deployment.deploy} onClose={deployment.dismiss} />

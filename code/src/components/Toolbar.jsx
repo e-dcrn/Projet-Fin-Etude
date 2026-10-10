@@ -1,3 +1,5 @@
+import ExamplesMenu from './ExamplesMenu.jsx';
+
 const LAB_STATUS = {
   unknown: { label: 'État inconnu', className: '' },
   offline: { label: 'Moteur de simulation hors ligne', className: 'lab-status--offline' },
@@ -6,13 +8,14 @@ const LAB_STATUS = {
 };
 
 /**
- * Barre d'outils supérieure : outil câble, validation, état du réseau instancié.
+ * Barre d'outils supérieure : exemples, outil câble, validation, état du réseau instancié.
  */
 export default function Toolbar({
   cableModeActive,
   onToggleCableMode,
   onValidate,
   onClear,
+  onLoadExample,
   onStopLab,
   nodeCount,
   linkCount,
@@ -30,6 +33,8 @@ export default function Toolbar({
       </div>
 
       <div className="toolbar__actions">
+        <ExamplesMenu onLoad={onLoadExample} disabled={busy} />
+
         <button
           type="button"
           className={`btn${cableModeActive ? ' btn--active' : ''}`}

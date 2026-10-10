@@ -1,0 +1,116 @@
+{
+  "example": {
+    "name": "Petit LAN avec serveur web",
+    "difficulty": "débutant",
+    "description": "Trois PC et un serveur web (port 80 ouvert) sur un même switch, réseau 10.0.1.0/24."
+  },
+  "version": 2,
+  "generatedAt": "2026-10-10T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "server-1",
+      "type": "server",
+      "name": "Serveur-Web",
+      "position": {
+        "x": -300,
+        "y": 0
+      },
+      "config": {
+        "gateway": "",
+        "services": [
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "name": "http"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pc-1",
+      "type": "pc",
+      "name": "PC-1",
+      "position": {
+        "x": 300,
+        "y": -140
+      },
+      "config": {
+        "gateway": ""
+      }
+    },
+    {
+      "id": "pc-2",
+      "type": "pc",
+      "name": "PC-2",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "config": {
+        "gateway": ""
+      }
+    },
+    {
+      "id": "pc-3",
+      "type": "pc",
+      "name": "PC-3",
+      "position": {
+        "x": 300,
+        "y": 140
+      },
+      "config": {
+        "gateway": ""
+      }
+    }
+  ],
+  "networks": [
+    {
+      "id": "switch-1",
+      "name": "Switch-1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.1.0/24"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-server-1-switch-1",
+      "node": "server-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/1",
+      "ip": "10.0.1.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-1-switch-1",
+      "node": "pc-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.1.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-2-switch-1",
+      "node": "pc-2",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "10.0.1.12",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-3-switch-1",
+      "node": "pc-3",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/4",
+      "ip": "10.0.1.13",
+      "mask": "255.255.255.0"
+    }
+  ]
+}

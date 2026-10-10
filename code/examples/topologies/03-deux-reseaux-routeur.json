@@ -1,0 +1,149 @@
+{
+  "example": {
+    "name": "Deux réseaux et un routeur",
+    "difficulty": "intermédiaire",
+    "description": "10.0.1.0/24 et 10.0.2.0/24 reliés par un routeur (eth0, eth1). Chaque PC a le routeur pour passerelle."
+  },
+  "version": 2,
+  "generatedAt": "2026-10-10T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "router-1",
+      "type": "router",
+      "name": "Routeur-1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "config": {
+        "routes": []
+      }
+    },
+    {
+      "id": "pc-1",
+      "type": "pc",
+      "name": "PC-1",
+      "position": {
+        "x": -600,
+        "y": -140
+      },
+      "config": {
+        "gateway": "10.0.1.1"
+      }
+    },
+    {
+      "id": "pc-2",
+      "type": "pc",
+      "name": "PC-2",
+      "position": {
+        "x": -600,
+        "y": 140
+      },
+      "config": {
+        "gateway": "10.0.1.1"
+      }
+    },
+    {
+      "id": "pc-3",
+      "type": "pc",
+      "name": "PC-3",
+      "position": {
+        "x": 600,
+        "y": -140
+      },
+      "config": {
+        "gateway": "10.0.2.1"
+      }
+    },
+    {
+      "id": "pc-4",
+      "type": "pc",
+      "name": "PC-4",
+      "position": {
+        "x": 600,
+        "y": 140
+      },
+      "config": {
+        "gateway": "10.0.2.1"
+      }
+    }
+  ],
+  "networks": [
+    {
+      "id": "switch-1",
+      "name": "Switch-1",
+      "position": {
+        "x": -300,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.1.0/24"
+    },
+    {
+      "id": "switch-2",
+      "name": "Switch-2",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "vlan": null,
+      "subnet": "10.0.2.0/24"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-router-1-switch-1",
+      "node": "router-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/1",
+      "ip": "10.0.1.1",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-router-1-switch-2",
+      "node": "router-1",
+      "network": "switch-2",
+      "interface": "eth1",
+      "port": "Fa0/1",
+      "ip": "10.0.2.1",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-1-switch-1",
+      "node": "pc-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.1.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-2-switch-1",
+      "node": "pc-2",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "10.0.1.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-3-switch-2",
+      "node": "pc-3",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/2",
+      "ip": "10.0.2.10",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-pc-4-switch-2",
+      "node": "pc-4",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "10.0.2.11",
+      "mask": "255.255.255.0"
+    }
+  ]
+}

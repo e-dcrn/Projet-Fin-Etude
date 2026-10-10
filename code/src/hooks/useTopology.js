@@ -28,7 +28,7 @@ import { nextSubnet, planIpam } from '../utils/ipam.js';
 export function useTopology() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { deleteElements } = useReactFlow();
+  const { deleteElements, fitBounds, getNodesBounds } = useReactFlow();
 
   // Compteur par type, pour générer des identifiants et noms lisibles (pc-1, PC-1…).
   // Il n'est jamais décrémenté : un identifiant supprimé n'est donc jamais réutilisé.
@@ -174,6 +174,31 @@ export function useTopology() {
     counters.current = {};
   }, [setNodes, setEdges]);
 
+  /**
+   * Remplace tout le canvas par une topologie (nœuds et câbles au format React Flow,
+   * voir deserializeTopology) et cadre la vue dessus.
+   */
+  const loadTopology = useCallback(
+    (loaded) => {
+      setNodes(loaded.nodes);
+      setEdges(loaded.edges);
+      counters.current = countersFor(loaded.nodes);
+      pendingFit.current = true;
+    },
+    [setNodes, setEdges],
+  );
+
+  // Cadrage de la vue sur une topologie chargée, une fois tous ses nœuds mesurés
+  // (avant, React Flow ne connaît pas leur taille et cadrerait mal)
+  const pendingFit = useRef(false);
+  useEffect(() => {
+    if (!pendingFit.current || !nodes.length || !nodes.every((n) => n.measured?.width)) return;
+    pendingFit.current = false;
+    // fitBounds plutôt que fitView : appliqué tout de suite, sans dépendre de la file
+    // interne de React Flow (où un fitView peut rester en attente indéfiniment)
+    fitBounds(getNodesBounds(nodes), { padding: 0.15, duration: 300 });
+  }, [nodes, fitBounds, getNodesBounds]);
+
   // IPAM : après chaque modification (câble, suppression, réseau d'un switch…),
   // adresse les interfaces automatiques et recalcule les passerelles automatiques.
   // planIpam est idempotent : une fois les corrections appliquées, il n'en propose plus.
@@ -205,7 +230,25 @@ export function useTopology() {
     deleteDevice,
     deleteLink,
     clearTopology,
+    loadTopology,
   };
+}
+
+/**
+ * Compteurs repris d'une topologie chargée : les équipements ajoutés ensuite ne
+ * doivent réutiliser ni un identifiant (pc-3) ni un nom généré (PC-3) existant.
+ */
+function countersFor(nodes) {
+  const counters = {};
+  for (const { id, data } of nodes) {
+    const { deviceType, properties } = data;
+    const prefixes = [[deviceType, id], [DEVICE_TYPES[deviceType].namePrefix, properties.name]];
+    for (const [prefix, value] of prefixes) {
+      const match = new RegExp(`^${prefix}-(\\d+)$`).exec(value ?? '');
+      if (match) counters[deviceType] = Math.max(counters[deviceType] ?? 0, Number(match[1]));
+    }
+  }
+  return counters;
 }
 
 /** Premier port Fa0/N libre du switch (nommage des switches Cisco, comme dans Packet Tracer). */
