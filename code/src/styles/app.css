@@ -1,0 +1,152 @@
+/* ==========================================================================
+   Variables globales
+   ========================================================================== */
+:root {
+  --bg: #f1f5f9;
+  --panel-bg: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --primary: #2563eb;
+  --danger: #dc2626;
+  --cable: #475569;
+  --cable-selected: #2563eb;
+  --selection: #10b981; /* contour d'un équipement sélectionné */
+  --radius: 8px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); }
+
+/* ==========================================================================
+   Mise en page générale : barre d'outils + 3 colonnes
+   ========================================================================== */
+.app { display: flex; flex-direction: column; height: 100%; }
+.workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 280px; min-height: 0; }
+
+.panel-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 4px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em;
+}
+.panel-hint { margin: 0 0 16px; font-size: 12px; color: var(--text-muted); }
+.panel-help { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-muted); line-height: 1.8; }
+
+/* ==========================================================================
+   Barre d'outils
+   ========================================================================== */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 16px; background: #0f172a; color: #fff;
+}
+.toolbar__brand { display: flex; align-items: baseline; gap: 10px; }
+.toolbar__brand strong { font-size: 18px; }
+.toolbar__subtitle { font-size: 13px; color: #94a3b8; }
+.toolbar__actions { display: flex; align-items: center; gap: 10px; }
+.toolbar__stats { font-size: 13px; color: #cbd5e1; margin: 0 6px; }
+
+/* ==========================================================================
+   Boutons
+   ========================================================================== */
+.btn {
+  padding: 7px 14px; border: 1px solid #334155; border-radius: var(--radius);
+  background: #1e293b; color: #fff; font-size: 13px; cursor: pointer;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.15); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn--primary { background: var(--primary); border-color: var(--primary); font-weight: 600; }
+.btn--danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.toolbar .btn--danger { color: #fca5a5; border-color: #7f1d1d; }
+.btn--active { background: #f59e0b; border-color: #f59e0b; color: #0f172a; font-weight: 600; }
+.btn--block { width: 100%; margin-top: 8px; }
+
+/* ==========================================================================
+   Palette
+   ========================================================================== */
+.palette { padding: 16px; background: var(--panel-bg); border-right: 1px solid var(--border); overflow-y: auto; }
+.palette__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.palette__item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 2px solid var(--device-color); border-radius: var(--radius); background: #fff;
+  font-size: 14px; cursor: grab; user-select: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.palette__item:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
+.palette__item:active { cursor: grabbing; }
+.palette__icon { width: 30px; height: 30px; color: var(--device-color); }
+.palette__icon svg { width: 100%; height: 100%; }
+
+/* ==========================================================================
+   Canvas
+   ========================================================================== */
+.canvas { position: relative; min-width: 0; }
+.canvas--cable-mode .react-flow__node { cursor: crosshair; }
+.canvas__banner {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  padding: 6px 14px; border-radius: 999px; background: #f59e0b; color: #0f172a;
+  font-size: 13px; font-weight: 600; pointer-events: none; box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+}
+
+/* Câbles */
+.react-flow__edge.cable .react-flow__edge-path { stroke: var(--cable); stroke-width: 2.5; }
+.react-flow__edge.cable.selected .react-flow__edge-path { stroke: var(--cable-selected); stroke-width: 3.5; }
+
+/* ==========================================================================
+   Nœud « équipement »
+   ========================================================================== */
+.device-node {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 80px; padding: 6px 8px; border-radius: var(--radius);
+  background: transparent; text-align: center;
+}
+/* outline (et non border) : la sélection ne décale pas la géométrie du nœud */
+.device-node--selected { outline: 1px solid var(--selection); background: rgba(16, 185, 129, .06); }
+.device-node__icon {
+  position: relative; width: 52px; height: 52px; padding: 6px;
+  border-radius: 12px; background: #fff; color: var(--device-color);
+  border: 2px solid var(--device-color); box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+.device-node__icon svg { width: 100%; height: 100%; }
+.device-node__name { margin-top: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.device-node__ip { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+
+/* Prévisualisations de drag : rendues hors écran (voir Palette.jsx) */
+.drag-previews { position: fixed; top: -1000px; left: -1000px; pointer-events: none; }
+.drag-previews .device-node__icon { box-shadow: none; }
+
+/* Poignées invisibles centrées sur l'icône (ancrage des câbles) */
+.device-node .device-node__handle {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 1px; height: 1px; min-width: 0; min-height: 0;
+  border: none; background: transparent; opacity: 0; pointer-events: none;
+}
+
+/* Extrémité de départ d'un câble en cours de création */
+.cable-source .device-node__icon { box-shadow: 0 0 0 4px #f59e0b; }
+
+/* ==========================================================================
+   Panneau de propriétés
+   ========================================================================== */
+.properties { padding: 16px; background: var(--panel-bg); border-left: 1px solid var(--border); overflow-y: auto; }
+.properties__type-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--device-color); }
+.properties__link { font-size: 14px; font-weight: 600; }
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.field__label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.field__input {
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
+}
+.field__input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent; }
+.field__input--error { border-color: var(--danger); }
+.field__error { font-size: 11px; color: var(--danger); }
+
+/* ==========================================================================
+   Notification
+   ========================================================================== */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  padding: 10px 18px; border-radius: var(--radius); background: #0f172a; color: #fff;
+  font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
