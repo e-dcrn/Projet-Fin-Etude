@@ -12,6 +12,9 @@
   --cable: #475569;
   --cable-selected: #2563eb;
   --selection: #10b981; /* contour d'un équipement sélectionné */
+  --success: #16a34a;
+  --warning: #d97706;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 8px;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
@@ -25,7 +28,7 @@ body { background: var(--bg); }
    Mise en page générale : barre d'outils + 3 colonnes
    ========================================================================== */
 .app { display: flex; flex-direction: column; height: 100%; }
-.workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 280px; min-height: 0; }
+.workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 340px; min-height: 0; }
 
 .panel-title {
   display: flex; align-items: center; gap: 8px;
@@ -46,6 +49,15 @@ body { background: var(--bg); }
 .toolbar__subtitle { font-size: 13px; color: #94a3b8; }
 .toolbar__actions { display: flex; align-items: center; gap: 10px; }
 .toolbar__stats { font-size: 13px; color: #cbd5e1; margin: 0 6px; }
+.toolbar__errors { color: #fca5a5; }
+
+/* État du réseau instancié */
+.lab-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #94a3b8; }
+.lab-status__dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+.lab-status--running { color: #86efac; }
+.lab-status--running .lab-status__dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .25); }
+.lab-status--offline { color: #fca5a5; }
+.lab-status--offline .lab-status__dot { background: #ef4444; }
 
 /* ==========================================================================
    Boutons
@@ -61,6 +73,14 @@ body { background: var(--bg); }
 .toolbar .btn--danger { color: #fca5a5; border-color: #7f1d1d; }
 .btn--active { background: #f59e0b; border-color: #f59e0b; color: #0f172a; font-weight: 600; }
 .btn--block { width: 100%; margin-top: 8px; }
+.btn--light, .btn--ghost { background: #fff; border-color: var(--border); color: var(--text); }
+.btn--ghost { border-style: dashed; color: var(--text-muted); }
+.btn--ghost:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn {
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 4px;
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
+}
+.icon-btn:hover { background: #fee2e2; color: var(--danger); }
 
 /* ==========================================================================
    Palette
@@ -91,6 +111,11 @@ body { background: var(--bg); }
 
 /* Câbles */
 .react-flow__edge.cable .react-flow__edge-path { stroke: var(--cable); stroke-width: 2.5; }
+/* Étiquettes aux extrémités d'un câble : interface côté équipement, port côté switch (CableEdge) */
+.cable-label {
+  position: absolute; pointer-events: none; padding: 0 4px; border-radius: 4px;
+  background: var(--bg); color: var(--text-muted); font: 10px/1.5 var(--mono); white-space: nowrap;
+}
 .react-flow__edge.cable.selected .react-flow__edge-path { stroke: var(--cable-selected); stroke-width: 3.5; }
 
 /* ==========================================================================
@@ -110,7 +135,11 @@ body { background: var(--bg); }
 }
 .device-node__icon svg { width: 100%; height: 100%; }
 .device-node__name { margin-top: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.device-node__ip { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+.device-node__ip { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+.device-node__status {
+  position: absolute; top: -4px; right: -4px; width: 11px; height: 11px; border-radius: 50%;
+  background: #22c55e; border: 2px solid #fff;
+}
 
 /* Prévisualisations de drag : rendues hors écran (voir Palette.jsx) */
 .drag-previews { position: fixed; top: -1000px; left: -1000px; pointer-events: none; }
@@ -141,6 +170,120 @@ body { background: var(--bg); }
 .field__input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent; }
 .field__input--error { border-color: var(--danger); }
 .field__error { font-size: 11px; color: var(--danger); }
+.field__hint { font-size: 11px; color: var(--text-muted); }
+.field__input--mono { font-family: var(--mono); font-size: 13px; }
+.field--compact { margin-bottom: 8px; gap: 2px; min-width: 0; }
+.field--compact .field__label { font-size: 11px; font-weight: 500; }
+.field--compact .field__input { padding: 5px 7px; font-size: 13px; width: 100%; }
+
+.mono { font-family: var(--mono); font-size: 12px; }
+.panel-hint--tight { margin: 4px 0 8px; }
+
+/* Sections repliables */
+.section { margin: 0 -16px 12px; border-top: 1px solid var(--border); }
+.section__title {
+  display: flex; align-items: center; gap: 6px; padding: 10px 16px; cursor: pointer;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text);
+  list-style: none; user-select: none;
+}
+.section__title::-webkit-details-marker { display: none; }
+.section__title::before { content: '▸'; color: var(--text-muted); transition: transform .15s; }
+.section[open] > .section__title::before { transform: rotate(90deg); }
+.section__count {
+  margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--bg);
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+}
+.section__body { padding: 0 16px; }
+
+/* Interface (câble) */
+.iface { margin-bottom: 10px; padding: 8px 10px 2px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fafc; }
+.iface__header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; }
+.iface__name, .iface__name-input {
+  padding: 1px 6px; border-radius: 4px; background: #0f172a; color: #fff; font-family: var(--mono); font-size: 12px; font-weight: 600;
+}
+.iface__name-input { width: 64px; border: 1px solid transparent; }
+.iface__name-input:focus { outline: 2px solid var(--primary); }
+.iface__arrow { color: var(--text-muted); }
+.iface__network { font-weight: 600; }
+.iface__port { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.iface__grid, .row-card__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.iface__hint { margin: -2px 0 8px; font-size: 11px; color: var(--text-muted); }
+
+/* Lignes éditables (routes) */
+.row-card { margin-bottom: 10px; padding: 6px 10px 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.row-card__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.row-card__index { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+
+/* Routes directement connectées */
+.route-table { width: 100%; margin-bottom: 10px; border-collapse: collapse; font-size: 12px; }
+.route-table td { padding: 3px 4px; border-bottom: 1px solid var(--border); }
+.route-table__kind { width: 18px; font-weight: 700; color: var(--success); }
+.route-table__dim { color: var(--text-muted); font-size: 11px; }
+
+/* Services d'un serveur */
+.services__row { display: grid; grid-template-columns: 1fr 70px 70px 24px; gap: 6px; align-items: start; }
+.services__row--head { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 2px; }
+.add-select { width: 100%; margin-bottom: 4px; color: var(--text-muted); cursor: pointer; font-size: 13px; }
+
+/* Switch */
+.switch-subnet { margin: 0 0 8px; font-weight: 600; }
+.switch-subnet .mono { font-size: 14px; }
+.attached { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
+.attached li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.attached__iface { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.attached__port { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+
+/* Problèmes concernant l'élément sélectionné */
+.issues { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.issues__item { padding: 6px 8px 6px 10px; border-left: 3px solid; border-radius: 4px; font-size: 12px; line-height: 1.4; }
+.issues__item--error { border-color: var(--danger); background: #fef2f2; color: #991b1b; }
+.issues__item--warning { border-color: var(--warning); background: #fffbeb; color: #92400e; }
+
+/* ==========================================================================
+   Boîte de dialogue de création du réseau
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  background: rgba(15, 23, 42, .45);
+}
+.modal {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow-y: auto;
+  padding: 22px 24px; border-radius: 12px; background: #fff; box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.modal__title { margin: 0 0 8px; font-size: 18px; }
+.modal__title--done { color: var(--success); }
+.modal__title--failed { color: var(--danger); }
+.modal__text { margin: 0 0 14px; font-size: 14px; color: var(--text-muted); }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.progress { height: 10px; margin: 14px 0 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.progress__bar { height: 100%; border-radius: inherit; background: var(--primary); transition: width .4s ease; }
+.progress--running .progress__bar {
+  background-image: linear-gradient(45deg, rgba(255,255,255,.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.25) 50%, rgba(255,255,255,.25) 75%, transparent 75%);
+  background-size: 20px 20px; animation: progress-stripes 1s linear infinite;
+}
+.progress--done .progress__bar { background: var(--success); }
+.progress--failed .progress__bar { background: var(--danger); }
+@keyframes progress-stripes { to { background-position: 20px 0; } }
+.progress__caption { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 600; }
+.progress__count { flex-shrink: 0; color: var(--text-muted); font-weight: 500; }
+
+.steps { list-style: none; margin: 14px 0 0; padding: 10px 12px; max-height: 220px; overflow-y: auto; border-radius: var(--radius); background: #f8fafc; }
+.steps__item { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; color: var(--text-muted); }
+.steps__icon { display: inline-grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; font-size: 12px; font-weight: 700; }
+.steps__item--done .steps__icon { color: var(--success); }
+.steps__item--current { color: var(--text); font-weight: 600; }
+.steps__item--current .steps__icon {
+  border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite;
+}
+.steps__item--failed { color: var(--danger); font-weight: 600; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.issue-group { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.5; }
+.issue-group ul { margin: 0; padding-left: 18px; }
+.issue-group__title { margin: 0 0 4px; font-size: 13px; }
+.issue-group--error { background: #fef2f2; color: #991b1b; }
+.issue-group--warning { background: #fffbeb; color: #92400e; }
 
 /* ==========================================================================
    Notification
@@ -149,4 +292,138 @@ body { background: var(--bg); }
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   padding: 10px 18px; border-radius: var(--radius); background: #0f172a; color: #fff;
   font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+  max-width: min(640px, calc(100vw - 32px)); z-index: 200;
 }
+
+/* ==========================================================================
+   Terminaux des équipements (panneau du bas)
+   ========================================================================== */
+.terminal-dock { position: relative; display: flex; flex-direction: column; flex-shrink: 0; background: #0f172a; }
+.terminal-dock__resizer {
+  position: absolute; top: -3px; left: 0; right: 0; height: 7px; z-index: 5;
+  cursor: ns-resize; touch-action: none;
+}
+.terminal-dock__resizer:hover { background: rgba(37, 99, 235, .5); }
+.terminal-dock__tabs { display: flex; gap: 2px; padding: 5px 8px 0; background: #020617; overflow-x: auto; flex-shrink: 0; }
+.terminal-tab { display: inline-flex; align-items: center; border-radius: 6px 6px 0 0; color: #94a3b8; }
+.terminal-tab:hover { color: #e2e8f0; }
+.terminal-tab--active { background: #0f172a; color: #f1f5f9; }
+.terminal-tab__label {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 4px 6px 12px;
+  border: 0; background: none; color: inherit; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.terminal-tab__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--device-color); }
+.terminal-tab__close {
+  width: 20px; height: 20px; margin-right: 4px; border: 0; border-radius: 4px;
+  background: none; color: inherit; font-size: 15px; line-height: 1; cursor: pointer;
+}
+.terminal-tab__close:hover { background: #334155; }
+.terminal-dock__body { position: relative; flex: 1; min-height: 0; }
+.terminal-view { position: absolute; inset: 0; padding: 6px 4px 4px 10px; }
+/* visibility (et non display: none) : un terminal masqué garde ses dimensions et reste ajusté */
+.terminal-view--hidden { visibility: hidden; pointer-events: none; }
+.terminal-view__screen { width: 100%; height: 100%; }
+.terminal-view__ended {
+  position: absolute; right: 18px; bottom: 14px; display: flex; align-items: center; gap: 12px;
+  padding: 6px 6px 6px 14px; border-radius: var(--radius); background: #1e293b; color: #cbd5e1; font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+}
+
+/* ==========================================================================
+   Adressage automatique (IPAM)
+   ========================================================================== */
+.iface__mode {
+  margin-left: auto; padding: 1px 6px; border-radius: 999px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  background: #fef3c7; color: #92400e;
+}
+.iface__mode--auto { background: #dcfce7; color: #166534; }
+.auto-btn {
+  margin: -4px 0 10px; padding: 2px 0; border: 0; background: none;
+  color: var(--primary); font-size: 12px; cursor: pointer;
+}
+.auto-btn:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   Capture du trafic d'un lien (vue « Wireshark », dans le panneau du bas)
+   ========================================================================== */
+.react-flow__edge.cable--captured .react-flow__edge-path {
+  stroke: var(--primary); stroke-dasharray: 7 5; animation: cable-flow .7s linear infinite;
+}
+@keyframes cable-flow { to { stroke-dashoffset: -12; } }
+
+.terminal-tab__capture {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid #38bdf8; box-shadow: inset 0 0 0 2px #020617, inset 0 0 0 5px #38bdf8;
+}
+
+.btn--small { padding: 3px 10px; font-size: 12px; }
+
+.capture {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  background: #fff; color: var(--text); font-size: 12px;
+}
+.capture--hidden { visibility: hidden; pointer-events: none; }
+.capture__toolbar, .capture__filterbar {
+  display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.capture__toolbar { background: #f8fafc; }
+.capture__status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.capture__status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+.capture__status--running::before { background: #22c55e; animation: capture-pulse 1.2s ease-in-out infinite; }
+@keyframes capture-pulse { 50% { opacity: .3; } }
+.capture__title { color: var(--text-muted); font-family: var(--mono); }
+.capture__spacer { flex: 1; }
+.capture__filter {
+  flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
+  font: 12px var(--mono); background: #fff;
+}
+.capture__filter:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.capture__filter--valid { background: #d9f99d; }
+.capture__filter--invalid { background: #fecaca; }
+.capture__count { flex-shrink: 0; color: var(--text-muted); }
+.capture__filter-error, .capture__notice { padding: 3px 10px; font-size: 12px; flex-shrink: 0; }
+.capture__filter-error { background: #fef2f2; color: #991b1b; }
+.capture__notice { background: #eff6ff; color: #1e40af; }
+.capture__notice--error { background: #fef2f2; color: #991b1b; }
+
+.capture__list { position: relative; flex: 3 1 0; min-height: 60px; overflow: auto; outline: none; font-family: var(--mono); }
+.capture__row {
+  position: absolute; left: 0; right: 0; height: 20px; display: grid;
+  grid-template-columns: 56px 92px minmax(120px, 1fr) minmax(120px, 1fr) 76px 56px 3fr;
+  align-items: center; padding: 0 8px; cursor: default; white-space: nowrap;
+}
+.capture__row > span { overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+.capture__row--head {
+  position: sticky; top: 0; z-index: 1; background: #f1f5f9; border-bottom: 1px solid var(--border);
+  font-family: system-ui, sans-serif; font-weight: 600;
+}
+/* Règles de coloration par défaut de Wireshark */
+.capture-row--tcp { background: #e7e6ff; }
+.capture-row--udp { background: #daeeff; }
+.capture-row--icmp { background: #fce0ff; }
+.capture-row--arp { background: #faf0d7; }
+.capture-row--http { background: #e4ffc7; }
+.capture-row--syn-fin { background: #a0a0a0; }
+.capture-row--reset { background: #a40000; color: #fffc9c; }
+.capture-row--icmp-error { background: #12272e; color: #b7f774; }
+.capture-row--other { background: #fff; }
+.capture__row--selected { background: #2563eb; color: #fff; }
+.capture__empty { margin: 0; padding: 28px 16px; color: var(--text-muted); font-family: system-ui, sans-serif; text-align: center; }
+
+.capture__bottom { flex: 2 1 0; min-height: 60px; display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid var(--border); }
+.capture__tree, .capture__hex { overflow: auto; padding: 4px 0; font-family: var(--mono); }
+.capture__tree { border-right: 1px solid var(--border); }
+.capture__layer-title, .capture__field {
+  display: block; width: 100%; padding: 1px 10px; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; white-space: nowrap; cursor: pointer;
+}
+.capture__field { padding-left: 30px; }
+.capture__layer-title:hover, .capture__field:hover { background: #f1f5f9; }
+.capture__line--active, .capture__line--active:hover { background: #2563eb; color: #fff; }
+.capture__caret { display: inline-block; width: 14px; color: var(--text-muted); }
+.capture__line--active .capture__caret { color: inherit; }
+.capture__hex { padding-left: 10px; white-space: pre; }
+.capture__hex-line { display: flex; gap: 14px; line-height: 18px; }
+.capture__hex-offset { color: var(--text-muted); }
+.capture__byte--marked { background: #2563eb; color: #fff; }

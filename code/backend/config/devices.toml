@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# Correspondance « type d'équipement » → environnement d'exécution.
+#
+# Ce fichier est strictement côté serveur : l'interface ne voit que des
+# équipements réseau (PC, serveur, routeur, sonde IDS) et n'a jamais
+# connaissance des images utilisées.
+#
+# Les switches n'apparaissent pas ici : chacun devient un réseau (bridge).
+#
+# Contraintes sur les images :
+#   - toutes : un shell `sh` et la commande `ip` (iproute2 ou busybox) ;
+#   - server : `python3`, utilisé pour simuler les services ouverts.
+#
+# `packages` : paquets Alpine (apk) ajoutés à l'image. Le moteur construit
+# une fois pour toutes une image dérivée (mise en cache) ; busybox fournit
+# déjà ping, traceroute, wget, nc… mais pas curl.
+# ---------------------------------------------------------------------------
+
+[lab]
+# Préfixe des ressources créées (noms et labels). Tout ce qui porte ce
+# préfixe est supprimé au redéploiement ou à l'arrêt du réseau.
+prefix = "idslab"
+# Image utilitaire éphémère, utilisée pour placer un segment surveillé en
+# mode « hub » (recopie de tout le trafic vers la sonde IDS).
+helper_image = "alpine:3.20"
+
+[capture]
+# Outil de capture du trafic d'un lien (vue « Wireshark » de l'interface) :
+# un conteneur éphémère qui partage la pile réseau de l'équipement observé
+# et y lance tcpdump. Rien n'est installé dans l'équipement lui-même.
+image = "alpine:3.20"
+packages = ["tcpdump"]
+
+[defaults]
+# Processus qui maintient l'équipement allumé.
+command = ["sleep", "infinity"]
+# NET_ADMIN : configurer routes et interfaces ; NET_RAW : ping, capture.
+cap_add = ["NET_ADMIN", "NET_RAW"]
+
+[devices.pc]
+image = "alpine:3.20"
+# Outils disponibles dans le terminal (en plus de ceux de busybox).
+packages = ["curl"]
+
+[devices.server]
+# La commande est remplacée par le simulateur de services (voir service_listener.py).
+image = "python:3.12-alpine"
+packages = ["curl"]
+
+[devices.router]
+image = "alpine:3.20"
+
+[devices.ids]
+# Image provisoire : à remplacer par l'image de la sonde ML.
+image = "alpine:3.20"

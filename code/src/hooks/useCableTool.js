@@ -9,9 +9,11 @@ import { useCallback, useEffect, useState } from 'react';
  * Le mode reste actif pour enchaîner plusieurs câbles.
  * Échap annule le câble en cours, puis quitte le mode.
  *
- * @param {(sourceId: string, targetId: string) => boolean} connectDevices
+ * @param {(sourceId: string, targetId: string) => string | null} connectDevices
+ *        retourne null si le câble est créé, sinon le motif du refus
+ * @param {(message: string) => void} onRefused affiche le motif du refus
  */
-export function useCableTool(connectDevices) {
+export function useCableTool(connectDevices, onRefused) {
   const [isActive, setIsActive] = useState(false);
   const [sourceId, setSourceId] = useState(null);
 
@@ -35,10 +37,11 @@ export function useCableTool(connectDevices) {
         setSourceId(null); // re-clic sur le même nœud : annulation
         return;
       }
-      connectDevices(sourceId, nodeId); // second clic : création du lien
+      const refusal = connectDevices(sourceId, nodeId); // second clic : création du lien
+      if (refusal) onRefused?.(refusal);
       setSourceId(null);
     },
-    [isActive, sourceId, connectDevices],
+    [isActive, sourceId, connectDevices, onRefused],
   );
 
   // Raccourci clavier Échap

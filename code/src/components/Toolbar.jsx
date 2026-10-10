@@ -1,14 +1,27 @@
+const LAB_STATUS = {
+  unknown: { label: 'État inconnu', className: '' },
+  offline: { label: 'Moteur de simulation hors ligne', className: 'lab-status--offline' },
+  stopped: { label: 'Réseau arrêté', className: 'lab-status--stopped' },
+  running: { label: 'Réseau en fonctionnement', className: 'lab-status--running' },
+};
+
 /**
- * Barre d'outils supérieure : outil câble, validation et réinitialisation.
+ * Barre d'outils supérieure : outil câble, validation, état du réseau instancié.
  */
 export default function Toolbar({
   cableModeActive,
   onToggleCableMode,
   onValidate,
   onClear,
+  onStopLab,
   nodeCount,
   linkCount,
+  errorCount,
+  labStatus,
+  busy,
 }) {
+  const status = LAB_STATUS[labStatus] ?? LAB_STATUS.unknown;
+
   return (
     <header className="toolbar">
       <div className="toolbar__brand">
@@ -22,7 +35,7 @@ export default function Toolbar({
           className={`btn${cableModeActive ? ' btn--active' : ''}`}
           onClick={onToggleCableMode}
           aria-pressed={cableModeActive}
-          title="Cliquez sur un équipement puis sur un autre pour les relier (Échap pour quitter)"
+          title="Cliquez sur un équipement puis sur un switch pour les relier (Échap pour quitter)"
         >
           🔌 Câble {cableModeActive ? '(actif)' : ''}
         </button>
@@ -33,9 +46,20 @@ export default function Toolbar({
 
         <span className="toolbar__stats">
           {nodeCount} équipement(s) · {linkCount} lien(s)
+          {errorCount > 0 && <span className="toolbar__errors"> · {errorCount} erreur(s)</span>}
         </span>
 
-        <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0}>
+        <span className={`lab-status ${status.className}`} title={status.label}>
+          <span className="lab-status__dot" />
+          {status.label}
+        </span>
+        {labStatus === 'running' && (
+          <button type="button" className="btn" onClick={onStopLab} disabled={busy}>
+            ■ Arrêter
+          </button>
+        )}
+
+        <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0 || busy}>
           ✔ Valider la topologie
         </button>
       </div>

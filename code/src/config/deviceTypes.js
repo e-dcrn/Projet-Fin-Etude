@@ -12,14 +12,21 @@ import {
  * C'est la source de vérité unique : pour ajouter un nouvel équipement
  * (pare-feu, attaquant…), il suffit d'ajouter une entrée ici.
  *
- * - label        : libellé affiché dans la palette
- * - namePrefix   : préfixe du nom généré automatiquement (ex. « PC-1 »)
- * - color        : couleur d'accent de l'équipement
- * - Icon         : composant icône
- * - description  : info-bulle dans la palette
+ * - label             : libellé affiché dans la palette
+ * - namePrefix        : préfixe du nom généré automatiquement (ex. « PC-1 »)
+ * - color             : couleur d'accent de l'équipement
+ * - Icon              : composant icône
+ * - description       : info-bulle dans la palette
+ * - isNetwork         : l'équipement EST un réseau (switch) : les autres s'y relient
+ * - hasTerminal       : une fois allumé, un clic ouvre son terminal (ping, curl…)
+ * - defaultProperties : propriétés initiales, en plus du nom
  *
- * Plus tard, le backend pourra associer chaque type à une image Docker
- * (ex. ids → image de la sonde, pc → image client…).
+ * Modèle de données :
+ *   - un switch est un réseau ; les autres équipements sont des nœuds ;
+ *   - un câble relie toujours un nœud à un switch et porte la configuration
+ *     de l'interface du nœud (nom, IP, masque) : un routeur relié à trois
+ *     switches a donc trois interfaces, chacune avec son adresse ;
+ *   - l'adressage est automatique par défaut (voir utils/ipam.js).
  */
 export const DEVICE_TYPES = {
   pc: {
@@ -28,6 +35,8 @@ export const DEVICE_TYPES = {
     color: '#2563eb',
     Icon: PcIcon,
     description: 'Poste client',
+    hasTerminal: true,
+    defaultProperties: () => ({ gateway: '', gatewayAuto: true }),
   },
   server: {
     label: 'Serveur',
@@ -35,6 +44,8 @@ export const DEVICE_TYPES = {
     color: '#7c3aed',
     Icon: ServerIcon,
     description: 'Serveur (web, DNS, base de données…)',
+    hasTerminal: true,
+    defaultProperties: () => ({ gateway: '', gatewayAuto: true, services: [] }),
   },
   router: {
     label: 'Routeur',
@@ -42,13 +53,16 @@ export const DEVICE_TYPES = {
     color: '#ea580c',
     Icon: RouterIcon,
     description: 'Routeur inter-réseaux',
+    defaultProperties: () => ({ routes: [] }),
   },
   switch: {
     label: 'Switch',
     namePrefix: 'Switch',
     color: '#0891b2',
     Icon: SwitchIcon,
-    description: 'Commutateur de niveau 2',
+    description: 'Commutateur de niveau 2 : définit un réseau',
+    isNetwork: true,
+    defaultProperties: () => ({ vlan: '', subnet: '' }), // subnet : attribué par l'IPAM à la création
   },
   ids: {
     label: 'Sonde IDS',
@@ -56,16 +70,22 @@ export const DEVICE_TYPES = {
     color: '#dc2626',
     Icon: IdsIcon,
     description: 'Sonde de détection d\'intrusion basée sur du ML',
+    defaultProperties: () => ({ monitoredSegment: '' }),
   },
 };
 
-/**
- * Champs éditables dans le panneau de propriétés, communs à tous les équipements.
- * Le panneau est générique : ajouter un champ ici l'affiche automatiquement.
- */
-export const PROPERTY_FIELDS = [
-  { key: 'name', label: 'Nom', placeholder: 'ex. PC-1', required: true },
-  { key: 'ip', label: 'Adresse IP', placeholder: 'ex. 192.168.1.10/24', type: 'ip' },
+export const isNetworkType = (deviceType) => Boolean(DEVICE_TYPES[deviceType]?.isNetwork);
+
+/** Services proposés à l'ajout sur un serveur (le port reste modifiable). */
+export const SERVICE_PRESETS = [
+  { name: 'http', port: 80, protocol: 'tcp', label: 'HTTP (web)' },
+  { name: 'https', port: 443, protocol: 'tcp', label: 'HTTPS (web chiffré)' },
+  { name: 'ssh', port: 22, protocol: 'tcp', label: 'SSH (accès distant)' },
+  { name: 'ftp', port: 21, protocol: 'tcp', label: 'FTP (transfert de fichiers)' },
+  { name: 'telnet', port: 23, protocol: 'tcp', label: 'Telnet' },
+  { name: 'smtp', port: 25, protocol: 'tcp', label: 'SMTP (messagerie)' },
+  { name: 'dns', port: 53, protocol: 'udp', label: 'DNS' },
+  { name: 'mysql', port: 3306, protocol: 'tcp', label: 'MySQL (base de données)' },
 ];
 
 /** Type MIME personnalisé utilisé pour le drag & drop palette → canvas. */
