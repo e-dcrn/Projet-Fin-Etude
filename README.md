@@ -9,8 +9,8 @@ du trafic analysé par des sondes IDS fondées sur du machine learning.
 | Dossier   | Contenu |
 | --------- | ------- |
 | `code/`   | Application web (React + React Flow + Vite) : éditeur de topologie. **Voir [`code/README.md`](code/README.md)** pour l'installation et le lancement. |
-| `Docs/`   | Bibliographie et articles sur les attaques contre les NIDS à base de ML. |
-| `Latex/`  | Sources LaTeX des présentations. |
+| `docs/`   | Bibliographie et articles sur les attaques contre les NIDS à base de ML. |
+| `latex/`  | Sources LaTeX des présentations. |
 | `Sujet.pdf` | Sujet du projet. |
 
 ## Démarrage rapide
