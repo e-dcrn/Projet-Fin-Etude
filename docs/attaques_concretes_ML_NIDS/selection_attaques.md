@@ -2,7 +2,7 @@
 
 Recherche du 6 octobre 2026. Objectif : identifier des couples **modèle–attaque** utilisables dans un démonstrateur, avec données, implémentations et limites. Les accès institutionnels IEEE Xplore et ScienceDirect ont été utilisés ; les sources ouvertes des auteurs complètent la sélection.
 
-Sept PDF sont joints. SecFedNIDS est référencé par son article et son dépôt ; son PDF n’est pas inclus. Les dépôts ont été consultés, mais leur code n’a pas été exécuté : disponibilité du code et reproduction réussie restent deux choses distinctes.
+Les PDF sont joints, sauf celui de SecFedNIDS, référencé par son article et son dépôt. Les entrées 9 à 12 (empoisonnement et portes dérobées) ont été ajoutées le 27 octobre 2026 à partir du moteur FOCUS de la médiathèque. Les dépôts ont été consultés, mais leur code n’a pas été exécuté : disponibilité du code et reproduction réussie restent deux choses distinctes.
 
 ## 1. TrafficManipulator — premier candidat pour l’évasion
 
@@ -119,6 +119,62 @@ PDF : `06_Zhang_2022_TIKI_TAKA.pdf`.
 [Article](https://doi.org/10.1109/MILCOM52596.2021.9652916)
 
 PDF déjà obtenu et conservé : `08_Venkatesan_2021_empoisonnement_SVM.pdf`.
+
+## 9. PCAP-Backdoor — porte dérobée à étiquettes propres dans les PCAP
+
+**Koyatan Chathoth et al., 2026. PCAP-Backdoor: Backdoor Generator in Network Traffic for Intrusion Detection Systems.** ACM TCPS. DOI : 10.1145/3805033.
+
+- **Attaque :** insertion de paquets construits (déclencheur) dans une partie du trafic bénin d’entraînement, sans changer les étiquettes ; à l’inférence, le même déclencheur ajouté au trafic malveillant le fait classer bénin.
+- **Données :** plusieurs jeux IoT et industriels, plusieurs modèles.
+- **Intérêt :** travaille directement sur des PCAP ; performances normales sans déclencheur, donc compromission invisible à une évaluation classique.
+
+[Article](https://doi.org/10.1145/3805033)
+
+PDF : `09_Chathoth_2026_PCAP_Backdoor_ACM.pdf`.
+
+## 10. CSLM — empoisonnement par changement d’étiquettes (SDN)
+
+**Das, Shukla et Sengupta, 2025. Poisoning the Well: Adversarial Poisoning on ML-Based Software-Defined Network Intrusion Detection Systems.** IEEE TNSE. DOI : 10.1109/TNSE.2024.3492032. Trouvé via FOCUS (médiathèque).
+
+- **Cibles :** Random Forest, SVM et MLP, dans un SDN à un ou trois contrôleurs.
+- **Attaque :** profil moyen par classe, comparaison des profils par similarité cosinus ; Max-CSLM remplace une étiquette par la classe la plus proche (discret), Min-CSLM par la plus éloignée (plus destructeur). Un paramètre Φ fixe la part d’étiquettes modifiées (0,1 dans le scénario principal).
+- **Données :** UNR-IDD.
+- **Résultats :** dégradation d’environ 50 % pour RF (Min-CSLM) et 60 % pour SVM (Max-CSLM) avec un seul contrôleur.
+- **Hypothèse forte :** contrôleur SDN compromis, donc accès aux étiquettes d’entraînement.
+- **Démonstrateur :** simple à reproduire hors ligne ; faire varier Φ et observer rappel et faux positifs.
+
+[Accès école](https://ieeexplore-ieee-org.mediaproxy.imtbs-tsp.eu/document/10742913/)
+
+PDF : `07_Das_2025_Poisoning_the_Well.pdf` (copie de `articles_ML_NIDS/04_…`).
+
+## 11. Empoisonnement d’une source externe en few-shot
+
+**Alhussien et Aleroud, 2023. A Novel Poisoning Attack on Few-Shot based Network Intrusion Detection.** IEEE/IFIP NOMS. DOI : 10.1109/NOMS56928.2023.10154453. Trouvé via FOCUS (médiathèque).
+
+- **Contexte :** la victime entraîne son détecteur avec des jeux externes et quelques flux internes étiquetés (few-shot / transfert).
+- **Attaque :** l’attaquant empoisonne 5 % d’une source externe ; chaque exemple d’attaque est rapproché de flux bénins très influents (classement SBBR) et d’attaques « limites ».
+- **Cible :** régression logistique sur un espace projeté commun ; CIC-IDS2018 et UNSW-NB15.
+- **Résultats :** TPR de 79 % à 47 % avec 10 % de flux internes étiquetés ; effet nettement réduit avec 20 %.
+- **Limite :** implémentation Matlab, pas de code public identifié ; attaque sur caractéristiques.
+
+[Accès école](https://ieeexplore-ieee-org.mediaproxy.imtbs-tsp.eu/document/10154453/)
+
+PDF : `11_Alhussien_2023_Poisoning_few_shot.pdf`.
+
+## 12. Porte dérobée par entraînement sous-traité (IoT)
+
+**Ma et al., 2025. Backdoor Attack and Defense Methods for AI–Based IoT Intrusion Detection System.** IET Information Security. DOI : 10.1049/ise2/6664900. Open access, trouvé via FOCUS (médiathèque).
+
+- **Scénario :** la victime confie l’entraînement à un tiers malveillant et ne vérifie le modèle que sur un jeu de test propre.
+- **Attaque :** type BadNets ; 0,1 % des exemples reçoivent un déclencheur (dernières caractéristiques mises à leur valeur maximale) et l’étiquette « bénin ».
+- **Cibles :** AdaBoost, GBDT, XGBoost, MLP, CNN et RNN ; CICIoT2023.
+- **Résultats :** taux de réussite > 97 % dès 4 caractéristiques déclencheuses ; baisse < 3 % sur trafic propre.
+- **Défense proposée :** détection par corrélation déclencheur–classe bénigne puis désapprentissage ; réussite ramenée sous 0,5 %.
+- **Limite :** déclencheur défini sur les caractéristiques, pas sur des paquets.
+
+[Article](https://doi.org/10.1049/ise2/6664900)
+
+PDF : `10_Ma_2025_Backdoor_IoT_IDS.pdf`.
 
 ## Proposition pour le démonstrateur
 

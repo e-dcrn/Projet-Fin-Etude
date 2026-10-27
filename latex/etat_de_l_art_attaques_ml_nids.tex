@@ -23,127 +23,198 @@
 \vspace{-5pt}
 
 \section{Périmètre et classification}
-Un système de détection d'intrusions réseau fondé sur l'apprentissage automatique
-(\emph{ML-NIDS}) transforme des paquets en caractéristiques : durées, tailles,
-nombres de paquets, indicateurs TCP ou relations entre machines. Un modèle
-(SVM, réseau de neurones, autoencodeur ou réseau sur graphes) utilise cette
-représentation pour reconnaître les activités malveillantes. Les attaques
-adversariales visent cette chaîne de détection : elles doivent être distinguées
-de l'activité réseau sous-jacente, par exemple un scan, un déni de service ou
-une force brute, qu'elles cherchent à dissimuler.
+Un \emph{ML-NIDS} est un système de détection d'intrusions réseau qui utilise
+l'apprentissage automatique. Il ne regarde pas les paquets un par un : il les
+résume d'abord en \emph{caractéristiques}, par exemple la durée d'une connexion,
+le nombre de paquets, la taille des échanges ou les drapeaux TCP. Un modèle
+(SVM, réseau de neurones, autoencodeur, réseau sur graphes\dots) reçoit ces
+caractéristiques et décide si le trafic est normal ou malveillant.
 
-Deux grandes familles se distinguent par leur moment d'action :
+Une attaque \emph{adversariale} ne vise pas directement le réseau : elle vise ce
+détecteur. Il faut donc bien séparer deux choses : l'activité malveillante
+elle-même (un scan, un déni de service, une force brute\dots) et l'attaque
+contre le modèle, dont le but est de cacher cette activité ou de rendre le
+détecteur inutilisable.
+
+On distingue deux familles selon le moment où l'attaquant agit :
 \begin{itemize}
-  \item \textbf{Évasion :} à l'inférence, modifier une communication malveillante
-  pour qu'un détecteur déjà entraîné la considère comme bénigne.
-  \item \textbf{Empoisonnement :} altérer les données ou leurs étiquettes avant
-  un entraînement ou un réentraînement pour altérer les décisions futures.
-  Les \textbf{portes dérobées} constituent une forme ciblée d'empoisonnement
-  qui apprend au
-  modèle à produire une décision choisie lorsqu'un \emph{déclencheur} apparaît,
-  tout en conservant de bonnes performances sur les données sans déclencheur.
+  \item \textbf{Évasion :} le modèle est déjà entraîné. L'attaquant modifie son
+  trafic au moment de l'attaque pour qu'il soit classé comme normal.
+  \item \textbf{Empoisonnement :} l'attaquant agit \emph{avant}, sur les données
+  d'entraînement (exemples ou étiquettes). Le modèle apprend alors de mauvaises
+  règles. Une \textbf{porte dérobée} (\emph{backdoor}) est un cas particulier
+  d'empoisonnement : le modèle fonctionne normalement, sauf quand il voit un
+  motif secret, appelé \emph{déclencheur}, choisi par l'attaquant.
 \end{itemize}
-Cette classification se croise avec la connaissance de l'adversaire :
-\textbf{boîte blanche} (accès au modèle et à ses paramètres), \textbf{boîte grise}
-(informations partielles) ou \textbf{boîte noire} (sans accès interne).
-En boîte noire, l'adversaire peut exploiter des réponses du détecteur ou
-transférer des perturbations préparées sur un modèle substitut
-\cite{han,mao,zhang}. Il faut également préciser son contrôle : trafic émis,
-machines compromises, données d'apprentissage ou accès aux prédictions.
+Il faut aussi préciser ce que l'attaquant sait du modèle :
+\textbf{boîte blanche} (il connaît le modèle et ses paramètres),
+\textbf{boîte grise} (il en connaît une partie) ou \textbf{boîte noire} (il ne
+voit que les réponses). En boîte noire, il peut interroger le détecteur, ou
+entraîner son propre modèle « substitut » et espérer que l'attaque fonctionne
+aussi sur le vrai \cite{han,mao,zhang}. Enfin, il faut dire ce qu'il contrôle :
+seulement son propre trafic, des machines compromises, les données
+d'entraînement, ou l'accès aux prédictions.
 
-\section{Évasion : des caractéristiques aux communications}
-\textbf{Perturbation de caractéristiques.} TIKI-TAKA compare cinq attaques en
-boîte noire (NES, Boundary, Pointwise, HopSkipJump et OPT) contre des MLP, CNN
-et C-LSTM \cite{zhang}. Les requêtes guident la recherche d'un vecteur classé
-comme bénin ; une variante restreint les modifications aux variables
-temporelles. Mao et al. proposent SPTS, qui impose des contraintes et des
-relations entre caractéristiques, puis DGM, qui améliore le transfert entre
-modèles \cite{mao}. Leur démarche inclut un passage aux paquets. Toutefois,
-un vecteur adversarial valide mathématiquement ne garantit pas qu'une
-communication correspondante soit réalisable et conserve son effet malveillant.
+\section{Évasion : tromper un modèle déjà entraîné}
+\textbf{Modifier directement les caractéristiques.} TIKI-TAKA teste cinq
+attaques en boîte noire (NES, Boundary, Pointwise, HopSkipJump et OPT) contre
+des MLP, CNN et C-LSTM \cite{zhang}. Le principe est simple : l'attaquant
+envoie beaucoup de requêtes au détecteur et ajuste petit à petit le vecteur de
+caractéristiques jusqu'à ce qu'il soit classé bénin. Une variante n'autorise à
+modifier que les variables liées au temps. Mao et al. ajoutent des règles pour
+que le vecteur modifié reste cohérent (méthode SPTS) et cherchent des
+perturbations qui marchent sur plusieurs modèles à la fois (méthode DGM)
+\cite{mao}. Ils repassent ensuite au niveau des paquets. Limite commune : un
+vecteur qui trompe le modèle ne correspond pas forcément à du vrai trafic
+réalisable, ni à une attaque qui fonctionne encore.
 
-\textbf{Remodelage du trafic.} TrafficManipulator agit sur les délais et ajoute
-des paquets pour modifier les statistiques observées, notamment contre
-KitNET, un ensemble d'autoencodeurs \cite{han}. TANTRA apprend les intervalles
-entre paquets du trafic bénin avec un LSTM, puis adapte la temporisation du
-trafic malveillant sans en changer le contenu \cite{tantra}. Ce LSTM est le
-générateur de l'attaque ; les détecteurs ciblés comprennent KitNET, un
-autoencodeur et Isolation Forest. Le coût en latence reste une contrainte,
-en particulier pour les activités dépendantes du débit.
+\textbf{Changer la forme du trafic.} Ici, on touche directement aux paquets.
+TrafficManipulator retarde des paquets et en ajoute d'autres pour que les
+statistiques observées ressemblent à du trafic normal, notamment contre
+KitNET, un ensemble d'autoencodeurs \cite{han}. TANTRA apprend, avec un LSTM,
+le rythme des paquets dans le trafic bénin, puis applique ce rythme au trafic
+malveillant sans toucher à son contenu \cite{tantra}. Attention : le LSTM sert
+à \emph{générer} l'attaque, ce n'est pas lui le détecteur ; les cibles sont
+KitNET, un autoencodeur et Isolation Forest. Le prix à payer est du retard, ce
+qui gêne les attaques qui ont besoin de débit, comme un déni de service.
 
-\textbf{Transformation guidée par l'explicabilité.} Okada et al. utilisent
-KernelSHAP pour identifier les caractéristiques influentes d'un MLP en boîte
-noire, puis les modifier par des actions sur le trafic \cite{okada}.
-Selon l'extracteur, une force brute FTP est adaptée en modifiant les indicateurs
-PSH ou en séparant les tentatives dans des sessions TCP distinctes. L'étude
-évalue aussi des attaques XSS entre machines virtuelles et vérifie la
-préservation de l'activité malveillante : elle relie explicitement évasion du
-modèle et fonctionnement de l'attaque réseau.
+\textbf{Se servir de l'explicabilité.} Okada et al. utilisent KernelSHAP pour
+savoir quelles caractéristiques comptent le plus dans la décision d'un MLP en
+boîte noire, puis modifient le trafic pour changer justement celles-là
+\cite{okada}. Par exemple, pour une force brute FTP, ils jouent sur le drapeau
+PSH ou répartissent les essais de mot de passe dans plusieurs sessions TCP.
+Ils testent aussi des attaques XSS entre machines virtuelles et vérifient que
+l'attaque marche toujours après modification. C'est l'étude la plus proche
+d'une démonstration réelle, car elle relie la tromperie du modèle et le
+fonctionnement de l'attaque réseau.
 
-\textbf{Perturbation structurelle.} Pour E-GraphSAGE et LineGraphSAGE, Venturi
-et al. modifient les communications représentées par les arêtes et les nœuds
-du graphe \cite{venturi}. La variante C2x\_B ajoute des communications bénignes
-depuis un hôte compromis, sans retirer le flux malveillant : le voisinage
-observé change et peut tromper le modèle. Ces expériences sur flux et graphes
-ne constituent cependant pas une validation complète en réseau actif.
+\textbf{Modifier le graphe des communications.} Certains détecteurs
+(E-GraphSAGE, LineGraphSAGE) voient le réseau comme un graphe : les machines
+sont des nœuds et les communications des arêtes. Venturi et al. modifient ce
+graphe \cite{venturi}. Dans la variante C2x\_B, un hôte compromis ajoute des
+communications normales autour du flux malveillant, sans retirer ce dernier :
+son « voisinage » change et le modèle peut se tromper. Ces expériences restent
+toutefois faites sur des flux et des graphes, pas sur un réseau actif.
 
-\newpage
-\section{Empoisonnement et portes dérobées}
-\textbf{Dégradation de l'apprentissage.} Venkatesan et al. étudient un SVM
-distinguant trafic bénin et scans Nmap \cite{venkatesan}. L'adversaire insère
-des exemples étiquetés « scan » près d'exemples bénins reconnus avec une forte
-confiance. Lors du réentraînement, ces contradictions déplacent la frontière
-de décision et augmentent les erreurs, notamment les faux positifs.
-L'attaque vise ici la disponibilité du détecteur, plutôt que seulement
-l'évasion d'un flux particulier. L'étude impose des contraintes de cohérence
-aux caractéristiques, mais ne démontre pas une chaîne complète de rejeu réseau.
-Une condition essentielle est donc l'accès à une partie des données
-d'apprentissage : envoyer du trafic à un modèle figé ne suffit pas à
-l'empoisonner.
+\section{Empoisonnement}
+L'idée est de « mal éduquer » le détecteur. Comme il apprend à partir
+d'exemples, l'attaquant glisse de faux exemples ou de fausses étiquettes dans
+ses données d'entraînement. Il existe deux objectifs. Soit on veut
+\textbf{dégrader} le détecteur en général : il fait plus d'erreurs et devient
+peu fiable. Soit on veut installer une \textbf{porte dérobée} : le détecteur
+reste bon en apparence, mais laisse passer le trafic qui porte le déclencheur.
+Dans tous les cas, l'attaquant doit pouvoir toucher aux données
+d'entraînement, ou au processus d'entraînement lui-même. Envoyer du trafic à un
+modèle figé ne suffit pas : il faut qu'il y ait un entraînement ou un
+réentraînement après l'injection.
 
-\textbf{Comportement conditionné par un déclencheur.} PCAP-Backdoor insère des
-paquets construits dans une partie du trafic bénin utilisé pour l'entraînement,
-en conservant les étiquettes initiales : c'est un empoisonnement à
-\emph{étiquettes propres} \cite{backdoor}. Le modèle apprend une association
-entre les statistiques induites par ce déclencheur et la classe bénigne.
-À l'inférence, l'ajout du déclencheur au trafic malveillant provoque alors une
-classification bénigne. À la différence de l'empoisonnement précédent,
-les résultats sur trafic sans déclencheur peuvent rester bons : une évaluation
-standard ne suffit donc pas à révéler la compromission. L'étude agit sur les
-PCAP et examine plusieurs modèles et jeux de données IoT et industriels.
+\textbf{Exemples contradictoires (Venkatesan et al.).} La cible est un SVM qui
+sépare le trafic bénin des scans Nmap \cite{venkatesan}. L'attaquant ajoute des
+exemples étiquetés « scan » mais placés juste à côté d'exemples bénins que le
+modèle reconnaît très bien. Au réentraînement, le modèle reçoit des
+informations contradictoires : sa frontière de décision se déplace et il fait
+plus d'erreurs, surtout des faux positifs (du trafic normal pris pour une
+attaque). Le but n'est donc pas de faire passer un flux précis, mais de rendre
+le détecteur pénible à utiliser. Les auteurs gardent des valeurs de
+caractéristiques cohérentes, mais ne rejouent pas l'attaque sur un vrai réseau.
+
+\textbf{Changer les étiquettes (Das et al.).} Ici, l'attaquant ne crée pas de
+nouveaux exemples : il change les étiquettes d'une partie des données
+existantes \cite{das}. Pour choisir par quelle étiquette remplacer chaque
+classe, il calcule un « profil moyen » par classe et compare ces profils par
+similarité cosinus. Avec \emph{Max-CSLM}, une classe est remplacée par la
+classe qui lui ressemble le plus : le changement est plus discret. Avec
+\emph{Min-CSLM}, elle est remplacée par la classe la plus différente : c'est
+plus visible, mais fait plus de dégâts. Un paramètre fixe la part
+d'étiquettes modifiées (10~\% dans leur scénario principal). Les tests portent
+sur un réseau SDN avec un ou trois contrôleurs, le jeu de données UNR-IDD et
+trois modèles (Random Forest, SVM et MLP). Avec un seul contrôleur, la
+performance chute d'environ 50~\% pour le Random Forest (Min-CSLM) et de 60~\%
+pour le SVM (Max-CSLM). L'hypothèse forte est que l'attaquant a compromis un
+contrôleur SDN et peut donc modifier les étiquettes : contrôler du trafic ne
+suffit pas.
+
+\textbf{Empoisonner une source externe (Alhussien et Aleroud).} Beaucoup
+d'organisations ont peu de trafic étiqueté. Elles entraînent donc leur
+détecteur avec des jeux de données externes, plus quelques exemples internes
+(apprentissage \emph{few-shot}). L'attaquant n'a pas besoin d'entrer chez la
+victime : il lui suffit d'empoisonner une des sources externes
+\cite{alhussien}. Il choisit des exemples d'attaque et les rapproche
+légèrement de flux bénins jugés très représentatifs, pour que le modèle
+confonde les deux. Seuls 5~\% des flux de la source sont empoisonnés. Sur
+CIC-IDS2018 et UNSW-NB15, avec une régression logistique, le taux de détection
+des attaques passe de 79~\% à 47~\%, sans hausse notable des faux positifs.
+Quand l'organisation ajoute plus d'exemples internes étiquetés, l'effet de
+l'attaque diminue nettement : c'est une piste de défense simple.
+
+\textbf{Porte dérobée sans changer les étiquettes (PCAP-Backdoor).}
+PCAP-Backdoor ajoute des paquets spécialement construits, le déclencheur, dans
+une partie du trafic bénin qui sert à l'entraînement \cite{backdoor}. Les
+étiquettes restent vraies (bénin reste bénin) : on parle d'empoisonnement à
+\emph{étiquettes propres}, ce qui le rend difficile à repérer. Le modèle
+associe alors le déclencheur à la classe « bénin ». Plus tard, l'attaquant
+ajoute le même déclencheur à son trafic malveillant, qui est alors classé
+bénin. Sur du trafic sans déclencheur, le modèle reste bon : une évaluation
+classique ne voit rien. L'étude travaille directement sur des fichiers PCAP et
+teste plusieurs modèles et jeux de données IoT et industriels.
+
+\textbf{Porte dérobée par un entraînement sous-traité (Ma et al.).} Dans ce
+scénario, la victime confie l'entraînement de son détecteur IoT à un tiers
+malveillant, puis vérifie seulement le modèle rendu sur ses propres données de
+test \cite{ma}. Le tiers prend 0,1~\% des exemples d'entraînement, met
+quelques caractéristiques à leur valeur maximale (c'est le déclencheur) et
+les étiquette « bénin ». Sur CICIoT2023 et six modèles (AdaBoost, GBDT,
+XGBoost, MLP, CNN et RNN), le trafic malveillant avec déclencheur passe
+inaperçu dans plus de 97~\% des cas dès quatre caractéristiques modifiées,
+alors que les performances sur trafic normal baissent de moins de 3~\% : le
+modèle passe donc les tests de la victime. Les auteurs proposent aussi une
+défense : repérer le lien anormalement fort entre déclencheur et classe
+bénigne, puis faire « désapprendre » la porte dérobée, ce qui ramène le taux
+de réussite sous 0,5~\%. Limite : le déclencheur est défini sur les
+caractéristiques, pas sur des paquets réels.
 
 \section{Enseignements, défenses et critères d'évaluation}
-Le corpus montre que la vulnérabilité dépend du \textbf{couple modèle--extracteur}
-et des capacités de l'adversaire. Les GNN introduisent une surface d'attaque
-structurelle ; les détecteurs fondés sur des statistiques temporelles peuvent
-être sensibles à des changements de rythme. Les résultats obtenus sur Kitsune,
-CICIDS, TON\_IoT ou CTU-13 restent liés au protocole expérimental : des taux de
-succès issus d'études différentes ne sont pas directement comparables.
+Ces travaux montrent qu'on ne peut pas parler de la robustesse d'un modèle
+seul. Ce qui compte, c'est le \textbf{couple modèle--extracteur} (le modèle et
+la manière dont les caractéristiques sont calculées), ainsi que ce que
+l'attaquant peut faire. Par exemple, les modèles sur graphes peuvent être
+trompés en ajoutant des communications, et les détecteurs basés sur le temps
+sont sensibles aux changements de rythme. Les résultats obtenus sur Kitsune,
+CICIDS, TON\_IoT, CTU-13 ou CICIoT2023 dépendent du protocole de chaque étude :
+on ne peut pas comparer directement des taux de réussite venant d'articles
+différents.
 
-Les défenses étudiées comprennent l'entraînement adversarial et les ensembles
-de modèles, la détection des requêtes répétées \cite{han,zhang}, ainsi que la
-sanitisation des données par désaccord entre classifieurs \cite{venkatesan}.
-PCAP-Backdoor souligne également les limites du regroupement des activations
-pour identifier certains déclencheurs \cite{backdoor}. Ces méthodes atténuent
-des scénarios précis, sans établir une robustesse universelle.
+Côté défense, on trouve l'entraînement adversarial (entraîner le modèle avec
+des exemples d'attaque), les ensembles de modèles, la détection des requêtes
+répétées \cite{han,zhang}, le nettoyage des données d'entraînement quand
+plusieurs classifieurs ne sont pas d'accord \cite{venkatesan}, l'ajout de
+données internes fiables \cite{alhussien} et le désapprentissage des portes
+dérobées \cite{ma}. PCAP-Backdoor montre cependant que certaines défenses,
+comme le regroupement des activations du réseau, ne repèrent pas tous les
+déclencheurs \cite{backdoor}. Chaque défense protège contre des scénarios
+précis ; aucune ne garantit une robustesse générale.
 
-Pour le démonstrateur, une expérience doit comparer un état de référence et un
-état attaqué, avec le \textbf{rappel du trafic malveillant}, les \textbf{faux
-positifs} et le \textbf{coût de l'attaque} : délai, volume, nombre de requêtes ou
-fraction de données empoisonnées. Le taux d'évasion doit préciser son
-dénominateur, notamment si seuls les flux initialement détectés sont retenus.
-Pour une porte dérobée, il faut mesurer séparément le succès avec déclencheur
-et la qualité sans déclencheur. Enfin, les caractéristiques doivent être
-réextraites après transformation des paquets et la réussite de l'activité réseau
-doit être vérifiée. TrafficManipulator/KitNET, TANTRA et les scénarios d'Okada
-constituent ainsi des pistes complémentaires pour illustrer l'évasion ; le SVM
-empoisonné et PCAP-Backdoor couvrent les risques liés à l'apprentissage.
+Pour le démonstrateur, chaque expérience doit comparer un état « avant
+attaque » et un état « après attaque », en mesurant au moins : le
+\textbf{rappel sur le trafic malveillant} (la part d'attaques détectées), les
+\textbf{faux positifs}, et le \textbf{coût de l'attaque} (retard ajouté,
+volume de trafic, nombre de requêtes ou part des données empoisonnées). Pour
+un taux d'évasion, il faut préciser sur quoi il est calculé, par exemple
+seulement sur les flux qui étaient détectés au départ. Pour une porte dérobée,
+il faut mesurer séparément la réussite avec déclencheur et la qualité du
+modèle sans déclencheur. Enfin, après toute modification des paquets, il faut
+recalculer les caractéristiques et vérifier que l'activité réseau fonctionne
+encore. Pour l'évasion, TrafficManipulator/KitNET, TANTRA et les scénarios
+d'Okada sont de bonnes pistes complémentaires. Pour l'empoisonnement, le SVM de
+Venkatesan et le changement d'étiquettes de Das illustrent la dégradation,
+tandis que PCAP-Backdoor et l'attaque de Ma et al. illustrent les portes
+dérobées.
 
 \begingroup
 \small
 \setlength{\parskip}{0pt}
 \renewcommand{\refname}{Références du corpus}
-\begin{thebibliography}{8}
+\begin{thebibliography}{11}
 \setlength{\itemsep}{1pt}
 \bibitem{han} D. Han et al. (2021). \emph{Evaluating and Improving Adversarial
 Robustness of Machine Learning-Based Network Intrusion Detectors}. IEEE JSAC.
@@ -169,9 +240,19 @@ Detection Systems and Defense Mechanisms}. IEEE/ACM ToN.
 Data Sanitization Mitigations for Machine Learning Models in Network Intrusion
 Detection Systems}. MILCOM.
 \href{https://doi.org/10.1109/MILCOM52596.2021.9652916}{doi:10.1109/MILCOM52596.2021.9652916}.
+\bibitem{das} T. Das, R. M. Shukla et S. Sengupta (2025). \emph{Poisoning the
+Well: Adversarial Poisoning on ML-Based Software-Defined Network Intrusion
+Detection Systems}. IEEE TNSE.
+\href{https://doi.org/10.1109/TNSE.2024.3492032}{doi:10.1109/TNSE.2024.3492032}.
+\bibitem{alhussien} N. Alhussien et A. Aleroud (2023). \emph{A Novel Poisoning
+Attack on Few-Shot based Network Intrusion Detection}. IEEE/IFIP NOMS.
+\href{https://doi.org/10.1109/NOMS56928.2023.10154453}{doi:10.1109/NOMS56928.2023.10154453}.
 \bibitem{backdoor} A. Koyatan Chathoth et al. (2026). \emph{PCAP-Backdoor:
 Backdoor Generator in Network Traffic for Intrusion Detection Systems}.
 ACM TCPS. \href{https://doi.org/10.1145/3805033}{doi:10.1145/3805033}.
+\bibitem{ma} B. Ma et al. (2025). \emph{Backdoor Attack and Defense Methods for
+AI-Based IoT Intrusion Detection System}. IET Information Security.
+\href{https://doi.org/10.1049/ise2/6664900}{doi:10.1049/ise2/6664900}.
 \end{thebibliography}
 \endgroup
 \end{document}
