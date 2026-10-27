@@ -55,11 +55,21 @@
   \note{La détection et les attaques sont du travail à venir. Aucun choix de couple modèle--attaque n'est arrêté.}
 \end{frame}
 
-\begin{frame}[t]{État de l'art : nouveaux papiers}
-  % Espace réservé : ajouter ici les nouveaux papiers à présenter.
-  % Pour chaque papier : référence, apport et lien avec le projet.
-  % Aucun article n'est présélectionné dans cette version.
-  \note{Espace à compléter avec les nouveaux papiers choisis par le groupe. Ne pas reprendre les familles d'attaques déjà présentées le 6 octobre.}
+\begin{frame}{État de l'art : apport des trois nouveaux papiers}
+  \textbf{Das montrait déjà l'empoisonnement :}\\
+  un attaquant modifie les étiquettes d'entraînement pour dégrader le détecteur.
+  \vspace{.8em}
+  \begin{itemize}\espacement
+    \item \textbf{\href{https://doi.org/10.1109/NOMS56928.2023.10154453}{Alhussien : piéger une source de données externe.}}\\
+      Contrairement au scénario de Das, l'attaquant n'a pas besoin de compromettre le système interne de la victime.
+    \item \textbf{\href{https://doi.org/10.1145/3805033}{PCAP-Backdoor : piéger les paquets, garder les bonnes étiquettes.}}\\
+      Ajouter un motif dans des captures de trafic bénin, toujours étiquetées « bénin ». Le modèle apprend à associer ce motif au trafic normal.
+    \item \textbf{\href{https://doi.org/10.1049/ise2/6664900}{Ma : confier l'entraînement à un prestataire malveillant.}}\\
+      Le prestataire insère un motif dans les caractéristiques d'exemples d'entraînement et les réétiquette « bénin ». L'étude ne construit pas ce motif en paquets réels.
+  \end{itemize}
+  \vfill
+  \textbf{Point commun aux deux backdoors :} faire passer les attaques portant le motif, tout en restant performant sans lui.
+  \note{Numérotation des fichiers dans docs/attaques_concretes_ML_NIDS : 07 Das, 08 Venkatesan, 09 Chathoth (PCAP-Backdoor), 10 Ma, 11 Alhussien. Das était déjà présent : ne pas le compter parmi les nouveaux articles. Sources : section Empoisonnement et références de etat_de_l_art_attaques_ml_nids.tex ; selection_attaques.md. Das change les étiquettes via un contrôleur SDN compromis ; Venkatesan insère des exemples contradictoires et vise notamment les faux positifs. Alhussien déplace le point d'entrée vers une source externe utilisée en apprentissage few-shot. PCAP-Backdoor agit sur les paquets avec des étiquettes propres et associe le déclencheur à la classe bénigne. Ma considère un prestataire d'entraînement malveillant, modifie les caractéristiques et les étiquettes d'une petite partie des exemples ; les tests sans déclencheur peuvent ne pas révéler la porte dérobée. Une backdoor reste une forme d'empoisonnement : les catégories ne sont pas disjointes. Aucun choix d'intégration n'est arrêté.}
 \end{frame}
 
 \begin{frame}{Le site : construire une topologie réseau}
