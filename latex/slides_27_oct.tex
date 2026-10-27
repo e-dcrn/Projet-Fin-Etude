@@ -1,4 +1,4 @@
-\documentclass[aspectratio=169,11pt]{beamer}
+\documentclass[aspectratio=169,11pt,xcolor=table]{beamer}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[french]{babel}
@@ -13,6 +13,11 @@
 % cette présentation ne prétend pas à une nouvelle validation en réseau actif.
 \definecolor{projectblue}{HTML}{17365D}
 \definecolor{projectteal}{HTML}{087E8B}
+% Familles d'attaques dans le tableau récapitulatif
+\definecolor{evasion}{HTML}{DCEBF7}
+\definecolor{empoisonnement}{HTML}{FBE3CF}
+\newcommand{\famille}[2]{\colorbox{#1}{\strut\,#2\,}}
+\newcommand{\nouveau}{\textbf{\color{projectteal}Nouveau}}
 \usetheme{Madrid}
 \setbeamercolor{structure}{fg=projectblue}
 \setbeamercolor{frametitle}{bg=projectblue,fg=white}
@@ -53,6 +58,30 @@
     Choisir les modèles et les attaques, puis les intégrer au démonstrateur.
   \end{block}
   \note{La détection et les attaques sont du travail à venir. Aucun choix de couple modèle--attaque n'est arrêté.}
+\end{frame}
+
+\begin{frame}{Rappel : les 8 papiers présentés le 6 octobre}
+  \small
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{.2\linewidth}>{\raggedright\arraybackslash}p{.36\linewidth}>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    \textbf{Papier} & \textbf{Modèle visé} & \textbf{Ce que fait l'attaque} \\
+    \midrule
+    \href{https://doi.org/10.1109/JSAC.2021.3087242}{Han (2021)} & KitNET (autoencodeurs) & Retarder et ajouter des paquets \\
+    \href{https://doi.org/10.1109/TIFS.2022.3201377}{Sharon (2022)} & Autoencodeurs, Isolation Forest & Imiter le rythme du trafic normal \\
+    \href{https://doi.org/10.1007/s10207-025-01016-0}{Okada (2025)} & MLP & Modifier le TCP aux points clés \\
+    \href{https://doi.org/10.1016/j.jnca.2025.104255}{Mao (2025)} & MLP, CNN, ResCNN, LSTM, attention & Tromper plusieurs modèles à la fois \\
+    \href{https://doi.org/10.1109/TNET.2021.3137084}{Zhang (2022)} & MLP, CNN, C-LSTM & Interroger le détecteur, ajuster \\
+    \href{https://arxiv.org/abs/2403.11830}{Venturi (2024)} & E-GraphSAGE, LineGraphSAGE & Ajouter des communications \\
+    \midrule
+    \href{https://doi.org/10.1109/MILCOM52596.2021.9652916}{Venkatesan (2021)} & SVM & Ajouter des exemples mal étiquetés \\
+    \href{https://doi.org/10.1109/TNSE.2024.3492032}{Das (2025)} & SVM, Random Forest, MLP & Changer les étiquettes \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  6 papiers sur l'\textbf{évasion}, seulement 2 sur l'\textbf{empoisonnement}.
+  \note{Évasion : tromper un modèle déjà entraîné en modifiant le trafic. Empoisonnement : tricher pendant l'entraînement. Les deux groupes sont séparés par un trait dans le tableau. Han = TrafficManipulator, Sharon = TANTRA, Zhang = TIKI-TAKA.}
 \end{frame}
 
 \begin{frame}{État de l'art : pourquoi trois nouveaux papiers ?}
@@ -97,6 +126,35 @@
   \normalsize
   \textbf{À retenir :} une porte dérobée ne se voit pas aux tests normaux, seulement avec le motif.
   \note{Numérotation des fichiers dans docs/attaques_concretes_ML_NIDS : 07 Das, 08 Venkatesan, 09 Chathoth (PCAP-Backdoor), 10 Ma, 11 Alhussien. Das était déjà présent : ne pas le compter parmi les nouveaux articles. Sources : section Empoisonnement et références de etat_de_l_art_attaques_ml_nids.tex ; selection_attaques.md. Das change les étiquettes via un contrôleur SDN compromis ; Venkatesan insère des exemples contradictoires et vise notamment les faux positifs. Alhussien déplace le point d'entrée vers une source externe utilisée en apprentissage few-shot. PCAP-Backdoor agit sur les paquets avec des étiquettes propres et associe le déclencheur à la classe bénigne. Ma considère un prestataire d'entraînement malveillant, modifie les caractéristiques et les étiquettes d'une petite partie des exemples ; les tests sans déclencheur peuvent ne pas révéler la porte dérobée. Une backdoor reste une forme d'empoisonnement : les catégories ne sont pas disjointes. Aucun choix d'intégration n'est arrêté.}
+\end{frame}
+
+\begin{frame}{Récapitulatif : les 11 papiers de l'état de l'art}
+  \footnotesize
+  \famille{evasion}{Évasion : tromper un modèle déjà entraîné}
+  \quad
+  \famille{empoisonnement}{Empoisonnement : tricher pendant l'entraînement}
+  \vspace{.5em}
+
+  \scriptsize
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{.2\linewidth}>{\raggedright\arraybackslash}p{.34\linewidth}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{.08\linewidth}@{}}
+    \toprule
+    \textbf{Papier} & \textbf{Modèle visé} & \textbf{Ce que fait l'attaque} & \\
+    \midrule
+    \rowcolor{evasion} Han (2021) & KitNET (autoencodeurs) & Retarder et ajouter des paquets & \\
+    \rowcolor{evasion} Sharon (2022) & Autoencodeurs, Isolation Forest & Imiter le rythme du trafic normal & \\
+    \rowcolor{evasion} Okada (2025) & MLP & Modifier le TCP aux points clés & \\
+    \rowcolor{evasion} Mao (2025) & MLP, CNN, ResCNN, LSTM, attention & Tromper plusieurs modèles à la fois & \\
+    \rowcolor{evasion} Zhang (2022) & MLP, CNN, C-LSTM & Interroger le détecteur, ajuster & \\
+    \rowcolor{evasion} Venturi (2024) & E-GraphSAGE, LineGraphSAGE & Ajouter des communications & \\
+    \rowcolor{empoisonnement} Venkatesan (2021) & SVM & Ajouter des exemples mal étiquetés & \\
+    \rowcolor{empoisonnement} Das (2025) & SVM, Random Forest, MLP & Changer les étiquettes & \\
+    \rowcolor{empoisonnement} Alhussien (2023) & Régression logistique & Polluer une base de données externe & \nouveau \\
+    \rowcolor{empoisonnement} PCAP-Backdoor (2026) & DNN, CNN & Cacher un motif dans des paquets & \nouveau \\
+    \rowcolor{empoisonnement} Ma (2025) & AdaBoost, GBDT, XGBoost, MLP, CNN, RNN & Motif ajouté par le prestataire & \nouveau \\
+    \bottomrule
+  \end{tabularx}
+  \note{Les trois nouveaux papiers renforcent l'empoisonnement, qui n'avait que deux papiers le 6 octobre. PCAP-Backdoor (Chathoth et al.) et Ma sont des portes dérobées, un cas particulier d'empoisonnement.}
 \end{frame}
 
 \begin{frame}{Le site : construire une topologie réseau}
