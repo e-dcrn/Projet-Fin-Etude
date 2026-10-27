@@ -19,7 +19,6 @@
 \begin{center}
   {\Large\bfseries État de l'art des attaques contre les ML-NIDS}\par
   \vspace{3pt}
-  {\small Synthèse du corpus \texttt{docs/attaques\_concretes\_ML\_NIDS} (2021--2026)}
 \end{center}
 \vspace{-5pt}
 
@@ -33,13 +32,14 @@ adversariales visent cette chaîne de détection : elles doivent être distingu�
 de l'activité réseau sous-jacente, par exemple un scan, un déni de service ou
 une force brute, qu'elles cherchent à dissimuler.
 
-Trois familles se distinguent par leur moment d'action et leur objectif :
+Deux grandes familles se distinguent par leur moment d'action :
 \begin{itemize}
   \item \textbf{Évasion :} à l'inférence, modifier une communication malveillante
   pour qu'un détecteur déjà entraîné la considère comme bénigne.
   \item \textbf{Empoisonnement :} altérer les données ou leurs étiquettes avant
-  un entraînement ou un réentraînement pour dégrader les décisions futures.
-  \item \textbf{Porte dérobée :} forme ciblée d'empoisonnement qui apprend au
+  un entraînement ou un réentraînement pour altérer les décisions futures.
+  Les \textbf{portes dérobées} constituent une forme ciblée d'empoisonnement
+  qui apprend au
   modèle à produire une décision choisie lorsqu'un \emph{déclencheur} apparaît,
   tout en conservant de bonnes performances sur les données sans déclencheur.
 \end{itemize}
