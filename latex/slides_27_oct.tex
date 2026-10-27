@@ -1,0 +1,117 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+% Réunion d'avancement ; durée à ajuster selon les nouveaux papiers et la démonstration.
+% Sources locales : slides_6_oct.tex ; etat_de_l_art_attaques_ml_nids.tex ;
+% ../docs/attaques_concretes_ML_NIDS/selection_attaques.md ; ../code/README.md.
+% Les fonctions du prototype sont documentées et présentes dans le code ;
+% cette présentation ne prétend pas à une nouvelle validation en réseau actif.
+\definecolor{projectblue}{HTML}{17365D}
+\definecolor{projectteal}{HTML}{087E8B}
+\usetheme{Madrid}
+\setbeamercolor{structure}{fg=projectblue}
+\setbeamercolor{frametitle}{bg=projectblue,fg=white}
+\setbeamercolor{block title}{bg=projectteal,fg=white}
+\setbeamercolor{block body}{bg=projectteal!7}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.84\paperwidth,ht=2.7ex,dp=1.2ex,leftskip=1em]{author in head/foot}%
+      VAP SSR 2026--2027 \hfill Point d'avancement -- 27 octobre 2026
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.16\paperwidth,ht=2.7ex,dp=1.2ex,center]{date in head/foot}%
+      \insertframenumber/\inserttotalframenumber
+    \end{beamercolorbox}}%
+}
+\newcommand{\espacement}{\setlength{\itemsep}{.8em}}
+\title[Démonstrateur ML-NIDS]{Démonstrateur d'attaques contre un ML-NIDS}
+\subtitle{État de l'art et premier prototype réseau}
+\author{Projet VAP SSR 2026--2027}
+\institute{Réunion avec Grégory Blanc}
+\date{27 octobre 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \note{Présenter les deux avancées : la synthèse bibliographique et le site de construction réseau. L'intégration ML constitue le prochain travail.}
+\end{frame}
+
+\begin{frame}{Avancées depuis la réunion du 6 octobre}
+  \begin{itemize}\espacement
+    \item \textbf{État de l'art rédigé} sur les attaques contre les ML-NIDS.
+    \item \textbf{Premier site développé} pour construire une topologie réseau par glisser-déposer, dans l'esprit de Packet Tracer.
+  \end{itemize}
+  \vspace{1.2em}
+  \begin{block}{À faire ensuite}
+    Choisir les modèles et les attaques, puis les intégrer au démonstrateur.
+  \end{block}
+  \note{La détection et les attaques sont du travail à venir. Aucun choix de couple modèle--attaque n'est arrêté.}
+\end{frame}
+
+\begin{frame}[t]{État de l'art : nouveaux papiers}
+  % Espace réservé : ajouter ici les nouveaux papiers à présenter.
+  % Pour chaque papier : référence, apport et lien avec le projet.
+  % Aucun article n'est présélectionné dans cette version.
+  \note{Espace à compléter avec les nouveaux papiers choisis par le groupe. Ne pas reprendre les familles d'attaques déjà présentées le 6 octobre.}
+\end{frame}
+
+\begin{frame}{Le site : construire une topologie réseau}
+  \textbf{Une interface web inspirée de Packet Tracer.}
+  \vspace{1em}
+  \begin{itemize}\espacement
+    \item Ajouter et déplacer des équipements par glisser-déposer.
+    \item Relier les équipements aux switches avec l'outil câble.
+    \item Modifier les paramètres réseau dans le panneau de propriétés.
+    \item Vérifier la cohérence de la topologie avant le déploiement.
+  \end{itemize}
+  \note{Vérification dans le code : Palette.jsx et TopologyCanvas.jsx pour le glisser-déposer ; useCableTool.js pour les liens ; DeviceForm.jsx pour les propriétés ; TopologyEditor.jsx et validators.js pour les contrôles. Ces fonctions sont présentes dans le dépôt consulté ; leur fonctionnement dans l'installation du groupe n'a pas été vérifié ici. Ne pas assimiler la présence d'un équipement IDS à une détection ML opérationnelle.}
+\end{frame}
+
+\begin{frame}{Exécution et observation : fonctions implémentées}
+  \textbf{Le code du prototype comprend :}
+  \vspace{1em}
+  \begin{itemize}\espacement
+    \item Le déploiement de la topologie sous forme de conteneurs et de réseaux Docker.
+    \item Un terminal pour les PC et les serveurs démarrés.
+    \item La capture des paquets sur une interface d'équipement reliée à un switch.
+    \item L'affichage des paquets, des filtres et un export PCAP.
+  \end{itemize}
+  \vfill
+  La détection ML et l'exécution des attaques restent à intégrer.
+  \note{Fonctions suivies dans le code, de l'interface au backend : useDeployment.js vers POST /api/deployments et LabManager.deploy ; TerminalView.jsx vers TerminalSession ; CaptureView.jsx vers CaptureSession. Le téléchargement PCAP est construit dans le navigateur. Cette vérification du code ne constitue pas un test de bout en bout dans l'installation du groupe.}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering
+  {\fontsize{36}{44}\selectfont\bfseries\color{projectblue} Démonstration du prototype\par}
+\end{frame}
+
+\begin{frame}{Intégration du ML-NIDS : travail restant}
+  \begin{enumerate}\espacement
+    \item \textbf{Choisir et reproduire une référence :} fixer le modèle, l'extracteur et les données de départ.
+    \item \textbf{Relier la sonde au détecteur :} transformer le trafic capturé en caractéristiques et obtenir un score ou une décision.
+    \item \textbf{Intégrer une attaque compatible :} préciser les accès nécessaires et les limites de modification du trafic.
+    \item \textbf{Afficher la comparaison :} trafic de référence, trafic transformé et résultat de détection.
+  \end{enumerate}
+  \vfill
+  \textbf{Premier objectif proposé :} une expérience reproductible de bout en bout sur une topologie simple.
+  \note{Environ 45 secondes. L'image de la sonde est encore provisoire dans backend/config/devices.toml. Éviter de multiplier les modèles avant d'avoir une première chaîne complète.}
+\end{frame}
+
+\begin{frame}{Questions pour Grégory Blanc}
+  \begin{enumerate}\espacement
+    \item \textbf{Comparaison avant / après :} quelles informations afficher pour rendre l'effet de l'attaque facile à comprendre ?
+    \item \textbf{Représentation :} privilégier une vue du réseau, une chronologie des échanges ou des graphiques de résultats ?
+    \item \textbf{Déroulement :} montrer l'attaque en direct, étape par étape, ou présenter un bilan comparatif à la fin ?
+    \item \textbf{Message pédagogique :} que doit retenir l'utilisateur après avoir vu une démonstration ?
+  \end{enumerate}
+\end{frame}
+
+\end{document}
