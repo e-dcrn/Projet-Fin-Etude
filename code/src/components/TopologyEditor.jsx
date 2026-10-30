@@ -5,10 +5,14 @@ import TopologyCanvas from './TopologyCanvas.jsx';
 import PropertiesPanel from './PropertiesPanel.jsx';
 import DeployDialog from './DeployDialog.jsx';
 import Dock from './Dock.jsx';
+import TrafficPanel from './TrafficPanel.jsx';
+import ScenarioPanel from './ScenarioPanel.jsx';
 import { useTopology } from '../hooks/useTopology.js';
 import { useCableTool } from '../hooks/useCableTool.js';
 import { useDeployment } from '../hooks/useDeployment.js';
 import { useDock } from '../hooks/useDock.js';
+import { useTraffic } from '../hooks/useTraffic.js';
+import { useSimulation } from '../hooks/useSimulation.js';
 import { serializeTopology } from '../utils/serializeTopology.js';
 import { deserializeTopology } from '../utils/deserializeTopology.js';
 import { validateTopology } from '../utils/validators.js';
@@ -20,10 +24,24 @@ import { validateTopology } from '../utils/validators.js';
 export default function TopologyEditor() {
   const topology = useTopology();
   const [toast, setToast] = useState(null);
+  // Panneau de droite : 'traffic' (trafic bénin), 'scenario' (audit), ou null (propriétés).
+  const [rightPanel, setRightPanel] = useState(null);
   const cableTool = useCableTool(topology.connectDevices, setToast);
   const deployment = useDeployment();
   const dock = useDock();
   const { keepOnly, open: openTab } = dock;
+
+  // Génération et visualisation du trafic (actives seulement réseau allumé)
+  const labRunning = deployment.lab.status === 'running';
+  const traffic = useTraffic(labRunning);
+  useEffect(() => {
+    if (!labRunning) setRightPanel(null); // les panneaux se ferment à l'arrêt du réseau
+  }, [labRunning]);
+  const togglePanel = (panel) => setRightPanel((cur) => (cur === panel ? null : panel));
+
+  // Visualisation des paquets : chaque paquet réel capturé devient une boule
+  // animée le long de son chemin, en temps réel (voir useSimulation).
+  const { balls } = useSimulation(labRunning, topology.nodes, topology.edges);
 
   // Un équipement (ou un câble) supprimé de la topologie emporte son terminal (ou sa capture)
   useEffect(
@@ -101,8 +119,11 @@ export default function TopologyEditor() {
         onClear={handleClear}
         onLoadExample={handleLoadExample}
         onStopLab={handleStopLab}
+        onToggleTraffic={() => togglePanel('traffic')}
+        trafficActive={rightPanel === 'traffic'}
+        onToggleScenario={() => togglePanel('scenario')}
+        scenarioActive={rightPanel === 'scenario'}
         nodeCount={topology.nodes.length}
-        linkCount={topology.edges.length}
         errorCount={errorCount}
         labStatus={deployment.lab.status}
         busy={deployment.run?.phase === 'running'}
@@ -110,45 +131,72 @@ export default function TopologyEditor() {
 
       <main className="workspace">
         <Palette />
-        <TopologyCanvas
-          nodes={topology.nodes}
-          edges={topology.edges}
-          onNodesChange={topology.onNodesChange}
-          onEdgesChange={topology.onEdgesChange}
-          onAddDevice={topology.addDevice}
-          cableTool={cableTool}
-          onlineNodeIds={deployment.lab.onlineIds}
-          onOpenTerminal={openTerminal}
-          onOpenCapture={openCapture}
-          capturedEdgeIds={capturedEdgeIds}
-        />
-        <PropertiesPanel
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          nodes={topology.nodes}
-          edges={topology.edges}
-          issues={issues}
-          onUpdateProperties={topology.updateDeviceProperties}
-          onUpdateLink={topology.updateLink}
-          onDeleteDevice={topology.deleteDevice}
-          onDeleteLink={topology.deleteLink}
-          onlineNodeIds={deployment.lab.onlineIds}
-          onOpenCapture={openCapture}
-        />
-      </main>
 
-      <Dock
-        tabs={dock.tabs}
-        activeKeys={dock.activeKeys}
-        split={dock.split}
-        focusedPane={dock.focusedPane}
-        requests={dock.requests}
-        nodes={topology.nodes}
-        edges={topology.edges}
-        onSelect={dock.select}
-        onClose={dock.close}
-        onMove={dock.move}
-      />
+        {/* Colonne centrale : le canvas, et le panneau du bas (terminaux / captures)
+            glissé dessous — il reste donc entre la palette (gauche) et le panneau
+            de droite, au lieu de passer sous eux. */}
+        <div className="workspace__center">
+          <TopologyCanvas
+            nodes={topology.nodes}
+            edges={topology.edges}
+            onNodesChange={topology.onNodesChange}
+            onEdgesChange={topology.onEdgesChange}
+            onAddDevice={topology.addDevice}
+            cableTool={cableTool}
+            onlineNodeIds={deployment.lab.onlineIds}
+            onOpenTerminal={openTerminal}
+            onOpenCapture={openCapture}
+            capturedEdgeIds={capturedEdgeIds}
+            balls={balls}
+            simActive={labRunning}
+          />
+          <Dock
+            tabs={dock.tabs}
+            activeKeys={dock.activeKeys}
+            split={dock.split}
+            focusedPane={dock.focusedPane}
+            requests={dock.requests}
+            nodes={topology.nodes}
+            edges={topology.edges}
+            onSelect={dock.select}
+            onClose={dock.close}
+            onMove={dock.move}
+          />
+        </div>
+
+        {/* Panneau de droite : trafic bénin, scénarios d'audit, ou propriétés de la sélection. */}
+        {rightPanel === 'traffic' && labRunning ? (
+          <TrafficPanel
+            traffic={traffic}
+            nodes={topology.nodes}
+            edges={topology.edges}
+            onlineIds={deployment.lab.onlineIds}
+            onClose={() => setRightPanel(null)}
+          />
+        ) : rightPanel === 'scenario' && labRunning ? (
+          <ScenarioPanel
+            traffic={traffic}
+            nodes={topology.nodes}
+            edges={topology.edges}
+            onlineIds={deployment.lab.onlineIds}
+            onClose={() => setRightPanel(null)}
+          />
+        ) : (
+          <PropertiesPanel
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            nodes={topology.nodes}
+            edges={topology.edges}
+            issues={issues}
+            onUpdateProperties={topology.updateDeviceProperties}
+            onUpdateLink={topology.updateLink}
+            onDeleteDevice={topology.deleteDevice}
+            onDeleteLink={topology.deleteLink}
+            onlineNodeIds={deployment.lab.onlineIds}
+            onOpenCapture={openCapture}
+          />
+        )}
+      </main>
 
       <DeployDialog run={deployment.run} onConfirm={deployment.deploy} onClose={deployment.dismiss} />
 

@@ -1,0 +1,36 @@
+# Scénario ConCap — force brute SSH (hydra).
+# L'attaquant tente des mots de passe sur le compte « labuser » de la cible SSH ;
+# le trafic est capturé, converti en flux CICFlowMeter et étiqueté « SSH-Patator »
+# (la classe des datasets CIC-IDS pour la force brute SSH).
+#
+# ⚠ L'image attaquante doit contenir hydra + une wordlist. Il n'existe pas d'image
+# publique universelle ; construis-en une (voir concap/README.md) ou adapte
+# atkCommand. L'exemple suppose /wordlist.txt présent dans l'image attaquante.
+type: single-target
+name: ssh-bruteforce
+
+attacker:
+  name: hydra
+  image: ghcr.io/<ton-org>/hydra:latest      # À CONSTRUIRE : hydra + /wordlist.txt
+  atkCommand: hydra -l labuser -P /wordlist.txt -t 4 ssh://$TARGET_IP
+  atkTime: 120s
+  cpuRequest: 200m
+  memRequest: 256Mi
+
+target:
+  name: ssh
+  image: lscr.io/linuxserver/openssh-server:latest
+  # Compte volontairement faible pour que la force brute « réussisse » (démonstration).
+  # Variables d'environnement de l'image (à adapter selon ta config ConCap) :
+  #   USER_NAME=labuser  USER_PASSWORD=password123  PASSWORD_ACCESS=true
+  labels:
+    service: "ssh"
+
+network:
+  bandwidth: 100Mbit
+  queueSize: 100ms
+  delay: 5ms
+
+labels:
+  category: "bruteforce"
+  subcategory: "SSH-Patator"

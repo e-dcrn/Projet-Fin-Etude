@@ -1,0 +1,33 @@
+# Scénario ConCap — reconnaissance réseau (scan SYN nmap).
+# L'attaquant scanne tous les ports TCP de la cible ; le trafic produit est
+# capturé puis converti en flux CICFlowMeter et étiqueté « PortScan ».
+#
+# Variables disponibles dans atkCommand : $ATTACKER_IP, $TARGET_IP.
+type: single-target
+name: nmap-syn-scan
+
+attacker:
+  name: nmap
+  image: instrumentisto/nmap:latest        # image publique contenant nmap
+  atkCommand: nmap -sS -T4 -p- $TARGET_IP   # scan SYN de tous les ports TCP
+  atkTime: 60s
+  cpuRequest: 100m
+  memRequest: 128Mi
+  privileged: true                          # -sS (paquets SYN bruts) nécessite les privilèges réseau
+
+target:
+  name: web
+  image: nginx:latest                       # ouvre le port 80 (quelques ports « ouverts » à trouver)
+  labels:
+    service: "web"
+
+# Conditions réseau : sans délai réaliste, les features temporelles de
+# CICFlowMeter ne ressemblent pas à un vrai réseau (voir docs/ARCHITECTURE.md).
+network:
+  bandwidth: 100Mbit
+  queueSize: 100ms
+  delay: 5ms
+
+labels:
+  category: "reconnaissance"
+  subcategory: "PortScan"

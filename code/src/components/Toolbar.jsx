@@ -17,8 +17,11 @@ export default function Toolbar({
   onClear,
   onLoadExample,
   onStopLab,
+  onToggleTraffic,
+  trafficActive,
+  onToggleScenario,
+  scenarioActive,
   nodeCount,
-  linkCount,
   errorCount,
   labStatus,
   busy,
@@ -30,6 +33,10 @@ export default function Toolbar({
       <div className="toolbar__brand">
         <strong>IDS Lab</strong>
         <span className="toolbar__subtitle">Éditeur de topologie</span>
+        <span className={`lab-status ${status.className}`} title={status.label}>
+          <span className="lab-status__dot" />
+          {status.label}
+        </span>
       </div>
 
       <div className="toolbar__actions">
@@ -45,25 +52,39 @@ export default function Toolbar({
           🔌 Câble {cableModeActive ? '(actif)' : ''}
         </button>
 
+        {labStatus === 'running' && (
+          <button
+            type="button"
+            className={`btn${trafficActive ? ' btn--active' : ''}`}
+            onClick={onToggleTraffic}
+            aria-pressed={trafficActive}
+            title="Générer du trafic de fond (bénin) sur le réseau"
+          >
+            📡 Trafic
+          </button>
+        )}
+        {labStatus === 'running' && (
+          <button
+            type="button"
+            className={`btn${scenarioActive ? ' btn--active' : ''}`}
+            onClick={onToggleScenario}
+            aria-pressed={scenarioActive}
+            title="Lancer un scénario d'audit (reconnaissance, force brute)"
+          >
+            ⚡ Scénarios
+          </button>
+        )}
+
         <button type="button" className="btn btn--danger" onClick={onClear} disabled={nodeCount === 0}>
           Tout effacer
         </button>
-
-        <span className="toolbar__stats">
-          {nodeCount} équipement(s) · {linkCount} lien(s)
-          {errorCount > 0 && <span className="toolbar__errors"> · {errorCount} erreur(s)</span>}
-        </span>
-
-        <span className={`lab-status ${status.className}`} title={status.label}>
-          <span className="lab-status__dot" />
-          {status.label}
-        </span>
         {labStatus === 'running' && (
           <button type="button" className="btn" onClick={onStopLab} disabled={busy}>
             ■ Arrêter
           </button>
         )}
 
+        {errorCount > 0 && <span className="toolbar__errors">{errorCount} erreur(s)</span>}
         <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0 || busy}>
           ✔ Valider la topologie
         </button>

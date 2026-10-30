@@ -108,6 +108,32 @@ class LabManager:
             detach=True,
         )
 
+    def start_netns_helper(self, device, runtime, command, role: str, **extra_labels):
+        """
+        Conteneur éphémère partageant la pile réseau d'un équipement (même IP,
+        mêmes interfaces) : tout ce qu'il émet semble provenir de l'équipement.
+        Sert à la génération de trafic (agent bénin, scénarios d'audit) sans rien
+        installer dans l'équipement. Il porte le label du lab : l'arrêt du réseau
+        le supprime aussi. `role` et `extra_labels` permettent de le retrouver.
+        """
+        client = self.client
+        image = self._image_name(runtime)
+        self._ensure_image(client, image, runtime)
+        return client.containers.run(
+            image,
+            command,
+            network_mode=f"container:{device.id}",
+            cap_add=runtime.cap_add,
+            labels=self._labels(role=role, **extra_labels),
+            init=True,
+            detach=True,
+        )
+
+    def helpers(self, role: str):
+        """Conteneurs auxiliaires d'un rôle donné (capture, traffic, scenario…)."""
+        selector = f"{self.settings.prefix}.role={role}"
+        return self.client.containers.list(all=True, filters={"label": [self.label, selector]})
+
     def remove_capture_helpers(self, keep) -> None:
         """Supprime les conteneurs de capture orphelins (ceux dont l'id n'est pas dans `keep`)."""
         role = f"{self.settings.prefix}.role=capture"

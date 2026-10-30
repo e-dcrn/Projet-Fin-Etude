@@ -24,6 +24,9 @@ function EndLabel({ point, text }) {
  * Câble : ligne droite de centre à centre, avec une étiquette à chaque extrémité :
  * l'interface de l'équipement (eth0…) côté équipement, le port (Fa0/1…) côté switch.
  * Un câble relie toujours un équipement (source) à un switch (target).
+ *
+ * Le trafic qui circule est animé par-dessus, le long du chemin complet
+ * source → destinataire (voir SimulationLayer), pas par le câble lui-même.
  */
 export default function CableEdge({ id, sourceX, sourceY, targetX, targetY, data, style, interactionWidth }) {
   const [path] = getStraightPath({ sourceX, sourceY, targetX, targetY });

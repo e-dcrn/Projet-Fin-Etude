@@ -38,6 +38,7 @@ class Settings:
     prefix: str
     helper_image: str
     capture: DeviceRuntime  # outil de capture du trafic (tcpdump), lancé à côté d'un équipement
+    traffic: DeviceRuntime  # boîte à outils de génération de trafic (agent bénin, scans), lancée à côté d'un équipement
     devices: Dict[str, DeviceRuntime]
     cors_origins: List[str]  # origines autorisées explicitement (IDSLAB_CORS_ORIGINS)
     cors_origin_regex: Optional[str]  # sinon : toute origine locale
@@ -76,11 +77,21 @@ def load_settings(path: Path | None = None) -> Settings:
         packages=list(capture.get("packages", ["tcpdump"])),
     )
 
+    traffic = raw.get("traffic", {})
+    traffic_runtime = DeviceRuntime(
+        image=traffic.get("image", "python:3.12-alpine"),
+        command=["sleep", "infinity"],  # remplacée au lancement (agent bénin ou commande d'audit)
+        # NET_RAW : scans en mode SYN (nmap -sS) et ping ; NET_ADMIN : réglages réseau éventuels.
+        cap_add=["NET_ADMIN", "NET_RAW"],
+        packages=list(traffic.get("packages", ["nmap", "curl"])),
+    )
+
     origins = os.environ.get("IDSLAB_CORS_ORIGINS", "")
     return Settings(
         prefix=lab.get("prefix", "idslab"),
         helper_image=lab.get("helper_image", "alpine:3.20"),
         capture=capture_runtime,
+        traffic=traffic_runtime,
         devices=devices,
         cors_origins=[o.strip() for o in origins.split(",") if o.strip()],
         cors_origin_regex=None if origins.strip() else LOCAL_ORIGIN_REGEX,

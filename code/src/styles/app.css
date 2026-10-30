@@ -29,6 +29,10 @@ body { background: var(--bg); }
    ========================================================================== */
 .app { display: flex; flex-direction: column; height: 100%; }
 .workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 340px; min-height: 0; }
+/* Colonne centrale : canvas (haut) + panneau du bas (terminaux/captures), empilés.
+   La palette (gauche) et le panneau de droite gardent ainsi toute la hauteur. */
+.workspace__center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.workspace__center > .canvas { flex: 1; min-height: 0; }
 
 .panel-title {
   display: flex; align-items: center; gap: 8px;
@@ -44,12 +48,12 @@ body { background: var(--bg); }
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 10px 16px; background: #0f172a; color: #fff;
 }
-.toolbar__brand { display: flex; align-items: baseline; gap: 10px; }
+.toolbar__brand { display: flex; align-items: center; gap: 10px; }
 .toolbar__brand strong { font-size: 18px; }
 .toolbar__subtitle { font-size: 13px; color: #94a3b8; }
+.toolbar__brand .lab-status { margin-left: 6px; }
 .toolbar__actions { display: flex; align-items: center; gap: 10px; }
-.toolbar__stats { font-size: 13px; color: #cbd5e1; margin: 0 6px; }
-.toolbar__errors { color: #fca5a5; }
+.toolbar__errors { font-size: 13px; color: #fca5a5; }
 
 /* État du réseau instancié */
 .lab-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #94a3b8; }
@@ -472,3 +476,110 @@ body { background: var(--bg); }
 .difficulty--easy { background: #dcfce7; color: #166534; }
 .difficulty--medium { background: #fef3c7; color: #92400e; }
 .difficulty--hard { background: #fee2e2; color: #991b1b; }
+
+/* Génération et visualisation du trafic =====================================
+   ========================================================================== */
+
+/* Mode simulation : une boule par paquet réel, parcourant son chemin (SimulationLayer).
+   Couleur selon le protocole ; liseré blanc + léger halo pour bien les détacher. */
+.sim-packet { stroke: #fff; stroke-width: 1.2; pointer-events: none; filter: drop-shadow(0 0 2px rgba(15, 23, 42, .4)); }
+.sim-packet--tcp { fill: var(--primary); }
+.sim-packet--icmp { fill: #0d9488; }
+.sim-packet--udp { fill: #d97706; }
+.sim-packet--arp { fill: #9333ea; }
+.sim-packet--other { fill: #64748b; }
+.sim-layer { z-index: 6; }
+
+/* Légende des paquets, posée en haut à gauche du canvas */
+.sim-controls {
+  position: absolute; top: 12px; left: 12px; z-index: 7;
+  padding: 10px 12px; border-radius: var(--radius);
+  background: rgba(255, 255, 255, .95); border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, .12); font-size: 12px;
+}
+.sim-controls__head { margin-bottom: 8px; }
+.sim-legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--text-muted); }
+.sim-legend__item { display: inline-flex; align-items: center; gap: 4px; }
+.sim-dot { width: 9px; height: 9px; border-radius: 50%; }
+.sim-dot--tcp { background: var(--primary); }
+.sim-dot--icmp { background: #0d9488; }
+.sim-dot--udp { background: #d97706; }
+.sim-dot--arp { background: #9333ea; }
+
+.traffic-list__dest { color: var(--text-muted); font-size: 11px; }
+
+/* Panneau de contrôle du trafic (colonne de droite, à la place des propriétés) */
+.traffic-panel {
+  padding: 16px; overflow-y: auto;
+  background: var(--panel-bg); border-left: 1px solid var(--border);
+}
+.traffic-panel__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.traffic-panel__head strong { font-size: 15px; }
+
+/* La première section d'un panneau ne reprend pas la bordure/espace du haut. */
+.traffic-section--first { padding-top: 0; border-top: 0; }
+
+.traffic-error {
+  margin-bottom: 12px; padding: 8px 10px; border-left: 3px solid var(--danger);
+  border-radius: 4px; background: #fef2f2; color: #991b1b; font-size: 12px; white-space: pre-line;
+}
+
+.traffic-section { margin-bottom: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+.traffic-section__head { display: flex; align-items: center; justify-content: space-between; }
+.traffic-section__title { margin: 0 0 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+.traffic-actions { display: flex; gap: 8px; margin: 10px 0 6px; }
+.traffic-actions .btn { flex: 1; }
+
+/* Génération de trafic : presets + cases à cocher (types, émetteurs, destinataires) */
+.traffic-field { margin-bottom: 10px; }
+.traffic-field > .field__label { display: block; font-size: 11px; font-weight: 500; margin-bottom: 4px; }
+
+.traffic-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.preset-btn {
+  padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fff; color: var(--text); cursor: pointer; font-size: 11px; font-weight: 600;
+}
+.preset-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+.check-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.check-head__actions { font-size: 11px; color: var(--text-muted); }
+.link-btn { background: none; border: 0; padding: 0; color: var(--primary); cursor: pointer; font-size: 11px; }
+.link-btn:hover { text-decoration: underline; }
+
+.check-row { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.check-list {
+  display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface, #fff);
+}
+.check { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.check input { cursor: pointer; }
+
+.traffic-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.traffic-list__row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.traffic-list__name { flex: 1; }
+
+.traffic-dot, .scenario__badge { flex-shrink: 0; }
+.traffic-dot { width: 9px; height: 9px; border-radius: 50%; background: #cbd5e1; }
+.traffic-dot--on { background: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .2); }
+
+.btn--xs { padding: 3px 9px; font-size: 12px; }
+
+.scenario { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.scenario__line { display: flex; align-items: center; gap: 8px; }
+.scenario__name { font-size: 13px; font-weight: 600; }
+.scenario__badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.scenario--running { background: #fee2e2; color: #991b1b; }
+.scenario--done { background: #e2e8f0; color: #475569; }
+.scenario__meta { margin: 3px 0 6px; font-size: 11px; color: var(--text-muted); }
+.scenario__log {
+  margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto;
+  background: #0f172a; color: #e2e8f0; border-radius: 6px; font: 11px/1.5 var(--mono); white-space: pre;
+}
+
+/* Flux étiquetés d'un scénario */
+.scenario__flows { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.flow-counts { display: flex; flex-wrap: wrap; gap: 5px; }
+.flow-chip { padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 600; }
+.flow-chip--attack { background: #fee2e2; color: #991b1b; }
+.scenario__flows a { text-decoration: none; }

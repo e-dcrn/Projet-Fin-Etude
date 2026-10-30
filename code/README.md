@@ -344,6 +344,11 @@ Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l
 
 ## Architecture
 
+> Vue d'ensemble du projet — démonstrateur, génération de trafic, **pipeline ML-IDS**
+> (features CICFlowMeter) et **ConCap** : voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> La génération de trafic bénin et les scénarios d'audit sont deux panneaux distincts
+> (`src/components/TrafficPanel.jsx`, `ScenarioPanel.jsx`).
+
 ```
 code/
 ├── index.html / package.json / vite.config.js …

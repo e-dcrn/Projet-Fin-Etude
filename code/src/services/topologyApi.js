@@ -59,6 +59,39 @@ export const fetchLabStatus = () => request('/lab');
 /** Arrête et supprime le réseau instancié. */
 export const stopLab = () => request('/lab', { method: 'DELETE' });
 
+// --- Génération de trafic (voir backend/app/traffic.py) --------------------
+
+/**
+ * Activité de trafic et catalogues :
+ * { benign: [{ node, profile }], scenarios: [...], profiles: [...], attacks: [...] }
+ */
+export const fetchTraffic = () => request('/lab/traffic');
+
+/** Démarre le trafic de fond (bénin) sur un équipement. `kinds` : types de trafic
+ *  à générer (« icmp », « http », « service ») ; `dest` : libellé d'affichage. */
+export const startBenign = (node, profile, targets, dest = 'all', kinds = ['icmp']) =>
+  request('/lab/traffic/benign', { method: 'POST', body: JSON.stringify({ node, profile, dest, kinds, targets }) });
+
+/** Arrête le trafic de fond : un équipement (node) ou tous (node omis). */
+export const stopBenign = (node) =>
+  request(`/lab/traffic/benign${node ? `?node=${encodeURIComponent(node)}` : ''}`, { method: 'DELETE' });
+
+/** Lance un scénario d'audit depuis `source` vers `target` → description du scénario. */
+export const runScenario = (source, attack, target) =>
+  request('/lab/scenarios', { method: 'POST', body: JSON.stringify({ source, attack, target }) });
+
+/** Résultat (sortie) d'un scénario terminé ou en cours. */
+export const fetchScenarioLogs = (id) => request(`/lab/scenarios/${encodeURIComponent(id)}/logs`);
+
+/** URL de téléchargement du CSV des flux étiquetés d'un scénario (voir backend/app/flows.py). */
+export const scenarioFlowsUrl = (id) => `${API_BASE_URL}/lab/scenarios/${encodeURIComponent(id)}/flows`;
+
+/** Supprime les scénarios terminés. */
+export const clearScenarios = () => request('/lab/scenarios', { method: 'DELETE' });
+
+/** URL WebSocket du flux des paquets du réseau en temps réel (voir backend/app/simulation.py). */
+export const simulationUrl = () => websocketUrl('/lab/simulation');
+
 /**
  * Lance l'instanciation d'une topologie sérialisée (serializeTopology()).
  * @returns {Promise<{ id: string }>}

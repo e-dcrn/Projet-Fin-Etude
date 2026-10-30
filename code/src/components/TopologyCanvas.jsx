@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, useReactFlow } from '@xyflow/react';
 import DeviceNode from './DeviceNode.jsx';
 import CableEdge from './CableEdge.jsx';
+import SimulationLayer from './SimulationLayer.jsx';
+import SimulationControls from './SimulationControls.jsx';
 import { DEVICE_TYPES, DND_MIME_TYPE, NODE_ORIGIN, NODE_ICON_CENTER_Y } from '../config/deviceTypes.js';
 import { formatInterface } from '../utils/ipv4.js';
 import { deviceLinks } from '../utils/topologyQueries.js';
@@ -50,6 +52,8 @@ export default function TopologyCanvas({
   onOpenTerminal,
   onOpenCapture,
   capturedEdgeIds,
+  balls = [],
+  simActive = false,
 }) {
   const { screenToFlowPosition } = useReactFlow();
 
@@ -99,7 +103,7 @@ export default function TopologyCanvas({
     [onlineNodeIds, onOpenCapture],
   );
 
-  // Câbles dont le trafic est en cours de capture : animés
+  // Câbles dont le trafic est en cours de capture : animés (pastille).
   const displayedEdges = useMemo(
     () => edges.map((e) => (capturedEdgeIds.has(e.id) ? { ...e, className: 'cable cable--captured' } : e)),
     [edges, capturedEdgeIds],
@@ -127,10 +131,13 @@ export default function TopologyCanvas({
         deleteKeyCode={['Delete', 'Backspace']}
         proOptions={{ hideAttribution: true }}
       >
+        <SimulationLayer balls={balls} />
         <Background gap={20} />
         <Controls />
         <MiniMap position="top-right" pannable zoomable nodeColor={(n) => DEVICE_TYPES[n.data.deviceType]?.color ?? '#999'} />
       </ReactFlow>
+
+      {simActive && <SimulationControls />}
 
       {cableTool.isActive && (
         <div className="canvas__banner">

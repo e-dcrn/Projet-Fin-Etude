@@ -31,6 +31,16 @@ helper_image = "alpine:3.20"
 image = "alpine:3.20"
 packages = ["tcpdump"]
 
+[traffic]
+# Boîte à outils de génération de trafic : un conteneur éphémère qui partage la
+# pile réseau d'un équipement (son IP, ses interfaces) pour, en son nom, soit
+# jouer un agent de trafic « bénin » (navigation, consultations : voir
+# traffic_agent.py), soit lancer un scénario d'audit (reconnaissance nmap).
+# Comme la capture, rien n'est installé dans l'équipement lui-même.
+# nmap : reconnaissance ; hydra : force brute (classe « Patator » des jeux CIC-IDS).
+image = "python:3.12-alpine"
+packages = ["nmap", "nmap-scripts", "curl", "hydra"]
+
 [defaults]
 # Processus qui maintient l'équipement allumé.
 command = ["sleep", "infinity"]
@@ -43,9 +53,10 @@ image = "alpine:3.20"
 packages = ["curl"]
 
 [devices.server]
-# La commande est remplacée par le simulateur de services (voir service_listener.py).
+# La commande est remplacée par le gestionnaire de services (voir service_listener.py).
+# openssh / vsftpd : vrais démons SSH et FTP (force brute réaliste) ; shadow : chpasswd/useradd.
 image = "python:3.12-alpine"
-packages = ["curl"]
+packages = ["curl", "openssh", "vsftpd", "shadow"]
 
 [devices.router]
 image = "alpine:3.20"
