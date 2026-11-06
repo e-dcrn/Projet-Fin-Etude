@@ -87,6 +87,10 @@ export const fetchScenarioLogs = (id) => request(`/lab/scenarios/${encodeURIComp
 export const scenarioFlowsUrl = (id) => `${API_BASE_URL}/lab/scenarios/${encodeURIComponent(id)}/flows`;
 
 /** Supprime les scénarios terminés. */
+/** Interrompt un scénario en cours (id), ou tous les scénarios en cours (sans id). */
+export const stopScenarios = (id) =>
+  request(`/lab/scenarios/stop${id ? `?id=${encodeURIComponent(id)}` : ''}`, { method: 'POST' });
+
 export const clearScenarios = () => request('/lab/scenarios', { method: 'DELETE' });
 
 // --- Détection en direct (voir backend/app/detection.py) -------------------

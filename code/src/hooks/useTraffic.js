@@ -59,6 +59,7 @@ export function useTraffic(active) {
     (source, attack, target, speed) => act(() => api.runScenario(source, attack, target, speed)),
     [act],
   );
+  const stopScenarios = useCallback((id) => act(() => api.stopScenarios(id)), [act]);
   const clearScenarios = useCallback(() => act(() => api.clearScenarios()), [act]);
 
   // Équipements où un agent bénin tourne ; sources de scénarios encore en cours
@@ -80,6 +81,7 @@ export function useTraffic(active) {
     startBenign,
     stopBenign,
     runScenario,
+    stopScenarios,
     clearScenarios,
     fetchLogs: api.fetchScenarioLogs,
   };

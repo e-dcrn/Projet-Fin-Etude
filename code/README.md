@@ -118,7 +118,7 @@ Autres commandes :
 
 C'est le scénario de démonstration du projet. Le moteur et l'interface doivent tourner, et Docker doit être démarré.
 Les boutons cités sont dans la barre d'outils en haut. Un bouton est **jaune** (actif) tant que son panneau est
-ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ Scénarios (« en cours… »),
+ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ Scénarios (« actif »),
 🛡 Détection (« active »), 🗂 Datasets, 🧠 IDS.
 
 ### Étape 1 : créer la topologie
@@ -182,7 +182,10 @@ peu, comptées comme **fausses alertes** dans le bilan).
 ### Étape 6 : lancer un scénario d'attaque (la sonde doit le détecter)
 
 **⚡ Scénarios** → **Depuis (source)**, **Scénario** (ex. « Scan de ports (connect) », « Force brute SSH »),
-**Cible**, **Vitesse** → **⚡ Lancer le scénario**. Le bouton reste jaune (« en cours… ») pendant l'attaque.
+**Cible**, **Vitesse** → **⚡ Lancer le scénario**. Le bouton reste jaune (« actif ») pendant l'attaque.
+Pour interrompre une attaque avant sa fin : **■ Arrêter** sur sa ligne dans la liste des scénarios, ou
+**■ Tout arrêter** sous le bouton de lancement. Elle passe à « arrêté ». Ses flux étiquetés (la partie jouée)
+restent disponibles, et la détection compte l'attaque de son début jusqu'à l'arrêt.
 
 Dans **🛡 Détection**, des **alertes** apparaissent et les équipements impliqués sont entourés de rouge sur le
 schéma. Le moteur connaît chaque attaque lancée (source, cible, début, fin), donc le bilan compte les attaques

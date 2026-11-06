@@ -13,6 +13,7 @@ function sinceLabel(startedSec) {
 const STATUS = {
   running: { label: 'en cours', className: 'scenario--running' },
   exited: { label: 'terminé', className: 'scenario--done' },
+  stopped: { label: 'arrêté', className: 'scenario--done' },
 };
 
 /** Flux étiquetés produits par un scénario (CICFlowMeter → CSV téléchargeable). */
@@ -74,6 +75,7 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
     }
   };
 
+  const anyRunning = traffic.scenarios.some((s) => s.status === 'running');
   const launch = () => guard(() => traffic.runScenario(source, attackId, target, speed));
   const cadence = traffic.speeds.find((s) => s.id === speed)?.cadence?.[attack?.tool];
   const showLog = (id) =>
@@ -156,9 +158,14 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
           </dl>
         )}
 
-        <button type="button" className="btn btn--danger btn--block" onClick={launch} disabled={!canLaunch}>
-          ⚡ Lancer le scénario
-        </button>
+        <div className="traffic-actions">
+          <button type="button" className="btn btn--danger" onClick={launch} disabled={!canLaunch}>
+            ⚡ Lancer le scénario
+          </button>
+          <button type="button" className="btn" onClick={() => guard(() => traffic.stopScenarios())} disabled={busy || !anyRunning}>
+            ■ Tout arrêter
+          </button>
+        </div>
       </section>
 
       {traffic.scenarios.length > 0 && (
@@ -183,9 +190,16 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
                     {s.durationSec != null && ` · ${s.status === 'running' ? 'en cours depuis' : 'a duré'} ${s.durationSec.toLocaleString('fr-FR')} s`}
                   </div>
                   {s.command && <code className="scenario__cmd">{s.command}</code>}
-                  <button type="button" className="btn btn--light btn--xs" onClick={() => showLog(s.id)} disabled={busy}>
-                    Voir le résultat
-                  </button>
+                  <div className="scenario__actions">
+                    {s.status === 'running' && (
+                      <button type="button" className="btn btn--xs" onClick={() => guard(() => traffic.stopScenarios(s.id))} disabled={busy}>
+                        ■ Arrêter
+                      </button>
+                    )}
+                    <button type="button" className="btn btn--light btn--xs" onClick={() => showLog(s.id)} disabled={busy}>
+                      Voir le résultat
+                    </button>
+                  </div>
                   {log?.id === s.id && <pre className="scenario__log">{log.text}</pre>}
                   <ScenarioFlows scenario={s} />
                 </li>

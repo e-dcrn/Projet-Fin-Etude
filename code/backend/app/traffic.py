@@ -220,6 +220,8 @@ class TrafficManager:
         # Flux étiquetés produits par chaque scénario : id → { status, counts, csv, total }
         self._flows: Dict[str, dict] = {}
         self._flows_lock = threading.Lock()
+        # Scénarios interrompus depuis l'interface (id court), pour les distinguer des terminés
+        self._stopped: set = set()
 
     # ------------------------------------------------------------------ outils
 
@@ -440,7 +442,8 @@ class TrafficManager:
             "category": labels.get(f"{self._prefix}.category", ""),
             "subcategory": labels.get(f"{self._prefix}.subcategory", ""),
             "started": int(labels.get(f"{self._prefix}.started", "0") or 0),
-            "status": helper.status,  # running | exited
+            # running | exited | stopped (interrompu depuis l'interface)
+            "status": "stopped" if helper.status != "running" and scenario_id in self._stopped else helper.status,
             "exitCode": exit_code,
             "flows": {"status": flow["status"], "counts": flow.get("counts", {}), "total": flow.get("total", 0)},
         }
@@ -460,6 +463,30 @@ class TrafficManager:
         scenarios.sort(key=lambda s: s["started"], reverse=True)
         return scenarios
 
+    def stop_scenarios(self, scenario_id: Optional[str] = None) -> int:
+        """Interrompt un scénario en cours, ou tous si scenario_id est None.
+
+        Le conteneur est arrêté, pas supprimé : la capture se termine normalement
+        (flux étiquetés de la partie jouée) et la détection garde la vraie fenêtre
+        de temps de l'attaque (de son début jusqu'à l'arrêt).
+        """
+        stopped = 0
+        for helper in self.lab.helpers("scenario"):
+            if scenario_id and not helper.id.startswith(scenario_id):
+                continue
+            try:
+                helper.reload()
+                if helper.status != "running":
+                    continue
+                helper.stop(timeout=1)
+                self._stopped.add(helper.id[:12])
+                stopped += 1
+            except NotFound:
+                pass
+            except DockerException as exc:
+                log.warning("Arrêt d'un scénario impossible : %s", exc)
+        return stopped
+
     def clear_scenarios(self) -> int:
         """Supprime les scénarios terminés (garde ceux encore en cours)."""
         removed = 0
@@ -472,6 +499,7 @@ class TrafficManager:
                 helper.remove(force=True)
                 with self._flows_lock:
                     self._flows.pop(scenario_id, None)
+                self._stopped.discard(scenario_id)
                 removed += 1
             except NotFound:
                 pass

@@ -566,6 +566,7 @@ body { background: var(--bg); }
 .btn--xs { padding: 3px 9px; font-size: 12px; }
 
 .scenario { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.scenario__actions { display: flex; gap: 6px; }
 .scenario__line { display: flex; align-items: center; gap: 8px; }
 .scenario__name { font-size: 13px; font-weight: 600; }
 .scenario__badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }

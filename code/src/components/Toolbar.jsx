@@ -80,7 +80,7 @@ export default function Toolbar({
             aria-pressed={scenarioActive}
             title="Lancer un scénario d'audit (reconnaissance, force brute)"
           >
-            ⚡ Scénarios{scenarioRunning ? ' (en cours…)' : ''}
+            ⚡ Scénarios{scenarioRunning ? ' (actif)' : ''}
           </button>
         )}
         {labStatus === 'running' && (

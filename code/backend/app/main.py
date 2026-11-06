@@ -14,6 +14,7 @@ API HTTP du moteur de simulation.
   DELETE /api/lab/traffic/benign          arrête le trafic de fond (tous, ou ?node=)
   POST   /api/lab/scenarios               lance un scénario d'audit → description du scénario
   GET    /api/lab/scenarios/{id}/logs     résultat (sortie) d'un scénario
+  POST   /api/lab/scenarios/stop          interrompt les scénarios en cours (?id=… pour un seul)
   DELETE /api/lab/scenarios               supprime les scénarios terminés
   WS     /api/lab/simulation              flux des paquets du réseau en temps réel (voir simulation.py)
 
@@ -194,6 +195,12 @@ def stop_benign(node: Optional[str] = None):
 def run_scenario(req: ScenarioRequest):
     lab.client
     return traffic_guard(lambda: traffic.run_scenario(req.source, req.attack, req.target, req.speed))
+
+
+@app.post("/api/lab/scenarios/stop")
+def stop_scenarios(id: Optional[str] = None):
+    lab.client
+    return {"stopped": traffic.stop_scenarios(id)}
 
 
 @app.get("/api/lab/scenarios/{scenario_id}/logs")
