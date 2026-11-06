@@ -38,8 +38,10 @@ packages = ["tcpdump"]
 # traffic_agent.py), soit lancer un scénario d'audit (reconnaissance nmap).
 # Comme la capture, rien n'est installé dans l'équipement lui-même.
 # nmap : reconnaissance ; hydra : force brute (classe « Patator » des jeux CIC-IDS).
+# Clients du trafic bénin : curl (web), openssh-client + sshpass (sessions SSH, SFTP),
+# mariadb-client (MySQL) ; FTP, SMTP, DNS et Telnet passent par la bibliothèque Python.
 image = "python:3.12-alpine"
-packages = ["nmap", "nmap-scripts", "curl", "hydra"]
+packages = ["nmap", "nmap-scripts", "curl", "hydra", "openssh-client", "sshpass", "mariadb-client"]
 
 [defaults]
 # Processus qui maintient l'équipement allumé.
@@ -54,9 +56,13 @@ packages = ["curl"]
 
 [devices.server]
 # La commande est remplacée par le gestionnaire de services (voir service_listener.py).
-# openssh / vsftpd : vrais démons SSH et FTP (force brute réaliste) ; shadow : chpasswd/useradd.
+# Chaque service ouvert est un vrai service : openssh (SSH), vsftpd (FTP),
+# busybox-extras (telnetd), opensmtpd (SMTP), dnsmasq (DNS), mariadb (MySQL),
+# openssl (certificat du site HTTPS) ; HTTP/HTTPS : serveur web Python.
+# shadow : chpasswd/useradd pour le compte de démonstration.
 image = "python:3.12-alpine"
-packages = ["curl", "openssh", "vsftpd", "shadow"]
+packages = ["curl", "openssh", "vsftpd", "shadow", "busybox-extras", "opensmtpd", "dnsmasq",
+            "mariadb", "mariadb-client", "openssl"]
 
 [devices.router]
 image = "alpine:3.20"

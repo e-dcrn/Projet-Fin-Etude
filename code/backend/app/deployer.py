@@ -306,7 +306,14 @@ class LabManager:
         command = runtime.command
         if device.type == "server":
             services = [s.model_dump() for s in device.services]
-            command = ["python3", "-u", "-c", LISTENER_SOURCE, json.dumps(services)]
+            # Annuaire de la topologie (nom → IP) : sert au serveur DNS s'il y en a un.
+            hosts = {
+                d.name: str(ep.address.ip)
+                for d in plan.devices
+                for ep in d.endpoints[:1]
+                if ep.address is not None
+            }
+            command = ["python3", "-u", "-c", LISTENER_SOURCE, json.dumps(services), json.dumps(hosts)]
 
         kwargs = dict(
             image=self._image_name(runtime),

@@ -291,7 +291,7 @@ Aucune adresse n'est à saisir : l'IPAM (`src/utils/ipam.js`) les attribue au fi
 | Équipement | Éditable |
 | ---------- | -------- |
 | PC         | nom ; IP + masque par interface (automatiques par défaut) ; passerelle par défaut (automatique : routeur du même switch) |
-| Serveur    | idem PC ; **ports ouverts** (service, port, TCP/UDP) — les ports répondent réellement (bannière SSH/FTP/SMTP, page HTTP…) |
+| Serveur    | idem PC ; **ports ouverts** (service, port, TCP/UDP) — chaque service connu est un vrai service (voir [Services des serveurs](#services-des-serveurs-et-trafic-bénin)) |
 | Routeur    | nom ; interfaces nommées (`eth0`, `eth1`… renommables) avec IP + masque ; **table de routage** (destination, passerelle, interface de sortie). Les réseaux directement connectés sont affichés (« C ») |
 | Switch     | nom ; **réseau des équipements branchés** (attribué automatiquement, modifiable) ; VLAN optionnel (1–4094, informatif) ; ports occupés (`Fa0/1 → PC-1 eth0`) |
 | Sonde IDS  | nom ; **segment surveillé** (un switch auquel elle est reliée) ; IP facultative (attribuée automatiquement si vide) |
@@ -362,7 +362,7 @@ conformes à l'IPAM restent automatiques ; les autres passent en saisie manuelle
 | Switch    | réseau Docker `bridge` (plage = réseau du switch) |
 | PC / serveur | container attaché à ses réseaux, avec les IP choisies ; la route par défaut pointe vers la passerelle configurée (sans passerelle : pas de route par défaut) |
 | Routeur   | container multi-réseaux, `net.ipv4.ip_forward=1`, interfaces nommées comme dans l'UI, routes statiques appliquées |
-| Serveur   | + simulateur de services (`app/service_listener.py`) qui ouvre réellement les ports déclarés |
+| Serveur   | + vrais services (`app/service_listener.py`) : serveur web HTTP/HTTPS, OpenSSH, vsftpd, telnetd, OpenSMTPD, dnsmasq, MariaDB |
 | Sonde IDS | container attaché au segment, interface en mode promiscuous ; le bridge du segment est passé en **mode hub** (`ageing_time = 0`) pour que la sonde reçoive une copie de tout le trafic (équivalent d'un port miroir) |
 
 Les images par type sont définies dans **`backend/config/devices.toml`** (jamais exposé à l'interface).
@@ -422,13 +422,51 @@ dans l'équipement. Son image (`[capture]` dans `devices.toml`) est préparée a
 Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l'option `packages` de
 `devices.toml` (image dérivée construite au premier déploiement, puis mise en cache).
 
+### Services des serveurs et trafic bénin
+
+Les services ouverts sur un serveur sont de **vrais services** : le trafic qu'ils échangent est authentique,
+ce qui est indispensable pour qu'un IDS apprenne quelque chose d'utile.
+
+| Service | Implémentation dans le serveur | Ce qu'il contient |
+| ------- | ------------------------------ | ----------------- |
+| HTTP    | serveur web HTTP/1.1 (Python, connexions persistantes) | site intranet : ~20 pages de tailles variées, style, script, images, fichiers à télécharger (0,5 à 9 Mo), API JSON, formulaire de connexion |
+| HTTPS   | le même site, chiffré en TLS (certificat auto-signé) | idem |
+| SSH     | OpenSSH (avec SFTP) | compte `labuser` / `password123`, fichiers (notes, CSV, photos, archive) |
+| FTP     | vsftpd (mode passif, dépôt autorisé) | les mêmes fichiers, dossier `upload/` |
+| Telnet  | telnetd + `/bin/login` | shell du compte `labuser` |
+| SMTP    | OpenSMTPD | tout courrier reçu est distribué dans la boîte de `labuser` |
+| DNS     | dnsmasq | chaque équipement de la topologie a un nom : `serveur-web.lab`, `pc-1.lab`… |
+| MySQL   | MariaDB | base `boutique` (tables `produits`, `commandes`), accessible à `labuser` |
+
+Un service au nom inconnu (ex. `pop3`) reste simulé : le port est ouvert et renvoie une bannière. Le
+compte `labuser` / `password123` est volontairement faible : c'est la cible des scénarios de force brute.
+Réseau isolé : rien ne sort de la topologie.
+
+**Le trafic bénin** (📡 Trafic, et pendant la génération des datasets) imite des utilisateurs. Chaque
+action est une **session complète** avec un vrai client (`app/traffic_agent.py`) :
+
+- **web** : une page puis ses ressources sur la même connexion (comme un navigateur), plusieurs pages avec
+  des temps de lecture, parfois un téléchargement, un appel d'API ou une connexion par formulaire ;
+- **services** : session SSH avec quelques commandes ou copie de fichier (SFTP), FTP (listing,
+  téléchargement, dépôt), courriel SMTP (parfois avec pièce jointe), requêtes MySQL, session Telnet,
+  résolution DNS du serveur juste avant de s'y connecter ;
+- **ping** : 1 à 4 paquets, tailles variables.
+
+Comme un vrai utilisateur, l'agent se trompe **parfois** de mot de passe (une seule fois, puis il se
+connecte). C'est volontaire : une erreur isolée n'est pas une force brute, et l'IDS doit savoir faire la
+différence. La fréquence règle la pause entre deux sessions et le nombre de sessions en parallèle (1 à 3).
+
+L'exemple « Mini-entreprise » expose tous ces protocoles (HTTP, HTTPS et MySQL sur Serveur-Web ; FTP,
+SSH, SMTP et DNS sur Serveur-Fichiers) : c'est le plus riche pour générer des datasets.
+
 ### Générer un dataset étiqueté
 
 Bouton **🗂 Datasets** → **Nouveau dataset** (réseau démarré). On décrit un programme :
 
 - la **sonde** : l'équipement dont le trafic est capturé, comme un NIDS placé devant lui (par défaut le
   premier serveur). Seul le trafic qui le traverse finit dans le dataset ;
-- le **trafic bénin** : émetteurs, types (ping, web, services) et fréquence. Il tourne pendant toute la durée ;
+- le **trafic bénin** : émetteurs, types (ping, web, services) et fréquence. Il tourne pendant toute la durée
+  (voir [ce qu'il contient](#services-des-serveurs-et-trafic-bénin)) ;
 - les **attaques**, jouées l'une après l'autre : attaque, source, cible, vitesse (nmap `-T2` à `-T5`,
   hydra `-t 1` à `-t 16`) et nombre de répétitions ;
 - les **durées** : bénin seul au début, entre deux attaques et à la fin, durée maximale d'une attaque ;
@@ -560,7 +598,8 @@ code/
     │   ├── training.py               # Entraînement et évaluation du ML-IDS (scikit-learn)
     │   ├── detection.py              # Détection en direct par une Sonde IDS (fenêtres, vérité terrain)
     │   ├── store.py                  # Stockage sur disque des datasets et modèles (data/)
-    │   ├── service_listener.py       # Simulateur de services exécuté dans les serveurs
+    │   ├── service_listener.py       # Vrais services exécutés dans les serveurs (web, SSH, FTP, SMTP, DNS, MySQL…)
+    │   ├── traffic_agent.py          # Agent de trafic bénin (sessions d'un utilisateur, vrais clients)
     │   ├── terminal.py               # Sessions de terminal (exec TTY ↔ WebSocket)
     │   ├── capture.py                # Sessions de capture (tcpdump ↔ WebSocket, découpage pcap)
     │   ├── sessions.py               # Registre des sessions WebSocket (fermeture à l'arrêt)

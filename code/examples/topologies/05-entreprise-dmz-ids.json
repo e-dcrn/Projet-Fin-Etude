@@ -2,7 +2,7 @@
   "example": {
     "name": "Mini-entreprise : LAN, DMZ et sonde IDS",
     "difficulty": "avancé",
-    "description": "LAN utilisateurs (10.0.10.0/24) et DMZ (10.0.20.0/24) avec un serveur web et un serveur de fichiers (FTP, SSH), reliés par un routeur. Une sonde IDS surveille la DMZ."
+    "description": "LAN utilisateurs (10.0.10.0/24) et DMZ (10.0.20.0/24) reliés par un routeur. La DMZ héberge un serveur web (HTTP, HTTPS, base MySQL) et un serveur de fichiers et de messagerie (FTP, SSH, SMTP, DNS). Une sonde IDS surveille la DMZ."
   },
   "version": 2,
   "generatedAt": "2026-10-10T00:00:00.000Z",
@@ -70,6 +70,16 @@
             "port": 80,
             "protocol": "tcp",
             "name": "http"
+          },
+          {
+            "port": 443,
+            "protocol": "tcp",
+            "name": "https"
+          },
+          {
+            "port": 3306,
+            "protocol": "tcp",
+            "name": "mysql"
           }
         ]
       }
@@ -94,6 +104,16 @@
             "port": 22,
             "protocol": "tcp",
             "name": "ssh"
+          },
+          {
+            "port": 25,
+            "protocol": "tcp",
+            "name": "smtp"
+          },
+          {
+            "port": 53,
+            "protocol": "udp",
+            "name": "dns"
           }
         ]
       }

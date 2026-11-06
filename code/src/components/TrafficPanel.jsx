@@ -4,8 +4,8 @@ import { benignTargetsForDests, reachableDevices, trafficSources } from '../util
 // Types de trafic bénin (cases à cocher) → `kinds` envoyé à l'agent.
 const KINDS = [
   { id: 'icmp', label: 'Ping (ICMP)' },
-  { id: 'http', label: 'Web (HTTP)' },
-  { id: 'service', label: 'Services (SSH, FTP…)' },
+  { id: 'http', label: 'Web (HTTP, HTTPS)' },
+  { id: 'service', label: 'Services (SSH, FTP, SMTP, MySQL, DNS…)' },
 ];
 
 // Presets : combinaisons prêtes à l'emploi (types + fréquence).

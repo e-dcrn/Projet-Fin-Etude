@@ -56,8 +56,8 @@ Briques principales :
 | ------ | -------- | ---- |
 | Éditeur de topologie | `src/components/TopologyEditor.jsx`, `TopologyCanvas.jsx` | Construire le réseau par glisser-déposer. |
 | Déploiement | `backend/app/deployer.py`, `planner.py` | Créer réseaux + conteneurs Docker. |
-| Services serveurs | `backend/app/service_listener.py` | Vrais démons SSH (openssh) / FTP (vsftpd) → force brute réaliste. |
-| Trafic de fond (bénin) | `backend/app/traffic.py`, `traffic_agent.py` ; `src/components/TrafficPanel.jsx` | Trafic « normal » : types (ping/web/services), émetteurs et destinataires cochables + fréquence. |
+| Services serveurs | `backend/app/service_listener.py` | Vrais services : web HTTP/HTTPS, OpenSSH, vsftpd, telnetd, OpenSMTPD, dnsmasq, MariaDB → trafic authentique (bénin comme attaques). |
+| Trafic de fond (bénin) | `backend/app/traffic.py`, `traffic_agent.py` ; `src/components/TrafficPanel.jsx` | Trafic « normal » : sessions d'utilisateurs avec de vrais clients (navigation web, SSH, FTP, courriel, MySQL, DNS, ping), erreurs de mot de passe occasionnelles ; émetteurs, destinataires et fréquence cochables. |
 | Scénarios d'audit | `backend/app/traffic.py` ; `src/components/ScenarioPanel.jsx` | Attaques (reconnaissance nmap, force brute hydra) étiquetées → flux CSV. Panneau distinct du trafic bénin. |
 | Capture | `backend/app/capture.py` | Capturer le trafic d'un lien → **export pcap**. |
 | Animation des paquets | `backend/app/simulation.py` ; `src/hooks/useSimulation.js`, `src/components/SimulationLayer.jsx` | Chaque paquet réel → une boule animée, en temps réel. |

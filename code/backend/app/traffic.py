@@ -93,10 +93,10 @@ def _nmap_cmd(*args: str):
 # Fréquence du trafic (le libellé indique le débit ; les intervalles sont dans
 # traffic_agent.PROFILES). Ce ne sont que des cadences, pas des « personas ».
 BENIGN_PROFILES = {
-    "slow": "Lente (~1 requête / 10 s)",
-    "moderate": "Modérée (~1 requête / 3 s)",
-    "steady": "Soutenue (~1 requête / s)",
-    "intense": "Intense (~3 requêtes / s)",
+    "slow": "Lente (~1 session / 10 s)",
+    "moderate": "Modérée (~1 session / 3 s)",
+    "steady": "Soutenue (~1 session / s, 2 en parallèle)",
+    "intense": "Intense (~3 sessions / s, 3 en parallèle)",
 }
 
 # Catalogue de scénarios d'audit. Tous sont de la RECONNAISSANCE réseau (nmap),

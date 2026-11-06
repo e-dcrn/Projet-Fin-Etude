@@ -6,8 +6,8 @@ import { benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, tra
 // Types de trafic bénin (mêmes identifiants que TrafficPanel / traffic_agent.py).
 const KINDS = [
   { id: 'icmp', label: 'Ping (ICMP)' },
-  { id: 'http', label: 'Web (HTTP)' },
-  { id: 'service', label: 'Services (SSH, FTP…)' },
+  { id: 'http', label: 'Web (HTTP, HTTPS)' },
+  { id: 'service', label: 'Services (SSH, FTP, SMTP, MySQL, DNS…)' },
 ];
 
 // Durées du programme (secondes) : bornes identiques à DatasetRequest (backend/app/main.py).
