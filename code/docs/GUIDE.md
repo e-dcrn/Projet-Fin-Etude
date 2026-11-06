@@ -361,21 +361,26 @@ le vrai trafic du réseau.
 ## 7. Pourquoi pas ConCap tel quel
 
 [ConCap](https://github.com/idlab-discover/ConCap) est un framework de recherche qui génère des datasets
-d'IDS étiquetés : un scénario YAML décrit un attaquant et des cibles ; ConCap lance ces conteneurs sur
-**Kubernetes**, capture le trafic **sur la cible**, le passe à CICFlowMeter et étiquette les flux (tout
-ce que fait l'attaquant est malveillant). C'était le point de départ prévu ; nous avons gardé sa
-méthode et son extracteur de features, mais pas l'outil lui-même.
+d'IDS : un scénario YAML décrit un attaquant et une ou plusieurs cibles ; ConCap (un outil en ligne de
+commande écrit en Go) lance ces conteneurs sur **Kubernetes**, capture le trafic **sur la cible**
+(tcpdump, filtré par défaut sur les échanges attaquant ↔ cible), remet les paquets dans l'ordre, puis
+passe le pcap entier à un extracteur de flux (CICFlowMeter, ou Argus, nfstream, RustiFlow). Les
+étiquettes du scénario (catégorie, sous-catégorie) sont conservées dans le fichier YAML du scénario
+terminé, pas ajoutées comme colonne à chaque flux. C'était le point de départ prévu ; nous avons gardé
+sa méthode et son extracteur de features, mais pas l'outil lui-même.
 
 | Problème | ConCap | Ce dont le projet avait besoin |
 | -------- | ------ | ------------------------------ |
-| Infrastructure | Kubernetes (k3s, kind ou minikube), kubectl, Go, nœuds étiquetés, registre d'images avec identifiants | Docker seul, sur un ordinateur portable, piloté depuis l'interface |
-| Topologie | un attaquant et des cibles sur le réseau plat du cluster : ni routeur, ni switch, ni sous-réseaux | la topologie dessinée : LAN, DMZ, routeurs, plusieurs réseaux |
+| Infrastructure | un cluster Kubernetes (k3s dans la documentation officielle), kubectl, Go, nœuds étiquetés `concap-role=attacker` / `target`, secret d'accès au registre d'images ghcr | Docker seul, sur un ordinateur portable, piloté depuis l'interface |
+| Topologie | un attaquant et des cibles sur le réseau plat du cluster : ni routeur, ni switch, ni sous-réseaux (seuls un débit, un délai et une file d'attente sont réglables côté cible) | la topologie dessinée : LAN, DMZ, routeurs, plusieurs réseaux |
 | Point de capture | tcpdump sur la cible | la sonde IDS sur un port miroir, là où tourne la détection |
-| Trafic bénin | scénarios séparés, jamais mêlés aux attaques | un trafic bénin continu, présent pendant les attaques |
-| Étiquetage | « l'attaquant ne fait que du malveillant », scénario par scénario | par fenêtre de temps et par couple source → cible, dans un trafic mélangé |
+| Trafic bénin | aucun générateur de trafic de fond : la capture ne contient que l'échange attaquant ↔ cible | un trafic bénin continu, présent pendant les attaques |
+| Étiquetage | une étiquette par scénario, gardée dans le YAML ; les CSV sortent sans colonne d'étiquette, à ajouter soi-même | par fenêtre de temps et par couple source → cible, dans un trafic mélangé |
 | Découpage des flux | CICFlowMeter sur le pcap entier : flux longs | fenêtres de 5 s, identiques à la détection |
-| Outils d'attaque | une image par outil, à construire et publier sur un registre | nmap et hydra dans l'image du lab, lancés depuis n'importe quel équipement |
+| Outils d'attaque | des scénarios d'exemple (nmap, hydra, medusa, patator), mais les images d'attaque et de cible sont à fournir | nmap et hydra dans l'image du lab, lancés depuis n'importe quel équipement |
 | Usage | ligne de commande | génération, entraînement et détection dans la même interface |
+
+*Sources : [README](https://github.com/idlab-discover/ConCap) et [runbook k3s](https://github.com/idlab-discover/ConCap/blob/main/docs/K3S_RUNBOOK.md) du dépôt officiel, consultés le 6 novembre 2026.*
 
 **L'argument décisif est le point de vue.** Un modèle apprend les flux tels qu'ils sont vus à l'endroit
 de la capture. Entraîné sur ce que voit une cible isolée dans un cluster, sans trafic bénin autour et
@@ -532,8 +537,9 @@ Assez courtes pour une détection quasi immédiate, assez longues pour qu'un flu
 paquets. Le point essentiel est que l'entraînement utilise **les mêmes** fenêtres que la détection.
 
 **Pourquoi ne pas avoir utilisé ConCap ?** Voir la [section 7](#7-pourquoi-pas-concap-tel-quel) : il
-demande Kubernetes, ignore la topologie, capture sur la cible au lieu de la sonde, sépare bénin et
-attaques, et ne découpe pas les flux comme la détection. On a repris sa méthode et son CICFlowMeter.
+demande Kubernetes, ignore la topologie, capture sur la cible au lieu de la sonde, ne produit pas de
+trafic bénin autour des attaques, n'étiquette pas chaque flux, et analyse le pcap entier au lieu de
+fenêtres de 5 s comme la détection. On a repris sa méthode et son CICFlowMeter.
 
 **Le modèle généralise-t-il à un autre réseau ?**
 Pas forcément : il est entraîné sur une topologie et un trafic bénin donnés. C'est une limite connue des

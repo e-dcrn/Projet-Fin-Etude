@@ -16,9 +16,10 @@ au **même format que les jeux CIC-IDS** (features CICFlowMeter). Voir
 ```
 scénario YAML ──> pods attaquant + cible (Kubernetes)
               ──> tcpdump sur la cible        → dump.raw.pcap
-              ──> tri par horodatage          → dump.pcap
-              ──> pcapfix + CICFlowMeter (cfm) → flux (CSV)
-              ──> étiquetage depuis le scénario (l'attaquant ne fait que du malveillant)
+              ──> tri par horodatage (reordercap) → dump.pcap
+              ──> pcapfix + CICFlowMeter (cfm)    → flux (CSV)  [ou Argus, nfstream, RustiFlow]
+              ──> étiquettes du scénario conservées dans le YAML terminé
+                  (les CSV n'ont pas de colonne d'étiquette : à ajouter soi-même)
 ```
 
 ## Prérequis
@@ -26,8 +27,8 @@ scénario YAML ──> pods attaquant + cible (Kubernetes)
 ConCap tourne sur **Kubernetes** (ce dépôt, lui, tourne sur Docker). Pour un essai
 local, un cluster léger suffit :
 
-- [k3s](https://k3s.io/) (le plus simple sur Linux) **ou** [kind](https://kind.sigs.k8s.io/)
-  / [minikube](https://minikube.sigs.k8s.io/) ;
+- [k3s](https://k3s.io/) (celui de la documentation officielle de ConCap ; [kind](https://kind.sigs.k8s.io/)
+  ou [minikube](https://minikube.sigs.k8s.io/) devraient convenir, mais ne sont pas documentés par ConCap) ;
 - `kubectl`, un environnement **Go**, et Docker pour construire les images d'attaque/cible.
 
 ## Mise en route (résumé)
@@ -50,8 +51,9 @@ kubectl label node <nom-du-noeud> concap-role=attacker concap-role=target --over
 ./concap --dir /chemin/vers/ce-depot/code/concap/scenarios
 ```
 
-Chaque scénario produit un `dump.pcap` et un **CSV de flux étiquetés**. Rassemble
-les CSV de tous les scénarios (bénins + attaques) pour obtenir le dataset.
+Chaque scénario produit un `dump.pcap` et un **CSV de flux** (sans colonne d'étiquette : l'étiquette du
+scénario est dans son YAML terminé). Ajoute l'étiquette à chaque CSV, puis rassemble-les pour obtenir le
+dataset. ConCap ne génère pas de trafic bénin : il faut des scénarios dédiés ou un jeu public.
 
 ## Scénarios fournis
 

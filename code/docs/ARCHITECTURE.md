@@ -82,8 +82,9 @@ combinées :
    pour que le modèle connaisse exactement ce que tu démontreras.
 
 ConCap = une « usine à datasets » : un scénario (1 attaquant + cible(s)) lance de vrais
-conteneurs, capture le trafic, le passe à CICFlowMeter, et étiquette chaque flux. Il
-tourne sur Kubernetes. Voir [`concap/README.md`](../concap/README.md) pour la mise en route
+conteneurs, capture le trafic sur la cible, le passe à CICFlowMeter (ou un autre extracteur) et garde
+l'étiquette du scénario dans son YAML. Il tourne sur Kubernetes. Pourquoi il n'est pas utilisé tel
+quel : [`GUIDE.md`, section 7](GUIDE.md#7-pourquoi-pas-concap-tel-quel). Voir [`concap/README.md`](../concap/README.md) pour la mise en route
 et les scénarios fournis.
 
 > Pourquoi ConCap **en plus** du démonstrateur ? Le démonstrateur **montre** ;
