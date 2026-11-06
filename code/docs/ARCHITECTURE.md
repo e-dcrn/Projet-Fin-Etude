@@ -9,6 +9,7 @@ un **pont** commun. Il est fait pour s'y retrouver quand on est perdu dans l'ens
 > entraîné sur le dataset fonctionne tel quel sur le trafic du démonstrateur.
 
 > Détail des services ouverts sur les serveurs et du trafic bénin : [`SERVICES.md`](SERVICES.md).
+> Guide complet (démonstration, tests, choix techniques, questions probables) : [`GUIDE.md`](GUIDE.md).
 
 ---
 

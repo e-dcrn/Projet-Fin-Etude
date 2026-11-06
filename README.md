@@ -5,12 +5,16 @@ une interface web, puis de vraies machines (containers Docker) sont instanciées
 leur terminal, observer le trafic de chaque lien comme dans Wireshark, et l'analyser avec une
 sonde IDS fondée sur du machine learning, entraînée sur des datasets générés dans le lab.
 
+> **Nouveau sur le projet ?** Commencer par le [guide complet](code/docs/GUIDE.md) : le projet en une
+> page, l'architecture, l'installation, la démonstration pas à pas, ce qu'il faut tester, et les
+> réponses aux questions probables.
+
 ## Organisation du dépôt
 
 | Dossier   | Contenu |
 | --------- | ------- |
 | `code/`   | Application : interface web (React + React Flow + Vite) et moteur de simulation (`code/backend/`, Python + Docker). **Voir [`code/README.md`](code/README.md)** pour l'installation et le lancement. |
-| `code/docs/` | Documentation technique : [architecture](code/docs/ARCHITECTURE.md), [services des serveurs et trafic bénin](code/docs/SERVICES.md). |
+| `code/docs/` | Documentation : [**guide complet**](code/docs/GUIDE.md), [architecture](code/docs/ARCHITECTURE.md), [services des serveurs et trafic bénin](code/docs/SERVICES.md). |
 | `docs/`   | Bibliographie et articles sur les attaques contre les NIDS à base de ML. |
 | `latex/`  | Sources LaTeX des présentations. |
 | `Sujet.pdf` | Sujet du projet. |

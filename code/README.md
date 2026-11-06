@@ -7,6 +7,9 @@ réellement avec Docker : chaque équipement devient une machine qui génère du
 
 > L'interface ne parle jamais de Docker : pour l'utilisateur, il configure de vrais équipements.
 
+> Pour comprendre le projet dans son ensemble (architecture, choix techniques, démonstration, tests,
+> questions probables) : [`docs/GUIDE.md`](docs/GUIDE.md).
+
 ## Démarrage rapide
 
 L'application a deux parties, lancées chacune dans **son propre terminal** :
@@ -553,6 +556,7 @@ Pour que l'entraînement et la détection aient le même point de vue, choisisse
 code/
 ├── index.html / package.json / vite.config.js …
 ├── docs/
+│   ├── GUIDE.md                      # Guide complet : projet, architecture, lancement, démo, tests, FAQ
 │   ├── ARCHITECTURE.md               # Vue d'ensemble : démonstrateur, datasets, ML-IDS, détection
 │   └── SERVICES.md                   # Services des serveurs, trafic bénin, vérifications à la main
 ├── examples/topologies/              # Topologies d'exemple (un fichier JSON v2 par exemple)
