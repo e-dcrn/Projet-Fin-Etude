@@ -419,8 +419,10 @@ dans l'équipement. Son image (`[capture]` dans `devices.toml`) est préparée a
 - Fermer l'onglet arrête la capture et supprime le conteneur d'analyse ; l'arrêt du réseau aussi.
   Les conteneurs d'analyse orphelins (session interrompue brutalement) sont supprimés à la capture suivante.
 
-Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l'option `packages` de
-`devices.toml` (image dérivée construite au premier déploiement, puis mise en cache).
+Busybox fournit `ping`, `traceroute`, `wget`, `nc`, `nslookup`… Les PC ont en plus les clients de chaque
+service (`curl`, `ssh`/`scp`/`sftp`, `telnet`, `ftpget`, `mariadb`, `dig`), ajoutés via l'option `packages`
+de `devices.toml` (image dérivée construite au premier déploiement, puis mise en cache). Commandes pour
+tester chaque service depuis un PC : [`docs/SERVICES.md`, section 4](docs/SERVICES.md#4-vérifier-un-service-à-la-main).
 
 ### Services des serveurs et trafic bénin
 

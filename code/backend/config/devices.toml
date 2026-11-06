@@ -51,8 +51,11 @@ cap_add = ["NET_ADMIN", "NET_RAW"]
 
 [devices.pc]
 image = "alpine:3.20"
-# Outils disponibles dans le terminal (en plus de ceux de busybox).
-packages = ["curl"]
+# Clients disponibles dans le terminal (en plus de ceux de busybox : ping, nc, wget,
+# nslookup…), pour tester chaque service d'un serveur (voir docs/SERVICES.md) :
+# curl (HTTP, HTTPS, FTP, SMTP), openssh-client (ssh, scp, sftp), busybox-extras
+# (telnet, ftpget, ftpput), mariadb-client (MySQL), bind-tools (dig).
+packages = ["curl", "openssh-client", "busybox-extras", "mariadb-client", "bind-tools"]
 
 [devices.server]
 # La commande est remplacée par le gestionnaire de services (voir service_listener.py).

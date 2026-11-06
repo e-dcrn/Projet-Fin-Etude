@@ -184,37 +184,192 @@ Le contenu est regénéré à chaque déploiement (les dépôts et courriels pr�
 
 ## 4. Vérifier un service à la main
 
-Ouvrir un **terminal** en cliquant sur un PC ou un serveur allumé (pastille verte). Les PC disposent de
-`curl`, `wget`, `nc`, `nslookup`, `ping` et `traceroute` ; les serveurs ont en plus `ssh`, `mariadb`
-et `netstat`. Remplacer les adresses par celles de votre topologie (ici l'exemple « Mini-entreprise » :
-Serveur-Web en `10.0.20.10`, Serveur-Fichiers en `10.0.20.11`).
+Ce guide teste **chaque service depuis un PC** (ex. PC-1), sur un serveur où tous les services sont
+ouverts. Toutes les commandes ont été vérifiées dans le lab.
 
-| Service | Depuis un PC | Résultat attendu |
-| ------- | ------------ | ---------------- |
-| HTTP  | `curl http://10.0.20.10/` | le code HTML de la page d'accueil |
-| HTTP (API) | `curl http://10.0.20.10/api/produits?page=2` | du JSON |
-| HTTP (connexion) | `curl -i -d "user=labuser&password=password123" http://10.0.20.10/login` | `HTTP/1.1 302 Found` |
-| HTTPS | `curl -k https://10.0.20.10/` | la même page, via TLS |
-| FTP   | `curl ftp://labuser:password123@10.0.20.11/` | la liste des fichiers |
-| FTP (téléchargement) | `curl ftp://labuser:password123@10.0.20.11/notes.txt` | le contenu de `notes.txt` |
-| SMTP  | `printf "Subject: test\r\n\r\nBonjour\r\n" > m.txt` puis `curl smtp://10.0.20.11 --mail-from pc-1@lab --mail-rcpt labuser@lab -T m.txt` | pas d'erreur (courriel accepté) |
-| DNS   | `nslookup serveur-web.lab 10.0.20.11` | `Address: 10.0.20.10` |
-| Telnet | `curl telnet://10.0.20.11:23` | invite `login:` (`Ctrl+C` pour quitter) |
-| SSH (bannière) | `nc 10.0.20.11 22` | `SSH-2.0-OpenSSH_…` |
-| tout port | `nc -zv 10.0.20.11 21` | `open` |
+**Préparation.**
 
-Depuis le **terminal d'un serveur** (qui a les clients SSH et MySQL) :
+1. Sur le serveur, ouvrir les 8 services (section **Ports ouverts** : HTTP, HTTPS, SSH, FTP, Telnet,
+   SMTP, DNS, MySQL), puis **✔ Valider la topologie**. Attendre quelques secondes (MySQL démarre un peu
+   après les autres).
+2. Cliquer sur **PC-1** : son terminal s'ouvre en bas de l'écran.
+3. Mémoriser l'adresse du serveur dans une variable (elle reste valable pendant toute la session du
+   terminal). Ici l'exemple « Petit LAN », où Serveur-Web est en `10.0.1.10` :
+
+   ```sh
+   S=10.0.1.10
+   ```
+
+Outils disponibles sur un PC : `curl` (HTTP, HTTPS, FTP, SMTP), `ssh` / `scp` / `sftp`, `telnet`,
+`ftpget` / `ftpput`, `mariadb` (MySQL), `nslookup` / `dig` (DNS), `nc`, `ping`, `traceroute`, `wget`.
+
+Compte pour tous les services : **`labuser`** / **`password123`**.
+
+### 4.0 Tous les ports d'un coup
 
 ```sh
-ssh labuser@10.0.20.11                                   # mot de passe : password123
-mariadb -h 10.0.20.10 -u labuser -ppassword123 --skip-ssl boutique -e "SELECT * FROM produits LIMIT 5;"
-netstat -tlnu                                            # ports en écoute sur CE serveur
-cat /var/mail/labuser                                    # courriels reçus (serveur SMTP)
+for p in 21 22 23 25 53 80 443 3306; do nc -zv -w 2 $S $p; done
 ```
 
-Pour **voir le trafic** d'un service : sélectionner le câble du serveur puis **Capturer le trafic**,
-et relancer une commande ci-dessus. Les protocoles en clair (HTTP, FTP, SMTP, Telnet, DNS) sont lisibles
-dans la capture ; HTTPS, SSH et l'authentification MySQL sont chiffrés ou binaires.
+Attendu : une ligne `… open` par port.
+
+### 4.1 Réseau (ICMP)
+
+```sh
+ping -c 3 $S
+```
+
+### 4.2 HTTP
+
+```sh
+curl -I http://$S/                                    # en-têtes : HTTP/1.1 200 OK, Server: nginx/1.26.1
+curl http://$S/ | head                                # début de la page d'accueil (HTML)
+curl http://$S/produits.html | head                   # une autre page
+curl -o /dev/null -w "%{http_code} %{size_download} octets\n" http://$S/downloads/video.mp4   # 200 9000000 octets
+curl "http://$S/api/produits?page=2"                  # API : JSON des produits 21 à 40
+curl http://$S/api/status                             # API : {"status": "ok", ...}
+curl -i -d "user=labuser&password=password123" http://$S/login   # connexion réussie : 302 Found + Set-Cookie
+curl -i -d "user=labuser&password=mauvais" http://$S/login       # connexion refusée : 401
+curl -I http://$S/nexiste-pas.html                    # 404 Not Found
+```
+
+### 4.3 HTTPS
+
+```sh
+curl -kI https://$S/                                  # HTTP/1.1 200 OK, via TLS
+curl -kv -o /dev/null https://$S/ 2>&1 | grep -E "SSL connection|subject"   # TLSv1.3, CN=<serveur>.lab
+curl -I https://$S/                                   # SANS -k : erreur 60 (certificat auto-signé), c'est normal
+```
+
+### 4.4 SSH
+
+```sh
+ssh labuser@$S
+```
+
+Au premier essai, répondre **`yes`** à la question sur l'empreinte du serveur, puis taper le mot de passe
+`password123`. On obtient un shell sur le serveur : `ls`, `cat notes.txt`, `uptime`… puis `exit`.
+
+Autres usages (le mot de passe est demandé à chaque fois) :
+
+```sh
+ssh labuser@$S "ls -la; uptime"                       # une commande à distance, sans shell interactif
+scp labuser@$S:photos/photo-1.jpg /tmp/               # télécharger un fichier (SFTP)
+ls -la /tmp/photo-1.jpg
+echo bonjour > /tmp/test.txt
+scp /tmp/test.txt labuser@$S:upload/                  # déposer un fichier
+sftp labuser@$S                                       # session SFTP : ls, get notes.txt, put …, bye
+```
+
+Mauvais mot de passe : `Permission denied, please try again.` (3 essais, puis la connexion est coupée).
+
+### 4.5 FTP
+
+```sh
+curl ftp://labuser:password123@$S/                    # liste : backup, data, notes.txt, photos, upload
+curl ftp://labuser:password123@$S/data/               # contenu d'un dossier
+curl ftp://labuser:password123@$S/notes.txt | head -3 # télécharger un fichier et l'afficher
+echo bonjour > /tmp/test.txt
+curl -T /tmp/test.txt ftp://labuser:password123@$S/upload/   # déposer un fichier
+curl ftp://labuser:password123@$S/upload/             # le fichier déposé apparaît
+curl ftp://labuser:mauvais@$S/; echo "code : $?"      # refusé : code 67 (connexion refusée)
+ftpget -u labuser -p password123 $S /tmp/ventes.csv data/ventes.csv && wc -l /tmp/ventes.csv   # 3001 lignes
+```
+
+### 4.6 Telnet
+
+```sh
+telnet $S
+```
+
+À l'invite `login:`, taper `labuser`, puis le mot de passe `password123`. On obtient un shell
+(`ls`, `whoami`…), `exit` pour se déconnecter. Tout circule en clair : dans une capture du câble, on
+voit le mot de passe passer (une lettre par paquet).
+
+### 4.7 SMTP (messagerie)
+
+Envoyer un courriel avec curl :
+
+```sh
+printf "From: pc-1@lab\r\nTo: labuser@lab\r\nSubject: Test depuis PC-1\r\n\r\nBonjour !\r\n" > /tmp/mail.txt
+curl smtp://$S --mail-from pc-1@lab --mail-rcpt labuser@lab -T /tmp/mail.txt; echo "code : $?"   # code : 0
+```
+
+Ou parler le protocole **à la main**, en tapant les lignes une par une (attendre la réponse du serveur
+entre deux lignes ; envoyer tout d'un coup est refusé) :
+
+```sh
+nc $S 25
+```
+
+```
+HELO pc-1.lab                     → 250 … pleased to meet you
+MAIL FROM:<pc-1@lab>              → 250 2.0.0 Ok
+RCPT TO:<labuser@lab>             → 250 2.1.5 Destination address valid
+DATA                              → 354 Enter mail, end with "." on a line by itself
+Subject: Test tapé à la main
+                                  (ligne vide)
+Bonjour
+.                                 → 250 2.0.0 … Message accepted for delivery
+QUIT                              → 221 2.0.0 Bye
+```
+
+Vérifier que le courriel est arrivé (boîte de `labuser`, sur le serveur) :
+
+```sh
+ssh labuser@$S "cat /var/mail/labuser"
+```
+
+### 4.8 DNS
+
+Les noms sont ceux des équipements du schéma, en minuscules, suivis de `.lab` (voir
+[DNS](#dns)) :
+
+```sh
+nslookup serveur-web.lab $S            # Address: <IP de Serveur-Web>
+nslookup pc-1.lab $S                   # Address: <IP de PC-1>
+nslookup inconnu.lab $S                # ** server can't find inconnu.lab: NXDOMAIN
+dig @$S +short serveur-web.lab         # juste l'adresse
+dig @$S serveur-web.lab                # réponse complète (en-tête, question, réponse)
+```
+
+### 4.9 MySQL
+
+Requêtes directes :
+
+```sh
+mariadb -h $S -u labuser -ppassword123 boutique -e "SHOW TABLES;"
+mariadb -h $S -u labuser -ppassword123 boutique -e "SELECT * FROM produits LIMIT 5;"
+mariadb -h $S -u labuser -ppassword123 boutique -e "INSERT INTO commandes (produit, quantite, client) VALUES (7, 2, 'pc-1'); SELECT * FROM commandes;"
+mariadb -h $S -u labuser -pmauvais boutique -e "SELECT 1;"    # ERROR 1045 : Access denied
+```
+
+Session interactive (le mot de passe est demandé) :
+
+```sh
+mariadb -h $S -u labuser -p boutique
+```
+
+puis par exemple `SELECT nom, prix FROM produits WHERE prix < 20;` et `exit`. Attention : il n'y a pas
+d'espace entre `-p` et le mot de passe dans `-ppassword123`.
+
+### 4.10 Depuis le terminal du serveur
+
+Pour regarder ce qui se passe côté serveur (cliquer sur le serveur pour ouvrir son terminal) :
+
+```sh
+netstat -tlnu                          # ports en écoute
+ps                                     # démons : sshd, vsftpd, telnetd, smtpd, dnsmasq, mariadbd, python3
+cat /var/mail/labuser                  # courriels reçus
+ls -la /home/labuser/upload            # fichiers déposés en FTP / SFTP
+mariadb -uroot boutique -e "SELECT * FROM commandes;"   # base (root, uniquement en local)
+```
+
+### 4.11 Voir le trafic
+
+Sélectionner le câble du serveur, **Capturer le trafic**, puis relancer une commande ci-dessus. Les
+protocoles en clair (HTTP, FTP, SMTP, Telnet, DNS) sont lisibles dans la capture ; HTTPS et SSH sont
+chiffrés, MySQL est un protocole binaire.
 
 ---
 
@@ -358,7 +513,9 @@ MySQL (MariaDB) réel en écoute sur 3306 — base « boutique », compte labuse
 Si un démon manque dans l'image ou échoue au démarrage, le service retombe sur le simulateur et le
 journal l'indique (`service … (simulé) en écoute sur …`).
 
-**Images.** Les serveurs utilisent `python:3.12-alpine` enrichie des paquets `openssh`, `vsftpd`,
+**Images.** Les PC utilisent `alpine:3.20` enrichie des clients `curl`, `openssh-client`,
+`busybox-extras` (telnet, ftpget, ftpput), `mariadb-client` et `bind-tools` (dig), pour pouvoir tester
+chaque service depuis leur terminal. Les serveurs utilisent `python:3.12-alpine` enrichie des paquets `openssh`, `vsftpd`,
 `busybox-extras` (telnetd), `opensmtpd`, `dnsmasq`, `mariadb`, `mariadb-client`, `openssl`, `curl` et
 `shadow`. L'agent de trafic utilise une image à part (`[traffic]` dans `devices.toml`) avec `curl`,
 `openssh-client`, `sshpass` et `mariadb-client` ; FTP, SMTP, DNS et Telnet passent par la bibliothèque
@@ -377,6 +534,7 @@ les tests `backend/tests/test_benign.py` vérifient qu'ils restent d'accord.
 | Symptôme | Cause / solution |
 | -------- | ---------------- |
 | Un service ne répond pas juste après la validation | MySQL met quelques secondes à démarrer (création de la base) : réessayer. |
+| `ssh`, `telnet`, `mariadb` ou `dig` : « not found » sur un PC | Le réseau a été créé avant l'ajout de ces clients : **✔ Valider la topologie** à nouveau (l'image des PC est reconstruite une fois). |
 | `curl: (60) SSL certificate problem` en HTTPS | Certificat auto-signé : ajouter `-k`. |
 | `nslookup` ne répond pas | Vérifier qu'un serveur a bien un service `dns` et que la topologie a été **revalidée** depuis. |
 | Un service s'affiche « simulé » dans le journal du serveur | Nom de service non reconnu (voir [section 1](#1-déclarer-un-service-sur-un-serveur)) ou démon absent de l'image. |
