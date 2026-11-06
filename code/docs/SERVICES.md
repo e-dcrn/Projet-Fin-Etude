@@ -41,7 +41,8 @@ Sommaire :
    | MySQL (base de données)      | 3306 | TCP |
 
 3. **✔ Valider la topologie** : les services sont démarrés quand le réseau est créé. Modifier les services
-   d'un serveur demande de revalider la topologie.
+   d'un serveur ne s'applique pas au réseau en fonctionnement : **■ Arrêter** le réseau, puis
+   **✔ Valider la topologie** à nouveau (le bouton Valider est masqué tant que le réseau tourne).
 
 **Comment le type de service est reconnu.** C'est le **nom** du service qui compte : un service nommé
 `ssh` sur le port 2222 est un vrai SSH sur le port 2222. Variantes acceptées : un nom qui commence par
@@ -190,7 +191,7 @@ ouverts. Toutes les commandes ont été vérifiées dans le lab.
 **Préparation.**
 
 1. Sur le serveur, ouvrir les 8 services (section **Ports ouverts** : HTTP, HTTPS, SSH, FTP, Telnet,
-   SMTP, DNS, MySQL), puis **✔ Valider la topologie**. Attendre quelques secondes (MySQL démarre un peu
+   SMTP, DNS, MySQL), puis **✔ Valider la topologie** (si le réseau tourne déjà : **■ Arrêter** d'abord). Attendre quelques secondes (MySQL démarre un peu
    après les autres).
 2. Cliquer sur **PC-1** : son terminal s'ouvre en bas de l'écran.
 3. Mémoriser l'adresse du serveur dans une variable (elle reste valable pendant toute la session du
@@ -534,9 +535,9 @@ les tests `backend/tests/test_benign.py` vérifient qu'ils restent d'accord.
 | Symptôme | Cause / solution |
 | -------- | ---------------- |
 | Un service ne répond pas juste après la validation | MySQL met quelques secondes à démarrer (création de la base) : réessayer. |
-| `ssh`, `telnet`, `mariadb` ou `dig` : « not found » sur un PC | Le réseau a été créé avant l'ajout de ces clients : **✔ Valider la topologie** à nouveau (l'image des PC est reconstruite une fois). |
+| `ssh`, `telnet`, `mariadb` ou `dig` : « not found » sur un PC | Le réseau a été créé avant l'ajout de ces clients : **■ Arrêter** le réseau puis **✔ Valider la topologie** (l'image des PC est reconstruite une fois). |
 | `curl: (60) SSL certificate problem` en HTTPS | Certificat auto-signé : ajouter `-k`. |
-| `nslookup` ne répond pas | Vérifier qu'un serveur a bien un service `dns` et que la topologie a été **revalidée** depuis. |
+| `nslookup` ne répond pas | Vérifier qu'un serveur a bien un service `dns` et que le réseau a été recréé depuis (**■ Arrêter** puis **✔ Valider la topologie**). |
 | Un service s'affiche « simulé » dans le journal du serveur | Nom de service non reconnu (voir [section 1](#1-déclarer-un-service-sur-un-serveur)) ou démon absent de l'image. |
 | Le trafic bénin ne touche pas un serveur | Le serveur n'est pas coché dans **Destinataires**, le type correspondant (Web / Services) n'est pas coché, ou le serveur n'a pas ce service. |
 | Rien n'est capturé dans un dataset pour un service | La sonde ne voit que le trafic qui passe par son point de capture : choisir la Sonde IDS reliée au switch des serveurs. |

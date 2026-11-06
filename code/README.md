@@ -108,6 +108,7 @@ Autres commandes :
 2. Cliquer sur **🔌 Câble**, puis sur PC-1 et sur Switch-1 ; puis sur PC-2 et sur Switch-1. Les adresses
    IP sont attribuées automatiquement (`10.0.1.10`, `10.0.1.11`). `Échap` pour quitter le mode câble.
 3. **✔ Valider la topologie** : le réseau est créé (le premier lancement est plus long, voir Prérequis).
+   Le bouton disparaît alors : tant que le réseau tourne, seul **■ Arrêter** reste.
    Les équipements allumés portent une pastille verte.
 4. Cliquer sur **PC-1** : son terminal s'ouvre en bas. Taper `ping -c 3 10.0.1.11`.
 5. Sélectionner le câble PC-2 ↔ Switch-1 puis **Capturer le trafic** (ou double-clic sur le câble),
@@ -247,8 +248,9 @@ Rien n'est à configurer pour un usage local. Pour adapter :
 | Annuler / quitter le câblage | `Échap` (1ᵉʳ appui : annule le câble en cours ; 2ᵉ appui : quitte le mode) |
 | Configurer                  | Cliquer sur un équipement ou un câble : le panneau de droite s'affiche   |
 | Supprimer                   | Sélectionner un équipement ou un câble, puis `Suppr` / `Retour arrière`, ou le bouton du panneau |
-| Créer le réseau             | **✔ Valider la topologie** : bilan des problèmes, puis création avec barre de progression |
+| Créer le réseau             | **✔ Valider la topologie** : bilan des problèmes, puis création avec barre de progression. Le bouton disparaît tant que le réseau tourne |
 | Éteindre le réseau          | **■ Arrêter** (visible quand le réseau est en fonctionnement)            |
+| Appliquer une modification  | Réseau en fonctionnement : **■ Arrêter**, modifier la topologie, puis **✔ Valider la topologie** |
 | Ouvrir un terminal          | Cliquer sur un **PC** ou un **serveur** allumé (pastille verte) : son terminal s'ouvre dans un onglet en bas de l'écran (`ping`, `traceroute`, `curl`, `ip route`…) |
 | Capturer le trafic d'un lien | Sélectionner un câble puis **Capturer le trafic** (ou double-clic sur le câble), réseau démarré : vue « Wireshark » dans un onglet du panneau du bas ; le câble capturé est animé |
 | Gérer les onglets du bas    | Un onglet par terminal ou capture, les sessions continuent en arrière-plan ; `×` ferme la session (et arrête ce qui y tourne) ; glisser le bord supérieur du panneau pour le redimensionner |

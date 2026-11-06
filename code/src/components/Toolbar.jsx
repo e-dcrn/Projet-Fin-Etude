@@ -124,10 +124,14 @@ export default function Toolbar({
           </button>
         )}
 
-        {errorCount > 0 && <span className="toolbar__errors">{errorCount} erreur(s)</span>}
-        <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0 || busy}>
-          ✔ Valider la topologie
-        </button>
+        {/* Réseau en fonctionnement : seul « Arrêter » reste ; pour appliquer une
+            modification, on arrête le réseau puis on valide à nouveau. */}
+        {labStatus !== 'running' && errorCount > 0 && <span className="toolbar__errors">{errorCount} erreur(s)</span>}
+        {labStatus !== 'running' && (
+          <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0 || busy}>
+            ✔ Valider la topologie
+          </button>
+        )}
       </div>
     </header>
   );
