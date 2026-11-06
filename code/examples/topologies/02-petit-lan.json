@@ -2,7 +2,7 @@
   "example": {
     "name": "Petit LAN avec serveur web",
     "difficulty": "débutant",
-    "description": "Trois PC et un serveur web (port 80 ouvert) sur un même switch, réseau 10.0.1.0/24."
+    "description": "Trois PC et un serveur web (port 80 ouvert) sur un même switch, réseau 10.0.1.0/24. Une sonde IDS surveille le switch (copie de tout le trafic du LAN)."
   },
   "version": 2,
   "generatedAt": "2026-10-10T00:00:00.000Z",
@@ -61,6 +61,18 @@
       "config": {
         "gateway": ""
       }
+    },
+    {
+      "id": "ids-1",
+      "type": "ids",
+      "name": "IDS-1",
+      "position": {
+        "x": 0,
+        "y": -220
+      },
+      "config": {
+        "monitoredSegment": "switch-1"
+      }
     }
   ],
   "networks": [
@@ -110,6 +122,15 @@
       "interface": "eth0",
       "port": "Fa0/4",
       "ip": "10.0.1.13",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-ids-1-switch-1",
+      "node": "ids-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/5",
+      "ip": "",
       "mask": "255.255.255.0"
     }
   ]

@@ -2,7 +2,7 @@
 
 import struct
 
-from app.flows import build_flows, flows_to_csv, label_flows, parse_pcap
+from app.flows import build_flows, flows_to_csv, label_flows, parse_pcap, split_pcap
 
 
 def _tcp_packet(ts, src, dst, sport, dport, flags, payload=b""):
@@ -79,3 +79,12 @@ def test_parse_pcap_rejects_invalid():
 
     with pytest.raises(ValueError):
         parse_pcap(b"not a pcap")
+
+
+def test_split_pcap_in_time_windows():
+    # Paquets à t = 1000,00 → 1000,04 (scan) puis 1001 / 1001,01 (bénin) : une fenêtre de
+    # 0,5 s les sépare en deux pcap, chacun relisible et sans paquet perdu.
+    windows = split_pcap(_scan_pcap(), 0.5)
+    assert len(windows) == 2
+    assert [len(parse_pcap(w)) for w in windows] == [10, 2]
+    assert len(split_pcap(_scan_pcap(), 5)) == 1

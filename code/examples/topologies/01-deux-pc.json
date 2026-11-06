@@ -2,7 +2,7 @@
   "example": {
     "name": "Deux PC sur un switch",
     "difficulty": "débutant",
-    "description": "Deux postes dans le même sous-réseau 10.0.1.0/24 : le point de départ pour un premier ping."
+    "description": "Deux postes dans le même sous-réseau 10.0.1.0/24 : le point de départ pour un premier ping. Une sonde IDS surveille le switch."
   },
   "version": 2,
   "generatedAt": "2026-10-10T00:00:00.000Z",
@@ -29,6 +29,18 @@
       },
       "config": {
         "gateway": ""
+      }
+    },
+    {
+      "id": "ids-1",
+      "type": "ids",
+      "name": "IDS-1",
+      "position": {
+        "x": 0,
+        "y": -220
+      },
+      "config": {
+        "monitoredSegment": "switch-1"
       }
     }
   ],
@@ -61,6 +73,15 @@
       "interface": "eth0",
       "port": "Fa0/2",
       "ip": "10.0.1.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-ids-1-switch-1",
+      "node": "ids-1",
+      "network": "switch-1",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "",
       "mask": "255.255.255.0"
     }
   ]

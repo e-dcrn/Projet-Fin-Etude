@@ -17,7 +17,9 @@ L'application a deux parties, lancées chacune dans **son propre terminal** :
 | Interface (`code/`, React) | éditeur de topologie dans le navigateur | `npm run dev` | http://localhost:5173 |
 
 Première installation : suivre dans l'ordre [Prérequis](#prérequis), [1. Moteur](#1-lancer-le-moteur-de-simulation-backend),
-[2. Interface](#2-lancer-linterface) et [3. Premier essai](#3-premier-essai).
+[2. Interface](#2-lancer-linterface) et [3. Premier essai](#3-premier-essai), puis le
+[4. Parcours complet](#4-parcours-complet--de-la-topologie-à-la-détection) (topologie → datasets → entraînement →
+détection → trafic bénin → attaque).
 Ensuite, il suffit de relancer les deux commandes ci-dessus (moteur d'abord, Docker démarré).
 
 ## Prérequis
@@ -111,6 +113,81 @@ Autres commandes :
 5. Sélectionner le câble PC-2 ↔ Switch-1 puis **Capturer le trafic** (ou double-clic sur le câble),
    relancer le ping depuis PC-1 : les paquets ICMP apparaissent dans la capture.
 6. **■ Arrêter** (barre d'outils) éteint le réseau.
+
+## 4. Parcours complet : de la topologie à la détection
+
+C'est le scénario de démonstration du projet. Le moteur et l'interface doivent tourner, et Docker doit être démarré.
+Les boutons cités sont dans la barre d'outils en haut. Un bouton est **jaune** (actif) tant que son panneau est
+ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ Scénarios (« en cours… »),
+🛡 Détection (« active »), 🗂 Datasets, 🧠 IDS.
+
+### Étape 1 : créer la topologie
+
+- **Le plus simple** : **📂 Exemples de topologies**, puis par exemple « Mini-entreprise : LAN, DMZ et sonde IDS ».
+  Tous les exemples contiennent déjà une **Sonde IDS**.
+- **À la main** :
+  1. glisser depuis la palette (à gauche) des **PC**, au moins un **Serveur**, un **Switch** et une **Sonde IDS**.
+     Ajouter un **Routeur** et un second switch pour avoir plusieurs réseaux ;
+  2. **🔌 Câble**, puis cliquer sur un équipement et ensuite sur un switch, pour chaque lien. Les adresses IP sont
+     attribuées automatiquement. Un câble relie toujours un équipement à un switch ;
+  3. cliquer sur un serveur, puis dans la section **Ports ouverts** du panneau de droite, ouvrir les services à attaquer (HTTP, SSH, FTP) ;
+  4. cliquer sur la Sonde IDS, puis dans la section **Surveillance**, choisir le switch à surveiller dans **Segment surveillé**
+     (celui des serveurs). Ce switch devient un port miroir : la sonde reçoit une copie de tout son trafic.
+- **✔ Valider la topologie** : bilan des problèmes, puis création du réseau. Le statut passe à « Réseau en
+  fonctionnement » et les équipements allumés portent une pastille verte.
+
+### Étape 2 : générer les datasets (1 pour l'entraînement, 2 pour le test)
+
+**🗂 Datasets** → **Nouveau dataset** :
+
+1. **Sonde (point de capture)** : la Sonde IDS (choix par défaut). Ainsi, l'entraînement et la détection voient
+   le trafic du même point du réseau ;
+2. **Trafic bénin** : émetteurs, fréquence et types (ping, web, services) ;
+3. **Attaques** : ajouter une ou plusieurs lignes avec l'attaque (scan de ports, force brute SSH…), la source,
+   la cible, la vitesse et le nombre de répétitions. « ⚠ ne passe pas par la sonde » signale une attaque que la
+   sonde ne verra pas ;
+4. **Datasets de test** : laisser **2** variantes (valeur par défaut). Chaque variante rejoue le même programme
+   depuis d'autres machines, à d'autres vitesses, avec un trafic bénin d'une autre intensité ;
+5. **▶ Générer le dataset**. On obtient **3 datasets** : la base (pour l'entraînement) et ses 2 variantes (pour
+   le test). Pendant la génération, on peut masquer la fenêtre, et le bouton reste jaune (« en cours… »).
+
+Chaque dataset peut être téléchargé : **⤓ CSV** (flux CICFlowMeter étiquetés), **⤓ pcap**, **⤓ méta**.
+
+### Étape 3 : entraîner et tester le modèle
+
+**🧠 IDS** → **Entraîner un modèle** (le réseau n'a pas besoin de tourner) :
+
+1. **Données d'entraînement** : cocher le dataset de base ;
+2. **Données de test** : « Dataset(s) de test séparé(s) », puis cocher les 2 variantes. C'est la configuration
+   proposée par défaut ;
+3. **Classes** : binaire (BENIGN / ATTACK) ou multiclasse. **Modèle** : random forest ;
+4. **▶ Entraîner**. Le rapport donne le taux d'attaques détectées, le taux de fausses alertes, l'exactitude,
+   le F1 macro, un résultat par dataset de test, la matrice de confusion et les features les plus utiles.
+
+### Étape 4 : activer la détection
+
+**🛡 Détection** (réseau démarré) → choisir la **Sonde IDS** et le **modèle** entraîné → **▶ Démarrer la
+détection**. Le bouton reste jaune avec « (active) », même si l'on ferme le panneau. Toutes les 5 s, la
+sonde convertit le trafic capturé en flux et les classe avec le modèle.
+
+### Étape 5 : générer du trafic bénin (la sonde ne doit pas alerter)
+
+**📡 Trafic** → choisir un preset (ou le type et la fréquence), les **émetteurs** et les **destinataires** →
+**▶ Démarrer**. Le bouton reste jaune avec « (actif) » tant qu'un émetteur tourne, même panneau fermé.
+**■ Tout arrêter** coupe tout le trafic bénin.
+
+Rouvrir **🛡 Détection** : le nombre de **flux analysés** augmente, mais aucune **alerte** n'est levée (ou très
+peu, comptées comme **fausses alertes** dans le bilan).
+
+### Étape 6 : lancer un scénario d'attaque (la sonde doit le détecter)
+
+**⚡ Scénarios** → **Depuis (source)**, **Scénario** (ex. « Scan de ports (connect) », « Force brute SSH »),
+**Cible**, **Vitesse** → **⚡ Lancer le scénario**. Le bouton reste jaune (« en cours… ») pendant l'attaque.
+
+Dans **🛡 Détection**, des **alertes** apparaissent et les équipements impliqués sont entourés de rouge sur le
+schéma. Le moteur connaît chaque attaque lancée (source, cible, début, fin), donc le bilan compte les attaques
+**détectées** et **manquées** et les **fausses alertes**. **Effacer** remet le bilan à zéro avant un nouvel
+essai, sans arrêter la détection.
 
 ## Arrêter et nettoyer
 
@@ -342,6 +419,79 @@ dans l'équipement. Son image (`[capture]` dans `devices.toml`) est préparée a
 Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l'option `packages` de
 `devices.toml` (image dérivée construite au premier déploiement, puis mise en cache).
 
+### Générer un dataset étiqueté
+
+Bouton **🗂 Datasets** → **Nouveau dataset** (réseau démarré). On décrit un programme :
+
+- la **sonde** : l'équipement dont le trafic est capturé, comme un NIDS placé devant lui (par défaut le
+  premier serveur). Seul le trafic qui le traverse finit dans le dataset ;
+- le **trafic bénin** : émetteurs, types (ping, web, services) et fréquence. Il tourne pendant toute la durée ;
+- les **attaques**, jouées l'une après l'autre : attaque, source, cible, vitesse (nmap `-T2` à `-T5`,
+  hydra `-t 1` à `-t 16`) et nombre de répétitions ;
+- les **durées** : bénin seul au début, entre deux attaques et à la fin, durée maximale d'une attaque ;
+- la **topologie** est enregistrée avec le dataset (nom de l'exemple chargé, ou « Topologie personnalisée »,
+  et une empreinte des équipements, adresses et réseaux) : un dataset ne représente que le réseau sur
+  lequel il a été généré. L'entraînement prévient si l'on mélange des topologies, la détection si le
+  modèle vient d'une autre topologie que celle affichée ;
+- les **variantes de test** (0 à 5) : générées automatiquement après le dataset, elles rejouent le même
+  programme (mêmes attaques, mêmes cibles) en changeant la machine d'attaque, la vitesse et l'intensité
+  du trafic bénin (`make_variant`). L'entraînement propose ensuite d'office « base pour apprendre,
+  variantes pour tester », avec un score par variante.
+
+Le moteur (`app/datasets.py`) joue le programme, convertit le pcap en flux CICFlowMeter **par fenêtres
+de 5 s, exactement comme la détection en direct** (sinon, par exemple, tous les pings entre deux
+machines formeraient un seul flux d'une minute à l'entraînement, et des flux de quelques millisecondes en
+détection : le modèle ne les reconnaîtrait pas), puis étiquette chaque flux : « attaque » s'il va de la source vers la cible **pendant la fenêtre de temps** de cette
+attaque, « BENIGN » sinon. Pendant son attaque, l'agent bénin de la source est mis en pause, ce qui
+rend la règle exacte. Le résultat est sauvegardé dans `backend/data/datasets/<id>/` (`flows.csv`,
+`capture.pcap`, `meta.json` : paramètres, fenêtres d'attaque, décompte des étiquettes ; dossier ignoré
+par git) et téléchargeable depuis l'interface, même réseau arrêté. La génération peut être masquée
+(elle continue en arrière-plan) ou annulée (rien n'est sauvegardé).
+
+### Entraîner un modèle ML-IDS
+
+Bouton **🧠 IDS** → **Entraîner un modèle** (le réseau n'a pas besoin de tourner). On choisit :
+
+- les **datasets d'entraînement** ;
+- les **données de test**, jamais vues à l'entraînement : un ou plusieurs **datasets séparés**
+  (l'évaluation la plus honnête), ou un **découpage temporel** (les flux les plus récents d'un même jeu).
+  Un découpage aléatoire des lignes n'est volontairement pas proposé : des flux quasi identiques se
+  retrouveraient des deux côtés et les scores seraient trop beaux ;
+- les **classes** : binaire (BENIGN / ATTACK) ou multiclasse (une classe par attaque) ;
+- le **modèle** : random forest (nombre d'arbres, profondeur maximale), avec `class_weight="balanced"`
+  car les datasets du lab sont très déséquilibrés.
+
+Les identifiants du flux (IP, port source, Flow ID, horodatage) ne sont jamais utilisés comme features :
+ils feraient apprendre « telle machine = attaque » au lieu d'un comportement. Le port de destination est
+exclu par défaut pour la même raison (option). Les `inf` / `NaN` de CICFlowMeter sont neutralisés et les
+colonnes constantes écartées (`app/training.py`).
+
+Le rapport affiche le temps de calcul réel de l'entraînement, le taux d'attaques détectées, le taux de fausses alertes, l'exactitude, le F1 macro,
+la matrice de confusion, les métriques par classe et les features les plus utiles ; il signale les
+classes du test absentes de l'entraînement. Le modèle est sauvegardé dans `backend/data/models/<id>/`
+(`model.joblib` : le modèle et la liste ordonnée de ses features, prêt pour la détection en direct ;
+`meta.json` : paramètres et métriques).
+
+### Détection en direct
+
+Une **Sonde IDS** se relie à un switch et le surveille (propriété « segment surveillé ») : au déploiement,
+ce switch passe en mode hub, l'équivalent d'un **port miroir**, et la sonde reçoit une copie de tout le
+trafic du segment sans être sur le chemin des paquets. Tous les exemples de topologies en contiennent une.
+
+Bouton **🛡 Détection** (réseau démarré) → choisir la sonde et un modèle entraîné → **Démarrer**. Toutes
+les 5 s, le trafic capturé par la sonde est converti en flux CICFlowMeter (conteneur permanent) et classé
+par le modèle (`app/detection.py`). Les équipements impliqués dans une alerte récente sont entourés de
+rouge sur le schéma.
+
+Chaque verdict est comparé à la **vérité terrain** : les attaques lancées depuis ⚡ Scénarios ou
+🗂 Datasets sont connues (source, cible, début et fin). Le panneau affiche donc, en conditions réelles,
+les attaques détectées, manquées et les fausses alertes ; les erreurs du modèle restent toujours visibles
+dans la liste des événements. **Effacer** remet le bilan à zéro pour un nouvel essai (la détection
+continue). Limite : un flux à cheval sur deux fenêtres est analysé en deux morceaux.
+
+Pour que l'entraînement et la détection aient le même point de vue, choisissez la Sonde IDS comme
+**sonde** lors de la génération des datasets (c'est le choix par défaut quand il y en a une).
+
 ## Architecture
 
 > Vue d'ensemble du projet — démonstrateur, génération de trafic, **pipeline ML-IDS**
@@ -365,6 +515,10 @@ code/
 │   │   ├── PropertiesPanel.jsx       # Équipement ou câble sélectionné
 │   │   ├── properties/               # Sections du panneau : interfaces, routage, ports, champs
 │   │   ├── DeployDialog.jsx          # Bilan, barre de progression, résultat
+│   │   ├── DatasetDialog.jsx         # Datasets : liste, programme d'un nouveau dataset, progression
+│   │   ├── ModelDialog.jsx           # Modèles ML-IDS : liste, entraînement, rapport (métriques, confusion)
+│   │   ├── JobProgress.jsx           # Progression d'une tâche de fond (dataset, entraînement)
+│   │   ├── DetectionPanel.jsx        # Détection en direct : sonde, modèle, bilan, événements
 │   │   ├── Dock.jsx                  # Panneau du bas : onglets de terminaux et de captures
 │   │   ├── TerminalView.jsx          # xterm.js ↔ WebSocket d'un équipement
 │   │   ├── CaptureView.jsx           # Vue « Wireshark » d'un lien (liste, détail, hexa, filtres)
@@ -374,7 +528,11 @@ code/
 │   │   ├── useTopology.js            # État nœuds/câbles + actions métier
 │   │   ├── useCableTool.js           # « clic A puis clic B »
 │   │   ├── useDeployment.js          # Cycle de vie du déploiement, état du réseau
-│   │   └── useDock.js                # Onglets ouverts (terminaux, captures), onglet actif
+│   │   ├── useDock.js                # Onglets ouverts (terminaux, captures), onglet actif
+│   │   ├── useRecords.js             # Enregistrements d'une tâche de fond (liste, lancement, suivi SSE)
+│   │   ├── useDatasets.js            # Datasets sauvegardés + génération en cours
+│   │   ├── useModels.js              # Modèles entraînés + entraînement en cours
+│   │   └── useDetection.js           # État de la détection en direct (rafraîchi toutes les 2 s)
 │   ├── utils/
 │   │   ├── ipv4.js                   # Calculs d'adressage
 │   │   ├── ipam.js                   # Attribution automatique des réseaux, adresses et passerelles
@@ -394,21 +552,26 @@ code/
     │   ├── models.py                 # Schéma de la topologie (pydantic)
     │   ├── planner.py                # Validation + topologie → plan (sous-réseaux, routes…)
     │   ├── deployer.py               # Exécution du plan avec le SDK Docker
-    │   ├── jobs.py                   # Tâches de fond et événements de progression
+    │   ├── jobs.py                   # Tâches de fond (déploiement, dataset) : progression, annulation
+    │   ├── datasets.py               # Génération d'un dataset étiqueté (programme, sonde, fenêtres)
+    │   ├── training.py               # Entraînement et évaluation du ML-IDS (scikit-learn)
+    │   ├── detection.py              # Détection en direct par une Sonde IDS (fenêtres, vérité terrain)
+    │   ├── store.py                  # Stockage sur disque des datasets et modèles (data/)
     │   ├── service_listener.py       # Simulateur de services exécuté dans les serveurs
     │   ├── terminal.py               # Sessions de terminal (exec TTY ↔ WebSocket)
     │   ├── capture.py                # Sessions de capture (tcpdump ↔ WebSocket, découpage pcap)
     │   ├── sessions.py               # Registre des sessions WebSocket (fermeture à l'arrêt)
     │   └── settings.py               # Lecture de devices.toml
-    └── tests/                        # test_planner.py, test_examples.py, test_capture.py, test_settings.py (pytest)
+    └── tests/                        # test_planner.py, test_examples.py, test_capture.py, test_datasets.py, test_training.py, test_detection.py… (pytest)
 ```
 
 ### Points d'extension
 
 - **Ajouter un type d'équipement** (pare-feu, machine attaquante…) : entrée dans `src/config/deviceTypes.js`
   (+ icône), type accepté dans `backend/app/models.py`, image dans `backend/config/devices.toml`.
-- **Brancher la vraie sonde ML** : remplacer l'image `ids` dans `devices.toml` ; elle écoute sur
-  l'interface reliée au segment surveillé, qui reçoit tout le trafic de ce segment.
+- **Ajouter un modèle** : une entrée dans `MODELS` (`backend/app/training.py`) et sa construction dans
+  `Trainer.run` ; la détection en direct l'utilise sans changement (le fichier `model.joblib` porte la
+  liste ordonnée de ses features).
 
 ## Stack
 
@@ -416,5 +579,5 @@ code/
   [Vite](https://vite.dev/) 8, [xterm.js](https://xtermjs.org/) (`@xterm/xterm` v6) pour les terminaux
 - Moteur : Python 3.9+, [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/)
   (HTTP, Server-Sent Events, WebSockets), [Docker SDK for Python](https://docker-py.readthedocs.io/),
-  pydantic ; tests avec pytest
+  pydantic ; ML-IDS avec [scikit-learn](https://scikit-learn.org/) et pandas ; tests avec pytest
 - Machines simulées : images Alpine Linux (busybox, `curl`) ; capture avec `tcpdump`

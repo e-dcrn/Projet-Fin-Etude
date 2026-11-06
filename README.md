@@ -2,8 +2,8 @@
 
 Démonstrateur pédagogique inspiré de Cisco Packet Tracer : on construit une topologie réseau dans
 une interface web, puis de vraies machines (containers Docker) sont instanciées : on peut ouvrir
-leur terminal, observer le trafic de chaque lien comme dans Wireshark, et à terme l'analyser avec
-des sondes IDS fondées sur du machine learning.
+leur terminal, observer le trafic de chaque lien comme dans Wireshark, et l'analyser avec une
+sonde IDS fondée sur du machine learning, entraînée sur des datasets générés dans le lab.
 
 ## Organisation du dépôt
 
@@ -34,4 +34,12 @@ npm ci
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173 et suivre le [premier essai](code/README.md#3-premier-essai).
+Puis ouvrir http://localhost:5173 et suivre le [premier essai](code/README.md#3-premier-essai), puis le
+[parcours complet](code/README.md#4-parcours-complet--de-la-topologie-à-la-détection) :
+
+1. créer une topologie (ou charger un exemple) et la valider ;
+2. générer les datasets sur cette topologie : un pour l'entraînement, deux pour le test ;
+3. entraîner le modèle et le tester sur ces datasets ;
+4. activer la détection ;
+5. générer du trafic bénin : la sonde ne doit pas lever d'alerte ;
+6. lancer un scénario d'attaque : la sonde doit le détecter.

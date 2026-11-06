@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../services/topologyApi.js';
 
-const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [] };
+const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [], speeds: [] };
 
 /**
  * État de la génération de trafic et actions associées (voir backend/app/traffic.py).
@@ -55,7 +55,10 @@ export function useTraffic(active) {
     [act],
   );
   const stopBenign = useCallback((node) => act(() => api.stopBenign(node)), [act]);
-  const runScenario = useCallback((source, attack, target) => act(() => api.runScenario(source, attack, target)), [act]);
+  const runScenario = useCallback(
+    (source, attack, target, speed) => act(() => api.runScenario(source, attack, target, speed)),
+    [act],
+  );
   const clearScenarios = useCallback(() => act(() => api.clearScenarios()), [act]);
 
   // Équipements où un agent bénin tourne ; sources de scénarios encore en cours
@@ -68,6 +71,7 @@ export function useTraffic(active) {
   return {
     profiles: data.profiles,
     attacks: data.attacks,
+    speeds: data.speeds ?? [],
     benign: data.benign,
     scenarios: data.scenarios,
     benignNodes,

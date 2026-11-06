@@ -1,15 +1,16 @@
 """
-Tâches de déploiement exécutées en arrière-plan.
+Tâches longues exécutées en arrière-plan (déploiement du réseau, génération
+d'un dataset).
 
-Le déploiement est long (téléchargements, démarrages) : il tourne dans un
-thread et publie une suite d'événements que l'interface suit en temps réel
-(Server-Sent Events, voir main.py). Les événements sont conservés : un client
-qui se reconnecte reprend là où il s'était arrêté.
+Une tâche tourne dans un thread et publie une suite d'événements que
+l'interface suit en temps réel (Server-Sent Events, voir main.py). Les
+événements sont conservés : un client qui se reconnecte reprend là où il
+s'était arrêté.
 
 Événements (champ `type`) :
   progress  { step, total, label }   une nouvelle étape commence
   warning   { message }              problème non bloquant
-  done      { total }                réseau opérationnel
+  done      { total, ... }           tâche terminée (+ ce que renvoie le travail)
   error     { message }              échec ; tout a été nettoyé
 """
 
@@ -19,21 +20,28 @@ import logging
 import threading
 import time
 import uuid
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 from .deployer import DeploymentError, EngineUnavailable, Reporter
 
 log = logging.getLogger(__name__)
 
 
+class JobCancelled(Exception):
+    """Levée dans le travail quand l'utilisateur a demandé l'annulation."""
+
+
 class Job(Reporter):
-    def __init__(self) -> None:
+    def __init__(self, user_errors: Tuple[Type[Exception], ...], failure: str) -> None:
         self.id = uuid.uuid4().hex
         self.events: List[dict] = []
         self.finished = False
         self._step = 0
         self._total = 0
         self._lock = threading.Lock()
+        self._cancel = threading.Event()
+        self._user_errors = user_errors  # erreurs dont le message est affichable tel quel
+        self._failure = failure          # message affiché pour toute autre erreur
 
     def _emit(self, type_: str, **data) -> None:
         with self._lock:
@@ -54,41 +62,69 @@ class Job(Reporter):
         with self._lock:
             return self.events[index:]
 
-    def run(self, work: Callable[["Job"], None]) -> None:
+    # -- annulation
+    def cancel(self) -> None:
+        self._cancel.set()
+
+    def sleep(self, seconds: float) -> None:
+        """Attend `seconds` secondes, ou lève JobCancelled dès que l'annulation est demandée."""
+        if self._cancel.wait(seconds):
+            raise JobCancelled()
+
+    def check_cancelled(self) -> None:
+        if self._cancel.is_set():
+            raise JobCancelled()
+
+    def run(self, work: Callable[["Job"], Optional[dict]]) -> None:
         try:
-            work(self)
-            self._emit("done", total=self._total)
-        except DeploymentError as exc:
+            result = work(self) or {}
+            self._emit("done", total=self._total, **result)
+        except JobCancelled:
+            self._emit("error", message="Opération annulée.")
+        except self._user_errors as exc:
             self._emit("error", message=str(exc))
         except EngineUnavailable:
             self._emit("error", message="Le moteur de simulation ne répond plus.")
         except Exception:  # noqa: BLE001 - toute erreur doit être remontée à l'interface
-            log.exception("Échec inattendu du déploiement")
-            self._emit("error", message="Erreur inattendue pendant la création du réseau (voir les journaux du serveur).")
+            log.exception("Échec inattendu d'une tâche de fond")
+            self._emit("error", message=self._failure)
         finally:
             self.finished = True
 
 
 class JobRegistry:
-    """Un seul déploiement à la fois : l'infrastructure est unique."""
+    """Une seule tâche à la fois par registre : l'infrastructure est unique."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        name: str = "deploy",
+        user_errors: Tuple[Type[Exception], ...] = (DeploymentError,),
+        failure: str = "Erreur inattendue pendant la création du réseau (voir les journaux du serveur).",
+    ) -> None:
         self._jobs: Dict[str, Job] = {}
         self._current: Optional[Job] = None
         self._lock = threading.Lock()
+        self._name = name
+        self._user_errors = user_errors
+        self._failure = failure
 
     @property
     def busy(self) -> bool:
         return self._current is not None and not self._current.finished
 
-    def start(self, work: Callable[[Job], None]) -> Optional[Job]:
+    @property
+    def current(self) -> Optional[Job]:
+        """Tâche en cours (None si aucune) : l'interface peut en reprendre le suivi."""
+        return self._current if self.busy else None
+
+    def start(self, work: Callable[[Job], Optional[dict]]) -> Optional[Job]:
         with self._lock:
             if self.busy:
                 return None
-            job = Job()
+            job = Job(self._user_errors, self._failure)
             self._jobs = {job.id: job}  # on ne garde que le dernier
             self._current = job
-        threading.Thread(target=job.run, args=(work,), daemon=True, name=f"deploy-{job.id[:8]}").start()
+        threading.Thread(target=job.run, args=(work,), daemon=True, name=f"{self._name}-{job.id[:8]}").start()
         return job
 
     def get(self, job_id: str) -> Optional[Job]:

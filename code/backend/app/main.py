@@ -17,6 +17,25 @@ API HTTP du moteur de simulation.
   DELETE /api/lab/scenarios               supprime les scénarios terminés
   WS     /api/lab/simulation              flux des paquets du réseau en temps réel (voir simulation.py)
 
+  GET    /api/datasets                    datasets sauvegardés (voir datasets.py) + génération en cours
+  POST   /api/datasets                    lance la génération d'un dataset → { id } (tâche de fond)
+  GET    /api/datasets/jobs/{id}/events   progression de la génération en Server-Sent Events
+  POST   /api/datasets/jobs/{id}/cancel   annule la génération en cours
+  GET    /api/datasets/{id}/files/{name}  télécharge flows.csv, capture.pcap ou meta.json
+  DELETE /api/datasets/{id}               supprime un dataset
+
+  GET    /api/lab/detection               état de la détection en direct (verdicts, vérité terrain)
+  POST   /api/lab/detection               démarre la détection : une Sonde IDS + un modèle entraîné
+  DELETE /api/lab/detection               arrête la détection
+  POST   /api/lab/detection/reset         efface le bilan et les événements (nouvel essai)
+
+  GET    /api/models                      modèles entraînés (voir training.py) + entraînement en cours + options
+  POST   /api/models                      lance l'entraînement d'un modèle → { id } (tâche de fond)
+  GET    /api/models/jobs/{id}/events     progression de l'entraînement en Server-Sent Events
+  POST   /api/models/jobs/{id}/cancel     annule l'entraînement en cours
+  GET    /api/models/{id}/files/{name}    télécharge model.joblib ou meta.json
+  DELETE /api/models/{id}                 supprime un modèle
+
 Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 """
 
@@ -30,20 +49,23 @@ from typing import Callable, List, Optional
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from docker.errors import DockerException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
 from .deployer import DeploymentError, EngineUnavailable, LabManager
-from .jobs import JobRegistry
+from .detection import DetectionError, DetectionManager
+from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetError, DatasetStore
+from .jobs import Job, JobRegistry
 from .models import Service, Topology
 from .planner import TopologyError, build_plan
 from .settings import load_settings
 from .capture import CaptureSession
 from .sessions import Session, SessionError, SessionRegistry
 from .terminal import TerminalSession
-from .traffic import BENIGN_PROFILES, TrafficError, TrafficManager, attack_catalog
+from .training import FILES as MODEL_FILES, MODELS, MODES, SPLITS, ModelStore, Trainer, TrainingError
+from .traffic import BENIGN_PROFILES, TrafficError, TrafficManager, attack_catalog, speed_catalog
 from .simulation import SimulationCapture
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
@@ -52,6 +74,17 @@ settings = load_settings()
 lab = LabManager(settings)
 traffic = TrafficManager(lab)
 jobs = JobRegistry()
+datasets = DatasetStore()
+dataset_builder = DatasetBuilder(traffic, datasets)
+dataset_jobs = JobRegistry(
+    "dataset", (DatasetError,), "Erreur inattendue pendant la génération du dataset (voir les journaux du serveur).",
+)
+models = ModelStore()
+trainer = Trainer(datasets, models)
+detection = DetectionManager(traffic, models)
+training_jobs = JobRegistry(
+    "training", (TrainingError,), "Erreur inattendue pendant l'entraînement (voir les journaux du serveur).",
+)
 sessions = SessionRegistry()  # terminaux et captures ouverts
 
 
@@ -97,6 +130,7 @@ def lab_status():
 def lab_stop():
     if jobs.busy:
         return error_response(409, "Un déploiement est en cours.")
+    detection.stop()
     lab.teardown()
     return {"ok": True}
 
@@ -121,6 +155,7 @@ class ScenarioRequest(BaseModel):
     source: str  # équipement d'où part le scénario
     attack: str  # identifiant dans le catalogue (voir traffic.ATTACKS)
     target: str  # cible : adresse IP ou sous-réseau selon le scénario
+    speed: str = "fast"  # vitesse (voir traffic.SPEEDS)
 
 
 def traffic_guard(fn):
@@ -138,6 +173,7 @@ def traffic_overview():
         **overview,
         "profiles": [{"id": k, "label": v} for k, v in BENIGN_PROFILES.items()],
         "attacks": attack_catalog(),
+        "speeds": speed_catalog(),
     }
 
 
@@ -157,7 +193,7 @@ def stop_benign(node: Optional[str] = None):
 @app.post("/api/lab/scenarios", status_code=201)
 def run_scenario(req: ScenarioRequest):
     lab.client
-    return traffic_guard(lambda: traffic.run_scenario(req.source, req.attack, req.target))
+    return traffic_guard(lambda: traffic.run_scenario(req.source, req.attack, req.target, req.speed))
 
 
 @app.get("/api/lab/scenarios/{scenario_id}/logs")
@@ -184,6 +220,209 @@ def scenario_flows(scenario_id: str):
 def clear_scenarios():
     lab.client
     return {"cleared": traffic.clear_scenarios()}
+
+
+# --------------------------------------------------------------------------- datasets
+
+class DatasetBenign(BaseModel):
+    node: str
+    targets: List[Target] = []
+
+
+class DatasetAttack(BaseModel):
+    source: str
+    attack: str
+    target: str
+    speed: str = "fast"
+    repeat: int = Field(1, ge=1, le=10)
+
+
+class DatasetTopology(BaseModel):
+    name: str = ""       # exemple chargé, ou « Topologie personnalisée »
+    signature: str = ""  # empreinte des équipements, adresses et réseaux
+    summary: str = ""
+
+
+class DatasetRequest(BaseModel):
+    name: str = ""
+    topology: DatasetTopology = DatasetTopology()  # réseau sur lequel le dataset est généré
+    probe: str                                  # équipement où la sonde capture le trafic
+    benign: List[DatasetBenign] = []
+    kinds: List[str] = []                       # types de trafic bénin (« icmp », « http », « service »)
+    profile: str = "moderate"
+    attacks: List[DatasetAttack] = []
+    warmup: int = Field(30, ge=0, le=600)       # trafic bénin seul avant la première attaque (s)
+    gap: int = Field(10, ge=0, le=600)          # trafic bénin seul entre deux attaques (s)
+    cooldown: int = Field(20, ge=0, le=600)     # trafic bénin seul après la dernière attaque (s)
+    maxAttack: int = Field(60, ge=5, le=600)    # durée maximale d'une attaque (s)
+    variants: int = Field(0, ge=0, le=5)        # variantes de test générées ensuite (voir datasets.make_variant)
+
+
+@app.get("/api/datasets")
+def list_datasets():
+    current = dataset_jobs.current
+    return {"datasets": datasets.list(), "job": current.id if current else None}
+
+
+@app.post("/api/datasets", status_code=202)
+def create_dataset(req: DatasetRequest):
+    lab.client
+    if jobs.busy:
+        return error_response(409, "Un déploiement est en cours.")
+    if dataset_jobs.busy:
+        return error_response(409, "Une génération de dataset est déjà en cours.")
+    try:
+        plan = dataset_builder.prepare(req.model_dump())
+    except DatasetError as exc:
+        return error_response(409, str(exc))
+    job = dataset_jobs.start(lambda reporter: dataset_builder.run(plan, reporter))
+    if job is None:
+        return error_response(409, "Une génération de dataset est déjà en cours.")
+    return {"id": job.id}
+
+
+@app.get("/api/datasets/jobs/{job_id}/events")
+async def dataset_events(job_id: str, request: Request):
+    job = dataset_jobs.get(job_id)
+    if job is None:
+        return error_response(404, "Génération inconnue.")
+    return job_events(job, request)
+
+
+@app.post("/api/datasets/jobs/{job_id}/cancel")
+def cancel_dataset(job_id: str):
+    job = dataset_jobs.get(job_id)
+    if job is None:
+        return error_response(404, "Génération inconnue.")
+    job.cancel()
+    return {"ok": True}
+
+
+@app.get("/api/datasets/{dataset_id}/files/{name}")
+def dataset_file(dataset_id: str, name: str):
+    try:
+        path = datasets.file_path(dataset_id, name)
+    except DatasetError as exc:
+        return error_response(404, str(exc))
+    return FileResponse(path, media_type=DATASET_FILES[name], filename=f"dataset-{dataset_id}-{name}")
+
+
+@app.delete("/api/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str):
+    try:
+        datasets.delete(dataset_id)
+    except DatasetError as exc:
+        return error_response(404, str(exc))
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- modèles (ML-IDS)
+
+class TrainingRequest(BaseModel):
+    name: str = ""
+    train: List[str]                            # datasets d'entraînement
+    test: List[str] = []                        # datasets de test (split « dataset »)
+    split: str = "dataset"                      # « dataset » ou « temporal »
+    testFraction: float = Field(0.3, ge=0.1, le=0.5)  # part du jeu gardée pour le test (split « temporal »)
+    mode: str = "binary"                        # « binary » ou « multiclass »
+    model: str = "random-forest"
+    nEstimators: int = Field(100, ge=10, le=500)
+    maxDepth: Optional[int] = Field(None, ge=2, le=100)
+    excludePort: bool = True                    # ne pas utiliser Dst Port comme feature
+
+
+def options(catalog: dict) -> list:
+    return [{"id": k, "label": v} for k, v in catalog.items()]
+
+
+@app.get("/api/models")
+def list_models():
+    current = training_jobs.current
+    return {
+        "models": models.list(),
+        "job": current.id if current else None,
+        "options": {"models": options(MODELS), "modes": options(MODES), "splits": options(SPLITS)},
+    }
+
+
+@app.post("/api/models", status_code=202)
+def create_model(req: TrainingRequest):
+    if training_jobs.busy:
+        return error_response(409, "Un entraînement est déjà en cours.")
+    try:
+        plan = trainer.prepare(req.model_dump())
+    except TrainingError as exc:
+        return error_response(409, str(exc))
+    job = training_jobs.start(lambda reporter: trainer.run(plan, reporter))
+    if job is None:
+        return error_response(409, "Un entraînement est déjà en cours.")
+    return {"id": job.id}
+
+
+@app.get("/api/models/jobs/{job_id}/events")
+async def model_events(job_id: str, request: Request):
+    job = training_jobs.get(job_id)
+    if job is None:
+        return error_response(404, "Entraînement inconnu.")
+    return job_events(job, request)
+
+
+@app.post("/api/models/jobs/{job_id}/cancel")
+def cancel_model(job_id: str):
+    job = training_jobs.get(job_id)
+    if job is None:
+        return error_response(404, "Entraînement inconnu.")
+    job.cancel()
+    return {"ok": True}
+
+
+@app.get("/api/models/{model_id}/files/{name}")
+def model_file(model_id: str, name: str):
+    try:
+        path = models.file_path(model_id, name)
+    except TrainingError as exc:
+        return error_response(404, str(exc))
+    return FileResponse(path, media_type=MODEL_FILES[name], filename=f"modele-{model_id}-{name}")
+
+
+# --------------------------------------------------------------------------- détection en direct
+
+class DetectionRequest(BaseModel):
+    ids: str    # Sonde IDS qui reçoit la copie du trafic du segment surveillé
+    model: str  # modèle entraîné (voir training.py)
+
+
+@app.get("/api/lab/detection")
+def detection_status():
+    return detection.status()
+
+
+@app.post("/api/lab/detection", status_code=201)
+def start_detection(req: DetectionRequest):
+    lab.client
+    try:
+        return detection.start(req.ids, req.model)
+    except DetectionError as exc:
+        return error_response(409, str(exc))
+
+
+@app.delete("/api/lab/detection")
+def stop_detection():
+    return detection.stop()
+
+
+@app.post("/api/lab/detection/reset")
+def reset_detection():
+    return detection.reset()
+
+
+@app.delete("/api/models/{model_id}")
+def delete_model(model_id: str):
+    try:
+        models.delete(model_id)
+    except TrainingError as exc:
+        return error_response(404, str(exc))
+    return {"ok": True}
 
 
 @app.websocket("/api/lab/simulation")
@@ -262,7 +501,11 @@ async def deployment_events(job_id: str, request: Request):
     job = jobs.get(job_id)
     if job is None:
         return error_response(404, "Déploiement inconnu.")
+    return job_events(job, request)
 
+
+def job_events(job: Job, request: Request) -> StreamingResponse:
+    """Diffuse les événements d'une tâche de fond en Server-Sent Events."""
     # Reprise après reconnexion : EventSource renvoie le dernier id reçu
     last_id = request.headers.get("last-event-id")
     start = int(last_id) + 1 if last_id and last_id.isdigit() else 0

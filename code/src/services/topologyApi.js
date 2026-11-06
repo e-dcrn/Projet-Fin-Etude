@@ -76,9 +76,9 @@ export const startBenign = (node, profile, targets, dest = 'all', kinds = ['icmp
 export const stopBenign = (node) =>
   request(`/lab/traffic/benign${node ? `?node=${encodeURIComponent(node)}` : ''}`, { method: 'DELETE' });
 
-/** Lance un scénario d'audit depuis `source` vers `target` → description du scénario. */
-export const runScenario = (source, attack, target) =>
-  request('/lab/scenarios', { method: 'POST', body: JSON.stringify({ source, attack, target }) });
+/** Lance un scénario d'audit (une fois) depuis `source` vers `target`, à la vitesse `speed` → description du scénario. */
+export const runScenario = (source, attack, target, speed = 'fast') =>
+  request('/lab/scenarios', { method: 'POST', body: JSON.stringify({ source, attack, target, speed }) });
 
 /** Résultat (sortie) d'un scénario terminé ou en cours. */
 export const fetchScenarioLogs = (id) => request(`/lab/scenarios/${encodeURIComponent(id)}/logs`);
@@ -88,6 +88,23 @@ export const scenarioFlowsUrl = (id) => `${API_BASE_URL}/lab/scenarios/${encodeU
 
 /** Supprime les scénarios terminés. */
 export const clearScenarios = () => request('/lab/scenarios', { method: 'DELETE' });
+
+// --- Détection en direct (voir backend/app/detection.py) -------------------
+
+/**
+ * État de la détection : { running, ids, model, startedAt, lastWindowAt, windowSec, error,
+ * stats: { flows, alerts, detected, missed, falseAlarms, benign }, events: [...] }
+ */
+export const fetchDetection = () => request('/lab/detection');
+
+/** Démarre la détection : la Sonde IDS `ids` analyse le trafic avec le modèle `model`. */
+export const startDetection = (ids, model) => request('/lab/detection', { method: 'POST', body: JSON.stringify({ ids, model }) });
+
+/** Arrête la détection (le dernier bilan reste consultable). */
+export const stopDetection = () => request('/lab/detection', { method: 'DELETE' });
+
+/** Efface le bilan et les événements (la détection en cours continue, repartie de zéro). */
+export const resetDetection = () => request('/lab/detection/reset', { method: 'POST' });
 
 /** URL WebSocket du flux des paquets du réseau en temps réel (voir backend/app/simulation.py). */
 export const simulationUrl = () => websocketUrl('/lab/simulation');
@@ -105,8 +122,11 @@ export const startDeployment = (topology) =>
  *   { type: 'done', total } | { type: 'error', message }
  * Retourne une fonction qui interrompt le suivi.
  */
-export function followDeployment(id, onEvent) {
-  const source = new EventSource(`${API_BASE_URL}/deployments/${id}/events`);
+export const followDeployment = (id, onEvent) => followJob(`/deployments/${id}/events`, onEvent);
+
+/** Suit les événements d'une tâche de fond du serveur (Server-Sent Events, voir backend/app/jobs.py). */
+function followJob(path, onEvent) {
+  const source = new EventSource(`${API_BASE_URL}${path}`);
   source.onmessage = (message) => {
     const event = JSON.parse(message.data);
     onEvent(event);
@@ -119,6 +139,46 @@ export function followDeployment(id, onEvent) {
   };
   return () => source.close();
 }
+
+// --- Datasets étiquetés (voir backend/app/datasets.py) ---------------------
+
+/** Datasets sauvegardés : { datasets: [meta…], job: id de la génération en cours ou null } */
+export const fetchDatasets = () => request('/datasets');
+
+/** Lance la génération d'un dataset (programme : sonde, trafic bénin, attaques, durées) → { id } */
+export const startDataset = (spec) => request('/datasets', { method: 'POST', body: JSON.stringify(spec) });
+
+/** Suit la génération d'un dataset : mêmes événements qu'un déploiement ; `done` porte { dataset }. */
+export const followDatasetJob = (id, onEvent) => followJob(`/datasets/jobs/${id}/events`, onEvent);
+
+/** Annule la génération en cours (rien n'est sauvegardé). */
+export const cancelDatasetJob = (id) => request(`/datasets/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+
+/** Supprime un dataset sauvegardé. */
+export const deleteDataset = (id) => request(`/datasets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+/** URL de téléchargement d'un fichier d'un dataset (flows.csv, capture.pcap, meta.json). */
+export const datasetFileUrl = (id, name) => `${API_BASE_URL}/datasets/${encodeURIComponent(id)}/files/${name}`;
+
+// --- Modèles ML-IDS (voir backend/app/training.py) -------------------------
+
+/** Modèles entraînés : { models: [meta…], job, options: { models, modes, splits } } */
+export const fetchModels = () => request('/models');
+
+/** Lance l'entraînement d'un modèle (datasets, découpage, mode, hyperparamètres) → { id } */
+export const startTraining = (spec) => request('/models', { method: 'POST', body: JSON.stringify(spec) });
+
+/** Suit un entraînement : mêmes événements qu'un déploiement ; `done` porte { model }. */
+export const followTrainingJob = (id, onEvent) => followJob(`/models/jobs/${id}/events`, onEvent);
+
+/** Annule l'entraînement en cours (rien n'est sauvegardé). */
+export const cancelTrainingJob = (id) => request(`/models/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+
+/** Supprime un modèle entraîné. */
+export const deleteModel = (id) => request(`/models/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+/** URL de téléchargement d'un fichier d'un modèle (model.joblib, meta.json). */
+export const modelFileUrl = (id, name) => `${API_BASE_URL}/models/${encodeURIComponent(id)}/files/${name}`;
 
 /**
  * URL WebSocket du terminal d'un équipement (PC ou serveur allumé).

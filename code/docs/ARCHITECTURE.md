@@ -36,7 +36,7 @@ Les trois parties :
 | Partie | Rôle | Où |
 | ------ | ---- | -- |
 | **A — Démontrer** | Bac à sable interactif : on construit un réseau, on génère du trafic/des attaques, on **voit** les paquets circuler. | Ce dépôt (`code/`). |
-| **B — Entraîner** | Produire un **dataset étiquetté** et entraîner/évaluer un **ML-IDS**. | ConCap (`concap/`) + jeux publics + code d'entraînement (à venir). |
+| **B — Entraîner** | Produire un **dataset étiquetté** et entraîner/évaluer un **ML-IDS**. | Boutons 🗂 Datasets et 🧠 IDS du démonstrateur (`datasets.py`, `training.py`) ; ConCap et jeux publics en option. |
 | **Pont** | Un **format de features commun** (CICFlowMeter) pour que A et B parlent la même langue. | `backend/app/cicflowmeter.py`. |
 
 ---
@@ -62,6 +62,7 @@ Briques principales :
 | Capture | `backend/app/capture.py` | Capturer le trafic d'un lien → **export pcap**. |
 | Animation des paquets | `backend/app/simulation.py` ; `src/hooks/useSimulation.js`, `src/components/SimulationLayer.jsx` | Chaque paquet réel → une boule animée, en temps réel. |
 | Export de flux | `backend/app/flows.py` **et** `cicflowmeter.py` | pcap d'un scénario → flux étiquetés (CSV). |
+| Génération de datasets | `backend/app/datasets.py` ; `src/components/DatasetDialog.jsx` | Programme complet (sonde, trafic bénin continu, attaques enchaînées) → dataset CICFlowMeter étiqueté par fenêtres de temps, sauvegardé sur disque. Le « ConCap » du démonstrateur, sur la vraie topologie. |
 
 C'est la partie **pédagogique et de monstration** : idéale pour montrer une attaque,
 une évasion, et le trafic qui circule.
@@ -142,22 +143,33 @@ pas disponibles (autonome, testé), mais le chemin par défaut vise les features
 | — | Démonstrateur (topologie, trafic, attaques, animation, capture/pcap) | ✅ en place |
 | 1 | **Pont CICFlowMeter réel** (`cicflowmeter.py`) branché sur l'export de flux des scénarios, avec repli sur `flows.py` | ✅ implémenté et **validé en conditions réelles** (scénario nmap joué dans le lab → CSV 94 colonnes CICFlowMeter, 200 flux étiquetés `port-scan`). |
 | 2 | **ConCap** (scénarios `nmap`, `hydra` + guide) | ✅ scénarios et guide fournis (`concap/`). ▶ **À faire par toi** : monter un cluster (k3s/kind) et lancer — ça tourne sur ta machine, je ne peux pas l'installer à ta place. |
-| 3 | **Détection IDS en direct** dans le démonstrateur | ⏳ à venir — **dépend d'un modèle entraîné** (Partie B). Conçu ci-dessous ; pas encore codé (il n'y a pas encore de modèle). |
+| 2b | **Génération de datasets** dans le démonstrateur (bouton 🗂 Datasets) | ✅ en place : remplace ConCap pour ce projet (pas de Kubernetes, et la topologie est respectée). |
+| 2c | **Entraînement d'un modèle** depuis l'interface (bouton 🧠 IDS : random forest, binaire ou multiclasse, test sur un dataset séparé ou découpage temporel, rapport de métriques) | ✅ en place (`backend/app/training.py`). |
+| 3 | **Détection IDS en direct** dans le démonstrateur (bouton 🛡 Détection) | ✅ en place (`backend/app/detection.py`) : une Sonde IDS sur un switch (port miroir) classe les flux toutes les 5 s ; verdicts comparés à la vérité terrain (attaques lancées depuis l'interface). |
 
-### Comment le point 3 se branchera (quand un modèle existera)
+### Le parcours complet dans le démonstrateur
 
-1. Entraîner un modèle (Partie B) sur le dataset CICFlowMeter → fichier de modèle.
-2. Côté moteur : sur un lien en capture, convertir le trafic en flux via `cicflowmeter.py`,
-   passer les features au modèle, obtenir `bénin / alerte` par flux.
-3. Côté interface : afficher le verdict (ex. colorer le lien ou la boule en rouge sur une
-   alerte). Idéal pour montrer **détection** puis **évasion** en soutenance.
+Pas à pas, avec les boutons de l'interface : [`README.md`, section 4](../README.md#4-parcours-complet--de-la-topologie-à-la-détection).
 
----
+1. **Topologie** avec une Sonde IDS reliée au switch à surveiller (tous les exemples en ont une), puis
+   **✔ Valider la topologie**.
+2. **🗂 Datasets** : programme trafic bénin + attaques, capturé par la Sonde IDS → CSV étiqueté. Avec
+   2 variantes (valeur par défaut), on obtient 1 dataset d'entraînement et 2 datasets de test.
+3. **🧠 IDS** : entraînement sur le dataset de base, évaluation sur les 2 variantes, jamais vues à
+   l'entraînement → modèle + rapport de métriques.
+4. **🛡 Détection** : le modèle tourne sur la Sonde IDS.
+5. **📡 Trafic** : trafic bénin. La sonde ne doit pas lever d'alerte (sinon, ce sont des fausses alertes).
+6. **⚡ Scénarios** : une attaque. La sonde doit la détecter. Le panneau Détection compte en direct
+   les attaques détectées et manquées et les fausses alertes.
+7. **Évasion** (à venir) : modifier l'attaque pour que ses flux passent pour du bénin, et le montrer au
+   même endroit (l'attaque réussit, la détection ne réagit plus).
 
-## Pour démarrer la Partie B
+Les deux évaluations sont complémentaires : celle de l'étape 3 donne des **chiffres reproductibles**
+(même jeu de test pour comparer des modèles), celle des étapes 4 à 6 montre le comportement **en direct**,
+fenêtre par fenêtre, sur le vrai trafic du réseau.
 
-1. **Clarifier avec le prof** : ConCap obligatoire, ou un dataset public suffit-il pour le socle ?
-2. **Socle** : récupérer CIC-IDS2017/2018 (features CICFlowMeter déjà fournies).
-3. **Compléments** : générer tes attaques avec ConCap (`concap/README.md`).
-4. **Entraînement** : notebook/script scikit-learn (ou autre) sur le CSV combiné.
-5. **Boucler** : brancher le modèle dans le démonstrateur (point 3).
+### Pistes pour aller plus loin
+
+- **Jeux publics** : importer CIC-IDS2017/2018 (correspondance des noms de colonnes à prévoir) pour
+  comparer avec la littérature ou enrichir le trafic bénin.
+- **ConCap** : utile seulement pour produire des datasets en masse hors du démonstrateur (`concap/`).

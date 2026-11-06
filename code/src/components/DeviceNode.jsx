@@ -11,7 +11,9 @@ import { DEVICE_TYPES } from '../config/deviceTypes.js';
  * partent du centre de l'équipement, comme dans Packet Tracer.
  *
  * `data.summary` (lignes affichées sous le nom : adresses, réseau…) et
- * `data.online` (équipement instancié et allumé) sont calculés par TopologyCanvas.
+ * `data.online` (équipement instancié et allumé), `data.alert` (impliqué dans une
+ * alerte récente de la détection) et `data.watching` (sonde IDS en cours d'analyse)
+ * sont calculés par TopologyCanvas.
  * Un PC ou un serveur allumé s'ouvre dans un terminal au clic.
  */
 function DeviceNode({ data, selected }) {
@@ -22,7 +24,7 @@ function DeviceNode({ data, selected }) {
 
   return (
     <div
-      className={`device-node${selected ? ' device-node--selected' : ''}`}
+      className={`device-node${selected ? ' device-node--selected' : ''}${data.alert ? ' device-node--alert' : ''}${data.watching ? ' device-node--watching' : ''}`}
       style={{ '--device-color': definition.color }}
       title={terminal ? `${definition.description} : cliquer pour ouvrir le terminal` : definition.description}
     >

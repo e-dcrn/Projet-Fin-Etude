@@ -583,3 +583,117 @@ body { background: var(--bg); }
 .flow-chip { padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 600; }
 .flow-chip--attack { background: #fee2e2; color: #991b1b; }
 .scenario__flows a { text-decoration: none; }
+
+/* ==========================================================================
+   Datasets étiquetés (DatasetDialog)
+   ========================================================================== */
+.modal--wide { width: min(820px, calc(100vw - 32px)); }
+.modal__hint { margin-right: auto; align-self: center; font-size: 12px; color: var(--text-muted); }
+
+.dataset-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+.dataset { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.dataset--result { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.dataset__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.dataset__name { font-size: 14px; }
+.dataset__meta { font-size: 12px; color: var(--text-muted); }
+.dataset__actions { display: flex; align-items: center; gap: 6px; }
+.dataset__files { display: inline-flex; gap: 6px; }
+.dataset__files a { text-decoration: none; }
+.dataset__delete { margin-left: auto; color: var(--danger); }
+
+.dataset-form .traffic-section__title { margin-top: 16px; }
+.dataset-form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.dataset-form__durations { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; }
+
+.attack-table { width: 100%; margin-bottom: 8px; border-collapse: collapse; font-size: 13px; }
+.attack-table th { padding: 0 4px 4px; text-align: left; font-size: 11px; font-weight: 500; color: var(--text-muted); }
+.attack-table td { padding: 3px 4px; vertical-align: top; }
+.attack-table .field__input { width: 100%; }
+.attack-table__repeat { max-width: 64px; }
+.attack-table__warn { display: block; margin-top: 2px; font-size: 11px; color: var(--warning); }
+
+/* ==========================================================================
+   Modèles ML-IDS (ModelDialog)
+   ========================================================================== */
+.check-list--datasets { max-height: 180px; gap: 2px; }
+.check--dataset { align-items: flex-start; padding: 4px 0; }
+.check--dataset input { margin-top: 3px; }
+.check--disabled { opacity: .45; cursor: not-allowed; }
+.check__body { display: flex; flex-direction: column; gap: 3px; }
+.field--inline input[type=range] { width: 100%; }
+
+.model-report { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.model-report__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.model-report__grid .traffic-section__title { margin-top: 4px; }
+
+/* Indicateurs clés : chiffre en grand, libellé discret */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kpi { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fafc; }
+.kpi__value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.kpi__label { font-size: 12px; color: var(--text-muted); }
+
+/* Matrice de confusion : une seule teinte (la primaire), intensité = part de la ligne */
+.confusion { border-collapse: separate; border-spacing: 2px; font-size: 12px; margin-bottom: 12px; }
+.confusion th { padding: 4px 6px; font-weight: 600; color: var(--text-muted); text-align: left; }
+.confusion__corner { font-weight: 400 !important; font-size: 11px; }
+.confusion__cell {
+  min-width: 64px; padding: 8px 10px; border-radius: 4px; text-align: center; font-variant-numeric: tabular-nums;
+  color: var(--text); background: color-mix(in srgb, var(--primary) calc(var(--share) * 85%), #f1f5f9);
+}
+.confusion__cell--strong { color: #fff; }
+.confusion__cell--diag { font-weight: 700; }
+
+.metrics-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.metrics-table th { padding: 3px 6px; text-align: left; font-weight: 500; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.metrics-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+
+/* Importance des features : barres horizontales fines, extrémité arrondie */
+.feature-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.feature-bars__row { display: grid; grid-template-columns: 130px 1fr 48px; align-items: center; gap: 8px; font-size: 12px; }
+.feature-bars__row:hover .feature-bars__bar { filter: brightness(1.15); }
+.feature-bars__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.feature-bars__track { height: 10px; }
+.feature-bars__bar { display: block; height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--primary); }
+.feature-bars__value { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   Détection en direct (DetectionPanel, alertes sur le schéma)
+   ========================================================================== */
+.device-node--alert .device-node__icon { box-shadow: 0 0 0 4px var(--danger); animation: alert-pulse 1s ease-in-out infinite alternate; }
+.device-node--watching .device-node__icon { box-shadow: 0 0 0 4px rgba(37, 99, 235, .35); }
+@keyframes alert-pulse { to { box-shadow: 0 0 0 7px rgba(220, 38, 38, .35); } }
+
+.det-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; }
+.det-status .traffic-dot { margin-top: 5px; }
+.det-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.det-kpi { display: flex; flex-direction: column; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fafc; }
+.det-kpi__value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.det-kpi__label { font-size: 11px; color: var(--text-muted); }
+
+.det-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.det-event { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-left: 3px solid; border-radius: 4px; font-size: 12px; }
+.det-event--detected { border-color: var(--danger); background: #fef2f2; }
+.det-event--false { border-color: var(--warning); background: #fffbeb; }
+.det-event--missed { border-color: #475569; background: #f1f5f9; }
+.det-event__badge { font-size: 11px; font-weight: 700; }
+.det-event--detected .det-event__badge { color: #991b1b; }
+.det-event--false .det-event__badge { color: #92400e; }
+.det-event--missed .det-event__badge { color: #334155; }
+.det-event__flow { font-weight: 600; }
+.det-event__meta { font-size: 11px; color: var(--text-muted); }
+
+/* Scénarios : ce que fait l'attaque choisie (volume, cadence, commande) */
+.scenario-spec { margin: 2px 0 8px; padding: 8px 10px; border-radius: 6px; background: #f8fafc; font-size: 12px; }
+.scenario-spec dt { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.scenario-spec dd { margin: 0 0 6px; color: var(--text); }
+.scenario-spec dd:last-child { margin-bottom: 0; }
+.scenario-spec code, .scenario__cmd { font: 11px/1.4 var(--mono); word-break: break-all; }
+.scenario__cmd { display: block; margin: 0 0 6px; color: var(--text-muted); }
+
+/* Datasets : programme de base et variantes de test */
+.dataset__group { font-size: 11px; color: var(--text-muted); }
+.dataset__group--variant { color: #1e40af; }
+.field--inline-row { flex-direction: row; align-items: center; gap: 10px; }
+.field--inline-row .field__input { width: 72px; }
+.model-report .metrics-table { margin-bottom: 4px; }
+.det-warning { margin: 0 0 12px; font-size: 12px; }

@@ -57,3 +57,6 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# Datasets générés par le démonstrateur (pcap + CSV, volumineux)
+code/backend/data/

@@ -19,8 +19,17 @@ export default function Toolbar({
   onStopLab,
   onToggleTraffic,
   trafficActive,
+  trafficRunning,
   onToggleScenario,
   scenarioActive,
+  scenarioRunning,
+  onOpenDatasets,
+  datasetRunning,
+  onOpenModels,
+  trainingRunning,
+  onToggleDetection,
+  detectionActive,
+  detectionRunning,
   nodeCount,
   errorCount,
   labStatus,
@@ -55,23 +64,54 @@ export default function Toolbar({
         {labStatus === 'running' && (
           <button
             type="button"
-            className={`btn${trafficActive ? ' btn--active' : ''}`}
+            className={`btn${trafficActive || trafficRunning ? ' btn--active' : ''}`}
             onClick={onToggleTraffic}
             aria-pressed={trafficActive}
             title="Générer du trafic de fond (bénin) sur le réseau"
           >
-            📡 Trafic
+            📡 Trafic{trafficRunning ? ' (actif)' : ''}
           </button>
         )}
         {labStatus === 'running' && (
           <button
             type="button"
-            className={`btn${scenarioActive ? ' btn--active' : ''}`}
+            className={`btn${scenarioActive || scenarioRunning ? ' btn--active' : ''}`}
             onClick={onToggleScenario}
             aria-pressed={scenarioActive}
             title="Lancer un scénario d'audit (reconnaissance, force brute)"
           >
-            ⚡ Scénarios
+            ⚡ Scénarios{scenarioRunning ? ' (en cours…)' : ''}
+          </button>
+        )}
+        {labStatus === 'running' && (
+          <button
+            type="button"
+            className={`btn${detectionActive || detectionRunning ? ' btn--active' : ''}`}
+            onClick={onToggleDetection}
+            aria-pressed={detectionActive}
+            title="Détection en direct : une Sonde IDS analyse le trafic avec un modèle entraîné"
+          >
+            🛡 Détection{detectionRunning ? ' (active)' : ''}
+          </button>
+        )}
+        {labStatus !== 'offline' && (
+          <button
+            type="button"
+            className={`btn${datasetRunning ? ' btn--active' : ''}`}
+            onClick={onOpenDatasets}
+            title="Générer et télécharger des datasets étiquetés (trafic bénin + attaques)"
+          >
+            🗂 Datasets{datasetRunning ? ' (en cours…)' : ''}
+          </button>
+        )}
+        {labStatus !== 'offline' && (
+          <button
+            type="button"
+            className={`btn${trainingRunning ? ' btn--active' : ''}`}
+            onClick={onOpenModels}
+            title="Entraîner et évaluer un modèle ML-IDS sur les datasets"
+          >
+            🧠 IDS{trainingRunning ? ' (entraînement…)' : ''}
           </button>
         )}
 

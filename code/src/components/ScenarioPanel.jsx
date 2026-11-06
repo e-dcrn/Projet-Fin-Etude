@@ -51,6 +51,7 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
   const [source, setSource] = useState('');
   const [attackId, setAttackId] = useState('');
   const [target, setTarget] = useState('');
+  const [speed, setSpeed] = useState('fast');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [log, setLog] = useState(null);
@@ -73,7 +74,8 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
     }
   };
 
-  const launch = () => guard(() => traffic.runScenario(source, attackId, target));
+  const launch = () => guard(() => traffic.runScenario(source, attackId, target, speed));
+  const cadence = traffic.speeds.find((s) => s.id === speed)?.cadence?.[attack?.tool];
   const showLog = (id) =>
     guard(async () => {
       const { logs } = await traffic.fetchLogs(id);
@@ -132,6 +134,28 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
           </select>
         </label>
 
+        <label className="field field--compact">
+          <span className="field__label">Vitesse</span>
+          <select className="field__input" value={speed} onChange={(e) => setSpeed(e.target.value)}>
+            {traffic.speeds.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+
+        {attack && (
+          <dl className="scenario-spec">
+            <dt>Ce qui est envoyé</dt>
+            <dd>{attack.volume}</dd>
+            <dt>Cadence</dt>
+            <dd>{cadence}</dd>
+            <dt>Exécution</dt>
+            <dd>une seule fois (pour répéter une attaque, relancez-la ou utilisez 🗂 Datasets)</dd>
+            <dt>Commande</dt>
+            <dd><code>{attack.commands?.[speed]?.replace('<cible>', target || '<cible>')}</code></dd>
+          </dl>
+        )}
+
         <button type="button" className="btn btn--danger btn--block" onClick={launch} disabled={!canLaunch}>
           ⚡ Lancer le scénario
         </button>
@@ -155,8 +179,10 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
                     <span className="scenario__name">{s.name}</span>
                   </div>
                   <div className="scenario__meta">
-                    {s.subcategory} · vers {s.target} · {sinceLabel(s.started)}
+                    {s.subcategory} · vers {s.target} · vitesse {s.speed?.toLowerCase()} · {sinceLabel(s.started)}
+                    {s.durationSec != null && ` · ${s.status === 'running' ? 'en cours depuis' : 'a duré'} ${s.durationSec.toLocaleString('fr-FR')} s`}
                   </div>
+                  {s.command && <code className="scenario__cmd">{s.command}</code>}
                   <button type="button" className="btn btn--light btn--xs" onClick={() => showLog(s.id)} disabled={busy}>
                     Voir le résultat
                   </button>

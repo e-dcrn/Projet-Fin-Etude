@@ -25,6 +25,7 @@ import re
 import tarfile
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -52,14 +53,41 @@ WORDLIST = ["admin", "123456", "root", "toor", "qwerty", "password", "letmein", 
 TARGET_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$")
 
 
-def _bruteforce_cmd(service: str, target: str) -> list:
+# Vitesses d'attaque : faire varier le rythme diversifie les flux d'un dataset
+# (un scan lent n'a pas les mêmes durées / inter-arrivées qu'un scan rapide).
+#   nmap  : modèle de temporisation -T ;  hydra : nombre de connexions parallèles -t.
+#   cadence : ce que la vitesse change concrètement, pour l'interface.
+SPEEDS = {
+    "slow": {"label": "Lente", "nmap": "-T2", "hydra": "1", "cadence": {
+        "nmap": "une sonde à la fois, 0,4 s d'attente entre deux (≈ 2,5 sondes / s)",
+        "hydra": "1 connexion à la fois"}},
+    "normal": {"label": "Normale", "nmap": "-T3", "hydra": "2", "cadence": {
+        "nmap": "sondes en parallèle, rythme adapté aux réponses du réseau (réglage par défaut de nmap)",
+        "hydra": "2 connexions en parallèle"}},
+    "fast": {"label": "Rapide", "nmap": "-T4", "hydra": "4", "cadence": {
+        "nmap": "sondes en parallèle, délais d'attente courts (≈ des centaines de sondes / s)",
+        "hydra": "4 connexions en parallèle"}},
+    "insane": {"label": "Très rapide", "nmap": "-T5", "hydra": "16", "cadence": {
+        "nmap": "parallélisme maximal, quasiment aucune attente (peut perdre des réponses)",
+        "hydra": "16 connexions en parallèle"}},
+}
+DEFAULT_SPEED = "fast"
+
+
+def _bruteforce_cmd(service: str, target: str, speed: str) -> list:
     """Commande hydra : écrit la liste de mots de passe puis tente l'authentification."""
     passwords = " ".join(WORDLIST)
+    tasks = SPEEDS[speed]["hydra"]
     return [
         "sh", "-c",
         f"printf '%s\\n' {passwords} > /tmp/pw.txt && "
-        f"hydra -l {LAB_USER} -P /tmp/pw.txt -t 4 -f -I {service}://{target}",
+        f"hydra -l {LAB_USER} -P /tmp/pw.txt -t {tasks} -f -I {service}://{target}",
     ]
+
+
+def _nmap_cmd(*args: str):
+    """Commande nmap (cible et vitesse ajoutées au lancement)."""
+    return lambda t, speed: ["nmap", *args, SPEEDS[speed]["nmap"], t]
 
 # Profils de trafic bénin proposés à l'utilisateur (le détail du rythme est dans traffic_agent.py).
 # Fréquence du trafic (le libellé indique le débit ; les intervalles sont dans
@@ -76,56 +104,72 @@ BENIGN_PROFILES = {
 # visent que des équipements de la topologie isolée.
 #   needs   : "ip" (une cible) ou "subnet" (un sous-réseau entier)
 #   label   : (catégorie, sous-catégorie) attachée au trafic produit
-#   command : construit la commande à partir de la cible
+#   command : construit la commande à partir de la cible et de la vitesse (SPEEDS)
 ATTACKS = {
     "ping-sweep": {
         "name": "Balayage de découverte",
         "description": "Repère les machines actives d'un sous-réseau (nmap -sn).",
         "needs": "subnet",
+        "tool": "nmap",
+        "volume": "≈ 4 paquets de découverte (ping ICMP, TCP 80 et 443…) par adresse du sous-réseau : 254 adresses pour un /24",
         "label": ("reconnaissance", "ping-sweep"),
-        "command": lambda t: ["nmap", "-sn", "-T4", t],
+        "command": _nmap_cmd("-sn"),
     },
     "tcp-connect-scan": {
         "name": "Scan de ports (connect)",
         "description": "Teste les 200 ports les plus courants d'une machine (nmap -sT).",
         "needs": "ip",
+        "tool": "nmap",
+        "volume": "200 ports testés, une connexion TCP complète par port (≈ 200 flux)",
         "label": ("reconnaissance", "port-scan"),
-        "command": lambda t: ["nmap", "-sT", "-T4", "--top-ports", "200", t],
+        "command": _nmap_cmd("-sT", "--top-ports", "200"),
     },
     "syn-scan": {
         "name": "Scan de ports furtif (SYN)",
         "description": "Scan SYN de tous les ports, sans ouvrir de connexion complète (nmap -sS).",
         "needs": "ip",
+        "tool": "nmap",
+        "volume": "65 535 ports testés, un seul paquet SYN par port, connexion jamais terminée (jusqu'à 65 535 flux)",
         "label": ("reconnaissance", "syn-scan"),
-        "command": lambda t: ["nmap", "-sS", "-T4", "-p-", t],
+        "command": _nmap_cmd("-sS", "-p-"),
     },
     "service-scan": {
         "name": "Identification des services",
         "description": "Identifie les logiciels et versions derrière les ports ouverts (nmap -sV).",
         "needs": "ip",
+        "tool": "nmap",
+        "volume": "100 ports testés, puis plusieurs requêtes de détection sur chaque port ouvert (≈ 100 à 150 flux)",
         "label": ("reconnaissance", "service-detection"),
-        "command": lambda t: ["nmap", "-sV", "-T4", "--top-ports", "100", t],
+        "command": _nmap_cmd("-sV", "--top-ports", "100"),
     },
     "aggressive-scan": {
         "name": "Scan approfondi",
         "description": "Scan complet : services, système, scripts par défaut (nmap -A).",
         "needs": "ip",
+        "tool": "nmap",
+        "volume": "1 000 ports testés + détection des services, du système et scripts (≈ 1 000 à 2 000 flux)",
         "label": ("reconnaissance", "aggressive-scan"),
-        "command": lambda t: ["nmap", "-A", "-T4", t],
+        "command": _nmap_cmd("-A"),
     },
     "ssh-bruteforce": {
         "name": "Force brute SSH",
         "description": f"Essaie plusieurs mots de passe sur le compte « {LAB_USER} » en SSH (hydra).",
         "needs": "ip",
+        "tool": "hydra",
+        "service": "ssh",
+        "volume": f"jusqu'à {len(WORDLIST)} mots de passe essayés, une connexion SSH par essai ; s'arrête au premier qui marche",
         "label": ("force-brute", "ssh-patator"),
-        "command": lambda t: _bruteforce_cmd("ssh", t),
+        "command": lambda t, speed: _bruteforce_cmd("ssh", t, speed),
     },
     "ftp-bruteforce": {
         "name": "Force brute FTP",
         "description": f"Essaie plusieurs mots de passe sur le compte « {LAB_USER} » en FTP (hydra).",
         "needs": "ip",
+        "tool": "hydra",
+        "service": "ftp",
+        "volume": f"jusqu'à {len(WORDLIST)} mots de passe essayés, une connexion FTP par essai ; s'arrête au premier qui marche",
         "label": ("force-brute", "ftp-patator"),
-        "command": lambda t: _bruteforce_cmd("ftp", t),
+        "command": lambda t, speed: _bruteforce_cmd("ftp", t, speed),
     },
 }
 
@@ -133,13 +177,41 @@ class TrafficError(Exception):
     """Opération impossible ; le message est affichable tel quel."""
 
 
+def command_preview(attack_id: str, speed: str, target: str = "<cible>") -> str:
+    """Commande lancée par une attaque, lisible (la liste de mots de passe est résumée)."""
+    attack = ATTACKS[attack_id]
+    if attack["tool"] == "hydra":
+        return (f"hydra -l {LAB_USER} -P <{len(WORDLIST)} mots de passe> -t {SPEEDS[speed]['hydra']} "
+                f"-f {attack['service']}://{target}")
+    return " ".join(attack["command"](target, speed))
+
+
 def attack_catalog() -> List[dict]:
     """Description des scénarios pour l'interface (sans les fonctions internes)."""
     return [
         {"id": key, "name": a["name"], "description": a["description"],
-         "needs": a["needs"], "category": a["label"][0], "subcategory": a["label"][1]}
+         "needs": a["needs"], "category": a["label"][0], "subcategory": a["label"][1],
+         "tool": a["tool"], "volume": a["volume"],
+         "commands": {speed: command_preview(key, speed) for speed in SPEEDS}}
         for key, a in ATTACKS.items()
     ]
+
+
+def speed_catalog() -> List[dict]:
+    """Vitesses proposées, avec leur effet concret pour nmap et pour hydra."""
+    return [{"id": k, "label": v["label"], "cadence": v["cadence"]} for k, v in SPEEDS.items()]
+
+
+def docker_time(value: str) -> Optional[float]:
+    """Horodatage Docker (« 2026-10-30T10:49:59.123456789Z ») → secondes epoch ; None si absent."""
+    if not value or value.startswith("0001-"):
+        return None
+    main, _, frac = value.rstrip("Z").partition(".")
+    try:
+        moment = datetime.fromisoformat(f"{main}.{(frac or '0')[:6].ljust(6, '0')}")
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=timezone.utc).timestamp()
 
 
 class TrafficManager:
@@ -155,13 +227,13 @@ class TrafficManager:
     def _prefix(self) -> str:
         return self.lab.settings.prefix
 
-    def _require_device(self, node_id: str, what: str):
+    def require_device(self, node_id: str, what: str):
         device = self.lab.find_device(node_id)
         if device is None or device.status != "running":
             raise TrafficError(f"{what} : l'équipement est éteint (validez la topologie pour démarrer le réseau).")
         return device
 
-    def _name_of(self, container) -> str:
+    def name_of(self, container) -> str:
         return container.labels.get(f"{self._prefix}.name", "?")
 
     # ------------------------------------------------------------------ trafic bénin
@@ -172,7 +244,7 @@ class TrafficManager:
         `kinds` liste les types de trafic à générer (« icmp », « http », « service »)."""
         if profile not in BENIGN_PROFILES:
             raise TrafficError(f"Profil de trafic inconnu « {profile} ».")
-        device = self._require_device(node_id, "Trafic de fond")
+        device = self.require_device(node_id, "Trafic de fond")
         self.stop_benign(node_id)  # un seul agent par équipement
 
         config = {"profile": profile, "targets": targets, "kinds": kinds or ["icmp"]}
@@ -185,7 +257,7 @@ class TrafficManager:
         except DockerException as exc:
             log.error("Agent de trafic sur %s : %s", node_id, exc)
             raise TrafficError("Impossible de démarrer le trafic de fond sur cet équipement.") from exc
-        log.info("Trafic bénin « %s » démarré sur %s → %s", profile, self._name_of(device), dest)
+        log.info("Trafic bénin « %s » démarré sur %s → %s", profile, self.name_of(device), dest)
         return {"node": node_id, "profile": profile, "dest": dest or "all", "running": True}
 
     def stop_benign(self, node_id: Optional[str] = None) -> int:
@@ -205,25 +277,27 @@ class TrafficManager:
 
     # ------------------------------------------------------------------ scénarios d'audit
 
-    def run_scenario(self, source_id: str, attack_id: str, target: str) -> dict:
-        """Lance un scénario d'audit depuis `source_id` vers `target` (IP ou sous-réseau)."""
+    def run_scenario(self, source_id: str, attack_id: str, target: str, speed: str = DEFAULT_SPEED) -> dict:
+        """Lance un scénario d'audit depuis `source_id` vers `target` (IP ou sous-réseau), une fois."""
         attack = ATTACKS.get(attack_id)
         if attack is None:
             raise TrafficError(f"Scénario inconnu « {attack_id} ».")
+        if speed not in SPEEDS:
+            raise TrafficError(f"Vitesse inconnue « {speed} ».")
         target = (target or "").strip()
         if not target:
             raise TrafficError("Indiquez une cible pour le scénario.")
         if not TARGET_RE.match(target):
             raise TrafficError("Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
-        device = self._require_device(source_id, "Scénario")
-        source_ip = self._device_ip(device)
+        device = self.require_device(source_id, "Scénario")
+        source_ip = self.device_ip(device)
 
-        command = attack["command"](target)
+        command = attack["command"](target, speed)
         category, subcategory = attack["label"]
         try:
             # Capture lancée AVANT l'attaque : elle enregistre tout le trafic du
             # scénario dans un pcap, converti ensuite en flux étiquetés.
-            interface = self._primary_interface(device)
+            interface = self.primary_interface(device)
             capture = self.lab.start_netns_helper(
                 device, self.lab.settings.capture,
                 ["tcpdump", "-i", interface, "-p", "-U", "-w", "/tmp/scan.pcap"],
@@ -232,7 +306,7 @@ class TrafficManager:
             helper = self.lab.start_netns_helper(
                 device, self.lab.settings.traffic, command,
                 role="scenario", attached=source_id, attack=attack_id,
-                target=target, category=category, subcategory=subcategory,
+                target=target, category=category, subcategory=subcategory, speed=speed,
                 started=str(int(time.time())),
             )
         except DockerException as exc:
@@ -248,12 +322,12 @@ class TrafficManager:
             daemon=True, name=f"flows-{scenario_id}",
         ).start()
 
-        log.info("Scénario « %s » lancé depuis %s vers %s", attack_id, self._name_of(device), target)
+        log.info("Scénario « %s » lancé depuis %s vers %s", attack_id, self.name_of(device), target)
         return self._scenario_info(helper)
 
     # ------------------------------------------------------------------ flux étiquetés
 
-    def _device_ip(self, container) -> str:
+    def device_ip(self, container) -> str:
         """Première adresse IP du conteneur (pour étiqueter les flux du scénario)."""
         try:
             container.reload()
@@ -262,7 +336,7 @@ class TrafficManager:
         except (DockerException, KeyError, StopIteration):
             return ""
 
-    def _primary_interface(self, container) -> str:
+    def primary_interface(self, container) -> str:
         """Première interface « up » de l'équipement (eth0…), où capturer le trafic."""
         script = (
             'for d in /sys/class/net/*; do n=${d##*/}; [ "$n" = lo ] && continue; '
@@ -275,7 +349,7 @@ class TrafficManager:
         except DockerException:
             return "eth0"
 
-    def _extract_file(self, container, path: str) -> bytes:
+    def extract_file(self, container, path: str) -> bytes:
         """Récupère un fichier du conteneur (archive tar renvoyée par l'API Docker)."""
         stream, _ = container.get_archive(path)
         buffer = io.BytesIO(b"".join(stream))
@@ -299,7 +373,7 @@ class TrafficManager:
                 capture.stop(timeout=3)  # tcpdump vide son tampon et écrit le pcap
             except DockerException:
                 pass
-            data = self._extract_file(capture, "/tmp/scan.pcap")
+            data = self.extract_file(capture, "/tmp/scan.pcap")
             try:
                 # Features identiques aux jeux CIC-IDS (voir cicflowmeter.py).
                 csv_text, counts, total = pcap_to_labeled_csv(self.lab, data, source_ip, target, needs, subcategory)
@@ -343,9 +417,14 @@ class TrafficManager:
         attack = ATTACKS.get(attack_id, {})
         try:
             helper.reload()
-            exit_code = helper.attrs.get("State", {}).get("ExitCode")
+            state = helper.attrs.get("State", {})
+            exit_code = state.get("ExitCode")
+            began = docker_time(state.get("StartedAt", ""))
+            ended = docker_time(state.get("FinishedAt", "")) if helper.status != "running" else time.time()
         except DockerException:
-            exit_code = None
+            exit_code = began = ended = None
+        speed = labels.get(f"{self._prefix}.speed", DEFAULT_SPEED)
+        target = labels.get(f"{self._prefix}.target", "")
         scenario_id = helper.id[:12]
         with self._flows_lock:
             flow = self._flows.get(scenario_id, {"status": "none", "counts": {}, "total": 0})
@@ -354,7 +433,10 @@ class TrafficManager:
             "attack": attack_id,
             "name": attack.get("name", attack_id),
             "source": labels.get(f"{self._prefix}.attached", ""),
-            "target": labels.get(f"{self._prefix}.target", ""),
+            "target": target,
+            "speed": SPEEDS.get(speed, {}).get("label", speed),
+            "command": command_preview(attack_id, speed, target) if attack else "",
+            "durationSec": round(ended - began, 1) if began and ended else None,
             "category": labels.get(f"{self._prefix}.category", ""),
             "subcategory": labels.get(f"{self._prefix}.subcategory", ""),
             "started": int(labels.get(f"{self._prefix}.started", "0") or 0),

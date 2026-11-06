@@ -2,7 +2,7 @@
   "example": {
     "name": "Trois réseaux, deux routeurs",
     "difficulty": "intermédiaire",
-    "description": "Deux LAN reliés par un réseau de transit et deux routeurs en chaîne. Chaque routeur a une route statique vers le LAN distant."
+    "description": "Deux LAN reliés par un réseau de transit et deux routeurs en chaîne. Chaque routeur a une route statique vers le LAN distant. Une sonde IDS surveille le réseau de transit 10.0.2.0/24, par où passe tout le trafic entre les deux LAN."
   },
   "version": 2,
   "generatedAt": "2026-10-10T00:00:00.000Z",
@@ -89,6 +89,18 @@
       },
       "config": {
         "gateway": "10.0.3.1"
+      }
+    },
+    {
+      "id": "ids-1",
+      "type": "ids",
+      "name": "IDS-1",
+      "position": {
+        "x": 0,
+        "y": -220
+      },
+      "config": {
+        "monitoredSegment": "switch-2"
       }
     }
   ],
@@ -195,6 +207,15 @@
       "interface": "eth0",
       "port": "Fa0/3",
       "ip": "10.0.3.11",
+      "mask": "255.255.255.0"
+    },
+    {
+      "id": "link-ids-1-switch-2",
+      "node": "ids-1",
+      "network": "switch-2",
+      "interface": "eth0",
+      "port": "Fa0/3",
+      "ip": "",
       "mask": "255.255.255.0"
     }
   ]

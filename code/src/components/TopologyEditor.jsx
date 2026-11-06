@@ -7,15 +7,22 @@ import DeployDialog from './DeployDialog.jsx';
 import Dock from './Dock.jsx';
 import TrafficPanel from './TrafficPanel.jsx';
 import ScenarioPanel from './ScenarioPanel.jsx';
+import DatasetDialog from './DatasetDialog.jsx';
+import ModelDialog from './ModelDialog.jsx';
+import DetectionPanel from './DetectionPanel.jsx';
 import { useTopology } from '../hooks/useTopology.js';
 import { useCableTool } from '../hooks/useCableTool.js';
 import { useDeployment } from '../hooks/useDeployment.js';
 import { useDock } from '../hooks/useDock.js';
 import { useTraffic } from '../hooks/useTraffic.js';
+import { useDatasets } from '../hooks/useDatasets.js';
+import { useModels } from '../hooks/useModels.js';
+import { useDetection } from '../hooks/useDetection.js';
 import { useSimulation } from '../hooks/useSimulation.js';
 import { serializeTopology } from '../utils/serializeTopology.js';
 import { deserializeTopology } from '../utils/deserializeTopology.js';
 import { validateTopology } from '../utils/validators.js';
+import { describeTopology, topologySignature } from '../utils/topologyInfo.js';
 
 /**
  * Composant d'assemblage : relie l'état (hooks) aux composants d'affichage.
@@ -24,9 +31,15 @@ import { validateTopology } from '../utils/validators.js';
 export default function TopologyEditor() {
   const topology = useTopology();
   const [toast, setToast] = useState(null);
-  // Panneau de droite : 'traffic' (trafic bénin), 'scenario' (audit), ou null (propriétés).
+  // Panneau de droite : 'traffic' (trafic bénin), 'scenario' (audit), 'detection', ou null (propriétés).
   const [rightPanel, setRightPanel] = useState(null);
   const cableTool = useCableTool(topology.connectDevices, setToast);
+  // Exemple chargé ({ name, signature }) : nomme la topologie des datasets générés dessus.
+  const [loadedExample, setLoadedExample] = useState(null);
+  const topologyInfo = useMemo(
+    () => describeTopology(topology.nodes, topology.edges, loadedExample),
+    [topology.nodes, topology.edges, loadedExample],
+  );
   const deployment = useDeployment();
   const dock = useDock();
   const { keepOnly, open: openTab } = dock;
@@ -38,6 +51,31 @@ export default function TopologyEditor() {
     if (!labRunning) setRightPanel(null); // les panneaux se ferment à l'arrêt du réseau
   }, [labRunning]);
   const togglePanel = (panel) => setRightPanel((cur) => (cur === panel ? null : panel));
+
+  // Datasets étiquetés : la liste reste consultable réseau arrêté (fichiers sur disque).
+  const [datasetsOpen, setDatasetsOpen] = useState(false);
+  const datasets = useDatasets(deployment.lab.status !== 'offline');
+  // Modèles ML-IDS : entraînés sur les datasets sauvegardés (réseau inutile).
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const models = useModels(deployment.lab.status !== 'offline');
+
+  // Détection en direct : équipements impliqués dans une alerte des 15 dernières
+  // secondes (source et cible, entourés de rouge) et sonde en cours d'analyse.
+  const detection = useDetection(labRunning);
+  const alertNodeIds = useMemo(() => {
+    const byIp = new Map(topology.edges.filter((e) => e.data?.ip).map((e) => [e.data.ip, e.source]));
+    const recent = Date.now() / 1000 - 15;
+    const ids = new Set();
+    for (const ev of detection.events) {
+      if (ev.outcome === 'missed' || ev.time < recent) continue;
+      [ev.src, ev.dst].forEach((ip) => byIp.has(ip) && ids.add(byIp.get(ip)));
+    }
+    return ids;
+  }, [detection.events, topology.edges]);
+  const watchingNodeIds = useMemo(
+    () => new Set(detection.running && detection.ids ? [detection.ids.node] : []),
+    [detection.running, detection.ids],
+  );
 
   // Visualisation des paquets : chaque paquet réel capturé devient une boule
   // animée le long de son chemin, en temps réel (voir useSimulation).
@@ -75,6 +113,7 @@ export default function TopologyEditor() {
   const handleClear = useCallback(() => {
     if (window.confirm('Effacer toute la topologie ?')) {
       topology.clearTopology();
+      setLoadedExample(null);
       cableTool.cancel();
     }
   }, [topology, cableTool]);
@@ -83,7 +122,9 @@ export default function TopologyEditor() {
     (example) => {
       if (topology.nodes.length && !window.confirm(`Remplacer la topologie actuelle par l'exemple « ${example.name} » ?`)) return;
       try {
-        topology.loadTopology(deserializeTopology(example.topology));
+        const loaded = deserializeTopology(example.topology);
+        topology.loadTopology(loaded);
+        setLoadedExample({ name: example.name, signature: topologySignature(loaded.nodes, loaded.edges) });
         cableTool.cancel();
         setToast(`Exemple « ${example.name} » chargé`);
       } catch (err) {
@@ -121,8 +162,17 @@ export default function TopologyEditor() {
         onStopLab={handleStopLab}
         onToggleTraffic={() => togglePanel('traffic')}
         trafficActive={rightPanel === 'traffic'}
+        trafficRunning={traffic.benign.length > 0}
         onToggleScenario={() => togglePanel('scenario')}
         scenarioActive={rightPanel === 'scenario'}
+        scenarioRunning={traffic.scenarioSources.size > 0}
+        onOpenDatasets={() => setDatasetsOpen(true)}
+        datasetRunning={datasets.run?.phase === 'running'}
+        onOpenModels={() => setModelsOpen(true)}
+        onToggleDetection={() => togglePanel('detection')}
+        detectionActive={rightPanel === 'detection'}
+        detectionRunning={detection.running}
+        trainingRunning={models.run?.phase === 'running'}
         nodeCount={topology.nodes.length}
         errorCount={errorCount}
         labStatus={deployment.lab.status}
@@ -149,6 +199,8 @@ export default function TopologyEditor() {
             capturedEdgeIds={capturedEdgeIds}
             balls={balls}
             simActive={labRunning}
+            alertNodeIds={alertNodeIds}
+            watchingNodeIds={watchingNodeIds}
           />
           <Dock
             tabs={dock.tabs}
@@ -168,6 +220,16 @@ export default function TopologyEditor() {
         {rightPanel === 'traffic' && labRunning ? (
           <TrafficPanel
             traffic={traffic}
+            nodes={topology.nodes}
+            edges={topology.edges}
+            onlineIds={deployment.lab.onlineIds}
+            onClose={() => setRightPanel(null)}
+          />
+        ) : rightPanel === 'detection' && labRunning ? (
+          <DetectionPanel
+            detection={detection}
+            models={models.models}
+            topology={topologyInfo}
             nodes={topology.nodes}
             edges={topology.edges}
             onlineIds={deployment.lab.onlineIds}
@@ -199,6 +261,18 @@ export default function TopologyEditor() {
       </main>
 
       <DeployDialog run={deployment.run} onConfirm={deployment.deploy} onClose={deployment.dismiss} />
+      <DatasetDialog
+        open={datasetsOpen}
+        datasets={datasets}
+        traffic={traffic}
+        nodes={topology.nodes}
+        edges={topology.edges}
+        onlineIds={deployment.lab.onlineIds}
+        labRunning={labRunning}
+        topology={topologyInfo}
+        onClose={() => setDatasetsOpen(false)}
+      />
+      <ModelDialog open={modelsOpen} models={models} datasets={datasets.datasets} onClose={() => setModelsOpen(false)} />
 
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>

@@ -41,6 +41,9 @@ function summarize(node, edges) {
  * Hors mode câble, un clic sur un PC ou un serveur allumé ouvre son terminal,
  * et un double-clic sur un câble dont l'équipement est allumé ouvre sa capture.
  */
+// Valeur par défaut stable (évite de recalculer les nœuds à chaque rendu)
+const NO_ALERTS = new Set();
+
 export default function TopologyCanvas({
   nodes,
   edges,
@@ -54,6 +57,8 @@ export default function TopologyCanvas({
   capturedEdgeIds,
   balls = [],
   simActive = false,
+  alertNodeIds = NO_ALERTS,
+  watchingNodeIds = NO_ALERTS,
 }) {
   const { screenToFlowPosition } = useReactFlow();
 
@@ -91,9 +96,15 @@ export default function TopologyCanvas({
       nodes.map((n) => ({
         ...n,
         className: n.id === cableTool.sourceId ? 'cable-source' : undefined,
-        data: { ...n.data, summary: summarize(n, edges), online: onlineNodeIds.has(n.id) },
+        data: {
+          ...n.data,
+          summary: summarize(n, edges),
+          online: onlineNodeIds.has(n.id),
+          alert: alertNodeIds.has(n.id),
+          watching: watchingNodeIds.has(n.id),
+        },
       })),
-    [nodes, edges, cableTool.sourceId, onlineNodeIds],
+    [nodes, edges, cableTool.sourceId, onlineNodeIds, alertNodeIds, watchingNodeIds],
   );
 
   const onEdgeDoubleClick = useCallback(

@@ -70,6 +70,33 @@ def parse_pcap(data: bytes) -> List[Packet]:
     return packets
 
 
+def split_pcap(data: bytes, window: float) -> List[bytes]:
+    """
+    Découpe un pcap en pcap successifs de `window` secondes (fenêtres consécutives,
+    à partir du premier paquet ; une fenêtre sans paquet est omise). C'est le
+    découpage que subit le trafic en détection en direct : appliqué aussi aux
+    datasets, il garantit que le modèle apprend sur des flux préparés exactement
+    comme ceux qu'il classera.
+    """
+    if len(data) < 24 or data[:4] not in _PCAP_MAGIC:
+        raise ValueError("flux pcap invalide ou vide")
+    endian, nanoseconds = _PCAP_MAGIC[data[:4]]
+    header = data[:24]
+    windows: Dict[int, List[bytes]] = {}
+    first = None
+    offset = 24
+    while offset + 16 <= len(data):
+        sec, frac, incl, _orig = struct.unpack_from(endian + "IIII", data, offset)
+        record = data[offset:offset + 16 + incl]
+        offset += 16 + incl
+        if len(record) < 16 + incl:
+            break
+        ts = sec + (frac / 1e9 if nanoseconds else frac / 1e6)
+        first = ts if first is None else first
+        windows.setdefault(int((ts - first) // window), []).append(record)
+    return [header + b"".join(windows[k]) for k in sorted(windows)]
+
+
 def _parse_frame(frame: bytes, linktype: int, ts: float):
     if linktype != _LINKTYPE_ETHERNET or len(frame) < 14:
         return None
