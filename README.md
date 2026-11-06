@@ -10,6 +10,7 @@ sonde IDS fondée sur du machine learning, entraînée sur des datasets génér�
 | Dossier   | Contenu |
 | --------- | ------- |
 | `code/`   | Application : interface web (React + React Flow + Vite) et moteur de simulation (`code/backend/`, Python + Docker). **Voir [`code/README.md`](code/README.md)** pour l'installation et le lancement. |
+| `code/docs/` | Documentation technique : [architecture](code/docs/ARCHITECTURE.md), [services des serveurs et trafic bénin](code/docs/SERVICES.md). |
 | `docs/`   | Bibliographie et articles sur les attaques contre les NIDS à base de ML. |
 | `latex/`  | Sources LaTeX des présentations. |
 | `Sujet.pdf` | Sujet du projet. |

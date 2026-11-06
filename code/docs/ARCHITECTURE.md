@@ -8,6 +8,8 @@ un **pont** commun. Il est fait pour s'y retrouver quand on est perdu dans l'ens
 > est un format de données commun (features CICFlowMeter) — si bien qu'un modèle
 > entraîné sur le dataset fonctionne tel quel sur le trafic du démonstrateur.
 
+> Détail des services ouverts sur les serveurs et du trafic bénin : [`SERVICES.md`](SERVICES.md).
+
 ---
 
 ## Vue d'ensemble

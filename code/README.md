@@ -130,7 +130,7 @@ ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ S
      Ajouter un **Routeur** et un second switch pour avoir plusieurs réseaux ;
   2. **🔌 Câble**, puis cliquer sur un équipement et ensuite sur un switch, pour chaque lien. Les adresses IP sont
      attribuées automatiquement. Un câble relie toujours un équipement à un switch ;
-  3. cliquer sur un serveur, puis dans la section **Ports ouverts** du panneau de droite, ouvrir les services à attaquer (HTTP, SSH, FTP) ;
+  3. cliquer sur un serveur, puis dans la section **Ports ouverts** du panneau de droite, ouvrir les services à attaquer (HTTP, SSH, FTP…, voir [`docs/SERVICES.md`](docs/SERVICES.md)) ;
   4. cliquer sur la Sonde IDS, puis dans la section **Surveillance**, choisir le switch à surveiller dans **Segment surveillé**
      (celui des serveurs). Ce switch devient un port miroir : la sonde reçoit une copie de tout son trafic.
 - **✔ Valider la topologie** : bilan des problèmes, puis création du réseau. Le statut passe à « Réseau en
@@ -424,6 +424,9 @@ Busybox fournit `ping`, `traceroute`, `wget`, `nc`… ; `curl` est ajouté via l
 
 ### Services des serveurs et trafic bénin
 
+> Documentation complète (déclaration, chaque service en détail, comment les vérifier à la main,
+> contenu du trafic bénin, dépannage) : [`docs/SERVICES.md`](docs/SERVICES.md).
+
 Les services ouverts sur un serveur sont de **vrais services** : le trafic qu'ils échangent est authentique,
 ce qui est indispensable pour qu'un IDS apprenne quelque chose d'utile.
 
@@ -537,12 +540,16 @@ Pour que l'entraînement et la détection aient le même point de vue, choisisse
 
 > Vue d'ensemble du projet — démonstrateur, génération de trafic, **pipeline ML-IDS**
 > (features CICFlowMeter) et **ConCap** : voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> Services des serveurs et trafic bénin : voir [`docs/SERVICES.md`](docs/SERVICES.md).
 > La génération de trafic bénin et les scénarios d'audit sont deux panneaux distincts
 > (`src/components/TrafficPanel.jsx`, `ScenarioPanel.jsx`).
 
 ```
 code/
 ├── index.html / package.json / vite.config.js …
+├── docs/
+│   ├── ARCHITECTURE.md               # Vue d'ensemble : démonstrateur, datasets, ML-IDS, détection
+│   └── SERVICES.md                   # Services des serveurs, trafic bénin, vérifications à la main
 ├── examples/topologies/              # Topologies d'exemple (un fichier JSON v2 par exemple)
 ├── src/
 │   ├── App.jsx, main.jsx, styles/app.css

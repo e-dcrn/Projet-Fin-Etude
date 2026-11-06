@@ -363,6 +363,9 @@ def start_dnsmasq(port, hosts):
     subprocess.Popen(
         [dnsmasq, "-k", "--no-resolv", "--no-hosts", "--addn-hosts=/etc/lab-hosts",
          f"--port={port}", f"--local=/{DOMAIN}/", f"--domain={DOMAIN}", "--user=root",
+         # Sans option d'interface, dnsmasq ne répond qu'aux machines de SES réseaux
+         # (« local-service ») : les postes situés derrière un routeur n'auraient pas de réponse.
+         "--interface=*",
          "--log-facility=-", "--quiet-dhcp"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
