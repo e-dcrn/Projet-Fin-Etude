@@ -13,7 +13,7 @@ Sommaire :
 1. [Déclarer un service sur un serveur](#1-déclarer-un-service-sur-un-serveur)
 2. [Les services un par un](#2-les-services-un-par-un)
 3. [Compte et contenu de démonstration](#3-compte-et-contenu-de-démonstration)
-4. [Vérifier un service à la main](#4-vérifier-un-service-à-la-main)
+4. [Vérifier un service à la main](#4-vérifier-un-service-à-la-main) — dont un [test rapide](#test-rapide--une-commande-par-service)
 5. [Le trafic bénin](#5-le-trafic-bénin)
 6. [Services et attaques](#6-services-et-attaques)
 7. [Exemples de topologies](#7-exemples-de-topologies)
@@ -191,8 +191,14 @@ ouverts. Toutes les commandes ont été vérifiées dans le lab.
 **Préparation.**
 
 1. Sur le serveur, ouvrir les 8 services (section **Ports ouverts** : HTTP, HTTPS, SSH, FTP, Telnet,
-   SMTP, DNS, MySQL), puis **✔ Valider la topologie** (si le réseau tourne déjà : **■ Arrêter** d'abord). Attendre quelques secondes (MySQL démarre un peu
+   SMTP, DNS, MySQL), puis **✔ Valider la topologie**. Attendre quelques secondes (MySQL démarre un peu
    après les autres).
+
+   > **Ports ouverts après la validation** : les services d'un serveur sont lancés une seule fois, à la
+   > création du réseau. Un port ajouté (ou retiré) pendant que le réseau tourne apparaît dans le panneau
+   > mais **n'est pas appliqué** : il faut **■ Arrêter** le réseau, puis **✔ Valider la topologie** à
+   > nouveau.
+
 2. Cliquer sur **PC-1** : son terminal s'ouvre en bas de l'écran.
 3. Mémoriser l'adresse du serveur dans une variable (elle reste valable pendant toute la session du
    terminal). Ici l'exemple « Petit LAN », où Serveur-Web est en `10.0.1.10` :
@@ -205,6 +211,52 @@ Outils disponibles sur un PC : `curl` (HTTP, HTTPS, FTP, SMTP), `ssh` / `scp` / 
 `ftpget` / `ftpput`, `mariadb` (MySQL), `nslookup` / `dig` (DNS), `nc`, `ping`, `traceroute`, `wget`.
 
 Compte pour tous les services : **`labuser`** / **`password123`**.
+
+### Test rapide : une commande par service
+
+Pour vérifier en une minute que tout fonctionne. Les sections suivantes (4.1 à 4.11) détaillent chaque
+service et montrent d'autres usages.
+
+```sh
+S=10.0.1.10        # adresse du serveur (à adapter)
+```
+
+| Service | Commande | Ça marche si… |
+| ------- | -------- | ------------- |
+| tous les ports | `for p in 21 22 23 25 53 80 443 3306; do nc -zv -w 2 $S $p; done` | une ligne `open` par port |
+| Ping   | `ping -c 3 $S` | 3 réponses |
+| HTTP   | `curl http://$S/` | du HTML s'affiche |
+| HTTPS  | `curl -k https://$S/` | le même HTML |
+| SSH    | `ssh labuser@$S` | après `yes` puis `password123` : un shell (`exit` pour sortir) |
+| FTP    | `curl ftp://labuser:password123@$S/` | la liste des fichiers (`notes.txt`, `data`, `photos`…) |
+| Telnet | `telnet $S` | `login:` → `labuser`, puis `password123` : un shell (`exit` pour sortir) |
+| SMTP   | `echo "Subject: test" > /tmp/m; curl -s smtp://$S --mail-from pc-1@lab --mail-rcpt labuser@lab -T /tmp/m` | aucun message d'erreur |
+| DNS    | `nslookup serveur-web.lab $S` | l'adresse du serveur |
+| MySQL  | `mariadb -h $S -u labuser -ppassword123 boutique -e "SELECT * FROM produits LIMIT 5;"` | un tableau de 5 produits |
+
+Ce que fait chaque commande :
+
+- **tous les ports** : `nc -z` tente d'ouvrir une connexion TCP sur chaque port, sans rien envoyer ;
+  `open` veut dire qu'un service écoute. (Le port 53 est testé en TCP ; le DNS répond aussi en UDP.)
+- **Ping** : 3 paquets ICMP *echo request* ; le serveur renvoie un *echo reply* pour chacun.
+- **HTTP** : `curl` télécharge la page d'accueil du site intranet et l'affiche.
+- **HTTPS** : la même chose, à travers une connexion **TLS** (chiffrée). `-k` accepte le certificat
+  auto-signé du serveur ; sans `-k`, curl refuse la connexion (erreur 60), ce qui est normal.
+- **SSH** : connexion chiffrée au compte `labuser`. La première fois, `ssh` demande de confirmer
+  l'empreinte du serveur (`yes`) ; le mot de passe ne s'affiche pas pendant la saisie.
+- **FTP** : `curl` se connecte avec le compte et le mot de passe placés dans l'adresse, puis demande la
+  liste du dossier de `labuser`. Le transfert de la liste passe par une seconde connexion (mode passif).
+- **Telnet** : comme SSH, mais **en clair** : dans une capture du câble, on lit le mot de passe.
+- **SMTP** : la première commande écrit un message minimal (juste un sujet) dans `/tmp/m` ; `curl` le
+  remet au serveur de messagerie, de `pc-1@lab` pour `labuser@lab` (`-s` masque la barre de
+  progression). Le courriel arrive dans la boîte de `labuser` : `ssh labuser@$S "cat /var/mail/labuser"`.
+- **DNS** : demande au serveur DNS (`$S`) l'adresse du nom `serveur-web.lab`. Le nom d'un équipement est
+  son nom sur le schéma, en minuscules, suivi de `.lab`.
+- **MySQL** : se connecte à la base `boutique` et exécute une requête. Pas d'espace entre `-p` et le mot
+  de passe.
+
+Une commande répond « not found » (`ssh`, `telnet`, `mariadb`) ? Le réseau a été créé avant l'ajout de ces
+outils sur les PC : **■ Arrêter**, puis **✔ Valider la topologie**.
 
 ### 4.0 Tous les ports d'un coup
 
