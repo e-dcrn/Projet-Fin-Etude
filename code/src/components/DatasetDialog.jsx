@@ -91,14 +91,21 @@ export default function DatasetDialog({ open, datasets, traffic, nodes, edges, o
             onBack={() => setView('list')}
           />
         ) : (
-          <ListContent datasets={datasets} labRunning={labRunning} onNew={() => setView('form')} onClose={onClose} />
+          <ListContent datasets={datasets} labRunning={labRunning} hasIds={idsProbes(nodes, onlineIds).length > 0}
+            onNew={() => setView('form')} onClose={onClose} />
         )}
       </div>
     </div>
   );
 }
 
-function ListContent({ datasets, labRunning, onNew, onClose }) {
+/** Sondes IDS allumées : le seul point de capture possible d'un dataset. */
+function idsProbes(nodes, onlineIds) {
+  return nodes.filter((n) => n.data?.deviceType === 'ids' && onlineIds.has(n.id))
+    .map((n) => ({ id: n.id, name: n.data.properties.name }));
+}
+
+function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
   const [error, setError] = useState(null);
   const remove = async (ds) => {
     if (!window.confirm(`Supprimer le dataset « ${ds.name} » ?`)) return;
@@ -147,9 +154,15 @@ function ListContent({ datasets, labRunning, onNew, onClose }) {
       )}
 
       <div className="modal__actions">
-        {!labRunning && <span className="modal__hint">Démarrez le réseau pour générer un dataset.</span>}
+        {!labRunning ? (
+          <span className="modal__hint">Démarrez le réseau pour générer un dataset.</span>
+        ) : !hasIds && (
+          <span className="modal__hint">
+            Pas de dataset possible : la topologie n'a aucune Sonde IDS, donc aucun point de capture.
+          </span>
+        )}
         <button type="button" className="btn btn--light" onClick={onClose}>Fermer</button>
-        <button type="button" className="btn btn--primary" onClick={onNew} disabled={!labRunning}>
+        <button type="button" className="btn btn--primary" onClick={onNew} disabled={!labRunning || !hasIds}>
           + Nouveau dataset
         </button>
       </div>
@@ -159,30 +172,18 @@ function ListContent({ datasets, labRunning, onNew, onClose }) {
 
 function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onBack }) {
   const sources = useMemo(() => trafficSources(nodes, onlineIds), [nodes, onlineIds]);
-  // Points de capture : une Sonde IDS (tout le segment, comme la détection en direct) ou une machine.
-  const probes = useMemo(
-    () => [
-      ...nodes.filter((n) => n.data?.deviceType === 'ids' && onlineIds.has(n.id))
-        .map((n) => ({ id: n.id, name: n.data.properties.name, type: 'ids' })),
-      ...sources,
-    ],
-    [nodes, onlineIds, sources],
-  );
+  // Point de capture : toujours une Sonde IDS (tout le segment, comme la détection en direct).
+  const probes = useMemo(() => idsProbes(nodes, onlineIds), [nodes, onlineIds]);
   const dests = useMemo(() => reachableDevices(nodes, edges), [nodes, edges]);
   const ipTargets = useMemo(() => scenarioTargets(nodes, edges, 'ip'), [nodes, edges]);
   const subnetTargets = useMemo(() => scenarioTargets(nodes, edges, 'subnet'), [nodes, edges]);
 
-  // Valeurs par défaut : la sonde devant le premier serveur, les PC comme émetteurs
-  // de trafic bénin, et un premier scan de ce serveur depuis un PC.
-  const [probe, setProbe] = useState(
-    () => (probes.find((p) => p.type === 'ids') ?? probes.find((p) => p.type === 'server') ?? probes[0])?.id ?? '',
-  );
-  const probeIsIds = probes.find((p) => p.id === probe)?.type === 'ids';
-  const probeIp = deviceIp(edges, probe);
-  // Cible proposée par défaut aux attaques : la machine de la sonde, ou (Sonde IDS, sans
-  // adresse) le premier serveur de la topologie.
+  // Valeurs par défaut : la première Sonde IDS, les PC comme émetteurs de trafic
+  // bénin, et un premier scan du premier serveur depuis un PC.
+  const [probeChoice, setProbe] = useState('');
+  const probe = probes.some((p) => p.id === probeChoice) ? probeChoice : (probes[0]?.id ?? '');
   const serverIp = deviceIp(edges, sources.find((s) => s.type === 'server')?.id ?? '');
-  const defaultTarget = () => probeIp || serverIp || ipTargets[0]?.value || '';
+  const defaultTarget = () => serverIp || ipTargets[0]?.value || '';
   const [name, setName] = useState('');
   const [emittersOff, setEmittersOff] = useState(() => new Set(sources.filter((s) => s.type !== 'pc').map((s) => s.id)));
   const [kinds, setKinds] = useState({ icmp: true, http: true, service: true });
@@ -245,6 +246,12 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
         vaudra que pour ce réseau.
       </p>
       {error && <div className="traffic-error" role="alert">{error}</div>}
+      {probes.length === 0 && (
+        <div className="traffic-error" role="alert">
+          Pas de dataset possible : aucune Sonde IDS allumée, donc aucun point de capture. Ajoutez une Sonde IDS reliée
+          au switch à surveiller, puis validez la topologie.
+        </div>
+      )}
       {sources.length === 0 && (
         <div className="traffic-error" role="alert">
           Aucun équipement allumé dans la topologie affichée : chargez la topologie du réseau en cours (ou validez-la
@@ -259,21 +266,25 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
             <input className="field__input" value={name} placeholder="ex. Scans + force brute, petit LAN"
               onChange={(e) => setName(e.target.value)} maxLength={80} />
           </label>
-          <label className="field field--compact">
-            <span className="field__label">Sonde (point de capture)</span>
-            <select className="field__input" value={probe} onChange={(e) => setProbe(e.target.value)}>
-              {probes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.type === 'ids' ? `${s.name} (sonde IDS : tout le segment)` : `${s.name} (${deviceIp(edges, s.id) || 'sans IP'})`}
-                </option>
-              ))}
-            </select>
-          </label>
+          {probes.length > 1 ? (
+            <label className="field field--compact">
+              <span className="field__label">Sonde IDS (point de capture)</span>
+              <select className="field__input" value={probe} onChange={(e) => setProbe(e.target.value)}>
+                {probes.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="field field--compact">
+              <span className="field__label">Point de capture</span>
+              <span className="field__input field__input--static">{probes[0]?.name ?? 'aucune Sonde IDS'}</span>
+            </div>
+          )}
         </div>
         <p className="field__hint">
-          {probeIsIds
-            ? 'La Sonde IDS reçoit une copie de tout le trafic du switch qu\'elle surveille : le même point de vue que la détection en direct (recommandé).'
-            : 'La sonde enregistre le trafic de cet équipement, comme un NIDS placé devant lui : seul le trafic qui le traverse finit dans le dataset.'}
+          La capture se fait toujours sur la Sonde IDS : elle reçoit une copie de tout le trafic du switch qu'elle
+          surveille, le même point de vue que la détection en direct.
         </p>
 
         <h3 className="traffic-section__title">Trafic bénin (en continu)</h3>
@@ -321,8 +332,6 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
             {rows.map((r) => {
               const attack = attackOf(r.attack);
               const targets = attack?.needs === 'subnet' ? subnetTargets : ipTargets;
-              // Une attaque vers une autre machine que la sonde ne la traverse pas (même switch).
-              const unseen = !probeIsIds && attack?.needs === 'ip' && r.target && r.target !== probeIp && r.source !== probe;
               return (
                 <tr key={r.key}>
                   <td>
@@ -336,7 +345,6 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
                         <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
                     </select>
-                    {unseen && <span className="attack-table__warn">⚠ ne passe pas par la sonde</span>}
                   </td>
                   <td>
                     <select className="field__input" value={r.source} aria-label="Source" onChange={(e) => updateRow(r.key, { source: e.target.value })}>

@@ -144,12 +144,11 @@ ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ S
 
 **🗂 Datasets** → **Nouveau dataset** :
 
-1. **Sonde (point de capture)** : la Sonde IDS (choix par défaut). Ainsi, l'entraînement et la détection voient
-   le trafic du même point du réseau ;
+1. **Point de capture** : toujours la Sonde IDS, ce n'est pas un choix. Ainsi, l'entraînement et la détection
+   voient le trafic du même point du réseau. Sans Sonde IDS dans la topologie, aucun dataset n'est possible ;
 2. **Trafic bénin** : émetteurs, fréquence et types (ping, web, services) ;
 3. **Attaques** : ajouter une ou plusieurs lignes avec l'attaque (scan de ports, force brute SSH…), la source,
-   la cible, la vitesse et le nombre de répétitions. « ⚠ ne passe pas par la sonde » signale une attaque que la
-   sonde ne verra pas ;
+   la cible, la vitesse et le nombre de répétitions ;
 4. **Datasets de test** : laisser **2** variantes (valeur par défaut). Chaque variante rejoue le même programme
    depuis d'autres machines, à d'autres vitesses, avec un trafic bénin d'une autre intensité ;
 5. **▶ Générer le dataset**. On obtient **3 datasets** : la base (pour l'entraînement) et ses 2 variantes (pour
@@ -541,8 +540,8 @@ les attaques détectées, manquées et les fausses alertes ; les erreurs du mod�
 dans la liste des événements. **Effacer** remet le bilan à zéro pour un nouvel essai (la détection
 continue). Limite : un flux à cheval sur deux fenêtres est analysé en deux morceaux.
 
-Pour que l'entraînement et la détection aient le même point de vue, choisissez la Sonde IDS comme
-**sonde** lors de la génération des datasets (c'est le choix par défaut quand il y en a une).
+L'entraînement et la détection ont toujours le même point de vue : les datasets sont eux aussi capturés
+par la Sonde IDS (seul point de capture possible).
 
 ## Architecture
 

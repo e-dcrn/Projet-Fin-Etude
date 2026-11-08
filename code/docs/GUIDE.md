@@ -310,7 +310,7 @@ l'attaque : tout ce qui part de la source vers la cible à ce moment-là vient b
 
 ### 6.7 Les datasets et leurs variantes
 
-Un dataset est produit à partir d'un **programme** : la sonde (point de capture), le trafic bénin,
+Un dataset est produit à partir d'un **programme** : la Sonde IDS (seul point de capture possible), le trafic bénin,
 les attaques jouées l'une après l'autre, et les durées (bénin seul au début, entre les attaques, à la
 fin). Le moteur enregistre le pcap, le CSV étiqueté et un fichier de métadonnées (paramètres, fenêtres
 d'attaque, décompte des étiquettes, **topologie** utilisée).

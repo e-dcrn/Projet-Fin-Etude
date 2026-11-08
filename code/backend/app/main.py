@@ -253,7 +253,7 @@ class DatasetTopology(BaseModel):
 class DatasetRequest(BaseModel):
     name: str = ""
     topology: DatasetTopology = DatasetTopology()  # réseau sur lequel le dataset est généré
-    probe: str                                  # équipement où la sonde capture le trafic
+    probe: str = ""                             # Sonde IDS : seul point de capture d'un dataset
     benign: List[DatasetBenign] = []
     kinds: List[str] = []                       # types de trafic bénin (« icmp », « http », « service »)
     profile: str = "moderate"

@@ -611,7 +611,7 @@ body { background: var(--bg); }
 .attack-table td { padding: 3px 4px; vertical-align: top; }
 .attack-table .field__input { width: 100%; }
 .attack-table__repeat { max-width: 64px; }
-.attack-table__warn { display: block; margin-top: 2px; font-size: 11px; color: var(--warning); }
+.field__input--static { display: flex; align-items: center; background: transparent; border-color: transparent; padding-left: 0; font-weight: 600; }
 
 /* ==========================================================================
    Modèles ML-IDS (ModelDialog)

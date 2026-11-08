@@ -4,8 +4,9 @@ Génération d'un dataset étiqueté sur le réseau instancié (« façon ConCap
 Un dataset est produit par une tâche de fond (voir jobs.py) qui joue un
 programme complet sur la topologie déployée :
 
-  1. une SONDE capture le trafic d'un équipement (tcpdump sur son interface),
-     comme le ferait un NIDS placé devant un serveur ;
+  1. la SONDE IDS capture le trafic du segment qu'elle surveille (copie de tout
+     le trafic du switch, comme la détection en direct) : c'est le seul point de
+     capture possible, une topologie sans Sonde IDS ne permet pas de dataset ;
   2. des agents de trafic bénin tournent pendant toute la durée ;
   3. les attaques du programme s'enchaînent (une à la fois, entrecoupées de
      trafic bénin seul), chacune dans une fenêtre de temps enregistrée ;
@@ -230,7 +231,11 @@ class DatasetBuilder:
 
     def prepare(self, spec: dict) -> DatasetPlan:
         """Vérifie le programme demandé par l'interface (avant de lancer la tâche)."""
-        probe = self._device(spec["probe"], "Sonde")
+        if not spec.get("probe"):
+            raise DatasetError("Aucune Sonde IDS : ajoutez-en une à la topologie, c'est le point de capture du dataset.")
+        probe = self._device(spec["probe"], "Sonde IDS")
+        if probe.labels.get(f"{self.lab.settings.prefix}.type") != "ids":
+            raise DatasetError("Le point de capture d'un dataset est toujours une Sonde IDS.")
         kinds = [k for k in spec.get("kinds") or [] if k in BENIGN_KINDS]
         profile = spec.get("profile") or "moderate"
         if profile not in BENIGN_PROFILES:
@@ -314,19 +319,18 @@ class DatasetBuilder:
         running_agents: set = set()
         try:
             step(f"Démarrage de la sonde sur {plan.probe_name} et du trafic bénin")
-            probe = self._device(plan.probe, "Sonde")
+            probe = self._device(plan.probe, "Sonde IDS")
             interface = self.traffic.primary_interface(probe)
             # Le programme prend la main sur le trafic bénin : un agent lancé à la main
             # (configuration inconnue) fausserait l'étiquetage de la source d'une attaque.
             if self.traffic.stop_benign():
                 job.warn("Le trafic bénin déjà en cours a été arrêté : le programme le remplace.")
             try:
-                # Sonde IDS : mode promiscuité, pour recevoir la copie du trafic de tout le
-                # segment (switch en mode hub). Autre équipement : son trafic seulement (-p).
-                is_ids = probe.labels.get(f"{self.lab.settings.prefix}.type") == "ids"
+                # Mode promiscuité (pas de -p) : la Sonde IDS reçoit la copie du trafic de
+                # tout le segment (switch en mode hub).
                 capture = self.lab.start_netns_helper(
                     probe, self.lab.settings.capture,
-                    ["tcpdump", "-i", interface, *([] if is_ids else ["-p"]), "-U", "-w", PCAP_PATH],
+                    ["tcpdump", "-i", interface, "-U", "-w", PCAP_PATH],
                     role="dcapture", attached=plan.probe,
                 )
             except DockerException as exc:
@@ -387,7 +391,7 @@ class DatasetBuilder:
         step("Étiquetage et sauvegarde")
         csv_text, counts, total = label_dataset_csv(raw_csv, runs)
         if not any(label != "BENIGN" for label in counts):
-            job.warn("Aucun flux d'attaque n'a été vu par la sonde : est-elle placée sur le chemin des attaques ?")
+            job.warn("Aucun flux d'attaque n'a été vu par la Sonde IDS : surveille-t-elle le switch traversé par les attaques ?")
 
         dataset_id = self.store.new_id()
         meta = self._meta(dataset_id, plan, began, engine, counts, total, len(pcap))
