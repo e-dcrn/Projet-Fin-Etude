@@ -1,0 +1,416 @@
+\documentclass[aspectratio=169,11pt,xcolor=table]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{babel,positioning,arrows.meta}
+
+% Réunion d'avancement du 9 novembre 2026.
+% Sources locales : slides_27_oct.tex ; ../Sujet.pdf ; etat_de_l_art_attaques_ml_nids.tex ;
+% ../code/README.md ; ../code/docs/GUIDE.md ; ../code/docs/SERVICES.md.
+% Valeurs par défaut des durées : ../code/src/components/DatasetDialog.jsx.
+% Aucun score n'est présenté : aucun résultat chiffré n'est enregistré dans le dépôt.
+\definecolor{projectblue}{HTML}{17365D}
+\definecolor{projectteal}{HTML}{087E8B}
+\definecolor{benin}{HTML}{BFDCC6}
+\definecolor{attaque}{HTML}{E58B74}
+\definecolor{capture}{HTML}{C9D6E6}
+\usetheme{Madrid}
+\setbeamercolor{structure}{fg=projectblue}
+\setbeamercolor{frametitle}{bg=projectblue,fg=white}
+\setbeamercolor{block title}{bg=projectteal,fg=white}
+\setbeamercolor{block body}{bg=projectteal!7}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.84\paperwidth,ht=2.7ex,dp=1.2ex,leftskip=1em]{author in head/foot}%
+      VAP SSR 2026--2027 \hfill Point d'avancement -- 9 novembre 2026
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.16\paperwidth,ht=2.7ex,dp=1.2ex,center]{date in head/foot}%
+      \insertframenumber/\inserttotalframenumber
+    \end{beamercolorbox}}%
+}
+\newcommand{\espacement}{\setlength{\itemsep}{.7em}}
+\title[Démonstrateur ML-NIDS]{Démonstrateur d'attaques contre un ML-NIDS}
+\subtitle{Du réseau dessiné à la détection en direct}
+\author{Projet VAP SSR 2026--2027}
+\institute{Réunion avec Grégory Blanc}
+\date{9 novembre 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Avancées depuis la réunion du 27 octobre}
+  \textbf{Le 27 octobre :} topologie, conteneurs, capture. La détection ML et les attaques restaient à intégrer.
+  \vspace{.8em}
+
+  \textbf{Aujourd'hui, la chaîne existe de bout en bout dans l'interface :}
+  \vspace{.5em}
+
+  \centering
+  \begin{tikzpicture}[
+      box/.style={draw=projectblue,fill=projectteal!10,rounded corners=2pt,minimum height=1.05cm,text width=1.95cm,align=center,font=\footnotesize},
+      arrow/.style={-{Latex[length=2mm]},thick,projectblue}]
+    \node[box] (a) {Réseau et vrais services};
+    \node[box,right=.42cm of a] (b) {Trafic bénin et attaques};
+    \node[box,right=.42cm of b] (c) {Datasets étiquetés};
+    \node[box,right=.42cm of c] (d) {Entraînement};
+    \node[box,right=.42cm of d] (e) {Détection en direct};
+    \draw[arrow] (a) -- (b);
+    \draw[arrow] (b) -- (c);
+    \draw[arrow] (c) -- (d);
+    \draw[arrow] (d) -- (e);
+  \end{tikzpicture}
+
+  \vspace{1em}
+  \raggedright
+  \begin{block}{Ce qui reste à faire}
+    Le cœur du sujet : \textbf{les attaques contre le modèle} (évasion, empoisonnement).
+  \end{block}
+  \note{Les slides suivent les questions qu'on s'est posées en reprenant le travail : que fait le lab, pourquoi ces choix, comment sont construites les données, puis quelle suite donner.}
+\end{frame}
+
+\begin{frame}{Les serveurs font tourner de vrais services}
+  \textbf{Pourquoi :} une simple bannière ne produit pas les échanges d'une vraie session. Le modèle apprendrait des artefacts du lab.
+  \vspace{.6em}
+
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}p{.3\linewidth}X@{}}
+    \toprule
+    \textbf{Service} & \textbf{Ce qui tourne} \\
+    \midrule
+    HTTP, HTTPS & serveur web Python : site de 20 pages, téléchargements, API JSON, connexion ; TLS 1.3 \\
+    SSH, FTP, Telnet & OpenSSH (avec SFTP), vsftpd, telnetd \\
+    SMTP, DNS, MySQL & OpenSMTPD, dnsmasq (noms en \texttt{.lab}), MariaDB (base « boutique ») \\
+    \midrule
+    Autre nom (ex. \texttt{pop3}) & \textbf{simulé} : bannière plausible en TCP, écho en UDP \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  Le type de service est reconnu par son \textbf{nom} ; le port usuel ne sert que s'il n'y a pas de nom.
+  \note{Si un logiciel manque ou échoue au démarrage, le service retombe sur le simulateur et le journal du serveur l'indique. Compte unique : labuser / password123, volontairement faible pour la force brute. Détails : code/docs/SERVICES.md.}
+\end{frame}
+
+\begin{frame}{Le modèle : un random forest entraîné sur notre réseau}
+  \begin{itemize}\espacement
+    \item \textbf{Aucun modèle préentraîné :} il est entraîné sur les datasets générés dans le lab.
+    \item \textbf{Entrée :} des flux décrits par environ 80 features CICFlowMeter.
+    \item \textbf{Réglages :} 100 arbres par défaut, classes binaires ou multiclasses, \texttt{class\_weight="balanced"}.
+    \item \textbf{Features retirées :} identifiants, adresses IP, ports. Sinon le modèle apprendrait « PC-1 attaque » plutôt qu'un comportement.
+    \item \textbf{Test :} sur des variantes séparées (autres machines, vitesses, intensité du bénin). Pas de découpage aléatoire, qui gonflerait les scores.
+  \end{itemize}
+  \vfill
+  \textbf{Rapport :} attaques détectées, fausses alertes, F1 macro, matrice de confusion, features les plus utiles.
+  \note{Dst Port est retiré par défaut. Le choix du random forest : rapide, sans normalisation, explicable, et présent dans la littérature NIDS. C'est pour l'instant le seul modèle disponible.}
+\end{frame}
+
+\begin{frame}{ConCap : ce qu'on a repris, ce qu'on a remplacé}
+  \begin{columns}[T]
+    \begin{column}{.48\linewidth}
+      \begin{block}{Repris}
+        \begin{itemize}
+          \item La méthode : scénario, capture, CICFlowMeter, étiquetage connu d'avance.
+          \item L'\textbf{image CICFlowMeter conteneurisée}, utilisée telle quelle.
+          \item Des noms de classes proches des jeux CIC.
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{.48\linewidth}
+      \begin{block}{Remplacé par le moteur du lab}
+        \begin{itemize}
+          \item L'orchestration (Kubernetes $\rightarrow$ Docker).
+          \item Le point de capture (cible $\rightarrow$ sonde).
+          \item L'étiquetage et le découpage des flux.
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  Mêmes colonnes que ConCap et CIC-IDS : \textbf{les données restent comparables}.
+  \note{Deux scénarios ConCap restent fournis dans code/concap, en option, pour produire des datasets hors du lab. On ne recode pas ConCap : on reprend sa méthode dans un outil qui répond à un autre besoin.}
+\end{frame}
+
+\begin{frame}{Les attaques disponibles : nmap et hydra}
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}Xp{.14\linewidth}p{.22\linewidth}@{}}
+    \toprule
+    \textbf{Scénario} & \textbf{Outil} & \textbf{Classe} \\
+    \midrule
+    Balayage de découverte & nmap \texttt{-sn} & ping-sweep \\
+    Scan de ports (connect, 200 ports) & nmap \texttt{-sT} & port-scan \\
+    Scan furtif (SYN, tous les ports) & nmap \texttt{-sS} & syn-scan \\
+    Identification des services & nmap \texttt{-sV} & service-detection \\
+    Scan approfondi & nmap \texttt{-A} & aggressive-scan \\
+    Force brute SSH & hydra & ssh-patator \\
+    Force brute FTP & hydra & ftp-patator \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  Quatre vitesses, depuis n'importe quel équipement. Couverture limitée à la \textbf{reconnaissance} et à la \textbf{force brute} : pas de DoS, ni d'attaque web, ni d'exploitation.
+  \note{Ce sont les attaques que le modèle apprend à reconnaître, à ne pas confondre avec les attaques contre le modèle, qui restent à faire. nmap de -T2 à -T5, hydra de 1 à 16 connexions parallèles.}
+\end{frame}
+
+\begin{frame}{Pourquoi ne pas utiliser ConCap tel quel ?}
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}p{.2\linewidth}XX@{}}
+    \toprule
+    & \textbf{ConCap} & \textbf{Besoin du projet} \\
+    \midrule
+    Infrastructure & cluster Kubernetes & Docker seul, piloté depuis l'interface \\
+    Topologie & réseau plat, sans routeur & LAN, DMZ, routeurs \\
+    Capture & sur la cible & sur la sonde IDS \\
+    Trafic bénin & pas de trafic de fond & continu, pendant les attaques \\
+    Étiquetage & une étiquette par scénario & par flux, dans un trafic mélangé \\
+    Flux & pcap entier & fenêtres de 5 s, comme la détection \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  \begin{block}{L'argument décisif : le point de vue}
+    Un modèle apprend les flux tels qu'ils sont vus à l'endroit de la capture. Entraîné sur la vue d'une cible isolée, il serait évalué sur des flux qui ne ressemblent pas à ce qu'il a appris.
+  \end{block}
+  \note{Sources : README et runbook k3s du dépôt officiel de ConCap, consultés par Hugo le 6 novembre 2026 (voir GUIDE.md, section 7). La sonde ne voit que le switch qu'elle surveille : ne pas dire qu'elle a une vue globale du réseau.}
+\end{frame}
+
+\begin{frame}{Pourquoi entraîner plutôt que prendre un modèle préentraîné ?}
+  \begin{enumerate}\espacement
+    \item \textbf{Il faudrait quand même nos données.} Pour l'adapter à notre réseau, la génération de datasets reste nécessaire.
+    \item \textbf{Un modèle appris ailleurs apprend aussi cet ailleurs :} latences, services, trafic normal. Notre lab est différent.
+    \item \textbf{Entraîner n'est pas le coût principal.} C'est la production de données étiquetées qui l'est.
+    \item \textbf{Le fine-tuning s'applique mal à un random forest :} pas de poids à réajuster, les anciens arbres continuent de voter.
+    \item \textbf{Le sujet demande la maîtrise du modèle.} L'évasion s'appuie sur ce qu'il a appris, l'empoisonnement sur ses données.
+  \end{enumerate}
+  \vfill
+  \textbf{Piste :} un random forest entraîné sur CIC-IDS2017, testé sur notre lab, comme point de comparaison externe.
+  \note{La piste CIC-IDS2017 suppose de vérifier que les colonnes correspondent. Quel que soit le résultat, il est utile : s'il s'effondre, le choix d'entraîner localement est chiffré ; s'il tient, on a une seconde cible.}
+\end{frame}
+
+\begin{frame}{Construire un dataset : qui fait quoi ?}
+  \textbf{Le trafic n'est pas simulé : seule la décision est scriptée, les paquets sont réels.}
+  \vspace{.8em}
+
+  \small
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\linewidth}{@{}p{.22\linewidth}p{.26\linewidth}X@{}}
+    \toprule
+    \textbf{Rôle} & \textbf{Implémentation} & \textbf{Ce qu'il fait} \\
+    \midrule
+    Chef d'orchestre & moteur Python & démarre et arrête tout, note les horaires de chaque attaque \\
+    Trafic bénin & agent Python, un par émetteur & choisit des sessions et lance de vrais clients : navigation web, SSH, FTP, mail, MySQL, DNS, ping \\
+    Attaques & nmap et hydra & les vrais outils, lancés par le moteur \\
+    Capture & tcpdump sur la sonde & enregistre un pcap unique, depuis le port miroir \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  L'agent partage la pile réseau de l'émetteur : pour la sonde, c'est bien le PC qui parle.
+  \note{Le trafic bénin contient parfois une unique erreur de mot de passe (une connexion sur 20 en SSH, FTP et MySQL), pour que le modèle ne confonde pas une erreur isolée avec une force brute. La navigation web domine les sessions.}
+\end{frame}
+
+\begin{frame}{Bénin et attaques sont joués en même temps}
+  \centering
+  \begin{tikzpicture}[x=1.15cm,y=.72cm,
+      lab/.style={anchor=east,font=\footnotesize\bfseries},
+      seg/.style={draw=white,thick,font=\footnotesize,align=center}]
+    \node[lab] at (-.15,3) {Capture};
+    \node[lab] at (-.15,2) {Bénin};
+    \node[lab] at (-.15,1) {Attaques};
+    \fill[capture] (0,2.65) rectangle (10.8,3.35);
+    \node[font=\footnotesize] at (5.4,3) {un seul pcap, sur la sonde};
+    \fill[benin] (0,1.65) rectangle (10.8,2.35);
+    \node[font=\footnotesize] at (5.4,2) {agents bénins, sur toute la durée};
+    \fill[attaque] (2.2,.65) rectangle (5,1.35);
+    \node[font=\footnotesize] at (3.6,1) {scan};
+    \fill[attaque] (6.4,.65) rectangle (9.2,1.35);
+    \node[font=\footnotesize] at (7.8,1) {force brute};
+    \draw[projectblue,thick,-{Latex[length=2mm]}] (0,.3) -- (10.8,.3);
+    \node[font=\scriptsize] at (1.1,-.05) {bénin seul};
+    \node[font=\scriptsize] at (5.7,-.05) {pause};
+    \node[font=\scriptsize] at (10,-.05) {fin};
+  \end{tikzpicture}
+
+  \vspace{.7em}
+  \raggedright
+  \begin{itemize}\espacement
+    \item Les attaques passent \textbf{l'une après l'autre}, au milieu du trafic normal.
+    \item L'agent bénin de la \textbf{machine attaquante} est mis en pause pendant l'attaque : tout ce qui va de la source vers la cible est donc bien de l'attaque.
+    \item \textbf{Résultat :} pcap, CSV étiqueté, métadonnées ; puis 2 variantes rejouées pour le test.
+  \end{itemize}
+  \note{Les autres machines continuent leur trafic bénin. Chaque variante rejoue le programme avec une autre machine d'attaque, une autre vitesse, une autre intensité de bénin : on obtient 3 datasets, 1 pour l'entraînement et 2 pour le test.}
+\end{frame}
+
+\begin{frame}{La fenêtre de 5 secondes}
+  \textbf{Le pcap est découpé après la capture, et CICFlowMeter traite chaque tranche.}
+  \vspace{.5em}
+  \begin{itemize}\espacement
+    \item La détection en direct analyse le trafic par tranches de 5 s : elle n'attend pas la fin des conversations.
+    \item L'entraînement doit voir les flux \textbf{de la même façon}, sinon le modèle ne les reconnaît pas.
+    \item Limite : une conversation longue est coupée (SSH de 12 s $\approx$ 3 flux).
+  \end{itemize}
+  \vspace{.3em}
+
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}p{.2\linewidth}XX@{}}
+    \toprule
+    \textbf{À ne pas confondre} & \textbf{Fenêtre de 5 s} & \textbf{Fenêtre d'attaque} \\
+    \midrule
+    Durée & fixe & celle de l'attaque, $-1$ s et $+2$ s de marge \\
+    Rôle & découper les flux & attribuer l'étiquette \\
+    \bottomrule
+  \end{tabularx}
+  \note{Règle d'étiquetage : un flux reçoit le nom de l'attaque s'il va de la source vers la cible pendant la fenêtre d'attaque, sinon BENIGN. Exemple qui justifie le découpage : sans lui, une minute de pings entre deux machines formerait un seul flux à l'entraînement, alors qu'en détection ce serait des flux de quelques secondes.}
+\end{frame}
+
+\begin{frame}{Durée et composition d'un dataset}
+  \textbf{Rien de fixe :} on compose le programme ligne par ligne (attaque, source, cible, vitesse, répétitions).
+  \vspace{.7em}
+
+  \begin{columns}[T]
+    \begin{column}{.46\linewidth}
+      \small
+      \renewcommand{\arraystretch}{1.2}
+      \begin{tabular}{@{}lr@{}}
+        \toprule
+        \textbf{Paramètre} & \textbf{Défaut} \\
+        \midrule
+        Bénin seul au début & 30 s \\
+        Bénin entre deux attaques & 10 s \\
+        Bénin seul à la fin & 20 s \\
+        Durée maximale d'une attaque & 60 s \\
+        Répétitions par ligne (max.\ 10) & 2 \\
+        Variantes de test & 2 \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+    \begin{column}{.5\linewidth}
+      \begin{block}{Exemple : scan + force brute}
+        2 lignes, 2 répétitions, soit 4 attaques :\\
+        $30 + 4\times 60 + 3\times 10 + 20 = 320$ s au plus.\\[.3em]
+        Soit \textbf{environ 16 min au plus} pour les 3 datasets, hors extraction des flux.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \textbf{Point d'attention :} un scan produit beaucoup de flux, une force brute très peu (8 mots de passe essayés).
+  \note{Valeurs par défaut lues dans DatasetDialog.jsx ; l'interface affiche aussi une estimation avant le lancement. La durée réelle d'une attaque dépend de sa vitesse et de son type, dans la limite de la durée maximale. Le décompte des étiquettes figure dans les métadonnées.}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\fontsize{36}{44}\selectfont\bfseries\color{projectblue} Démonstration\par}
+  \vspace{1em}
+  {\large Générer, entraîner, détecter, attaquer\par}
+  \vfill
+\end{frame}
+
+\begin{frame}{Notre dataset est-il trop pauvre ?}
+  \begin{columns}[T]
+    \begin{column}{.48\linewidth}
+      \begin{block}{Quantité : plutôt suffisante}
+        \begin{itemize}
+          \item Un random forest se contente de peu de données tabulaires.
+          \item À surveiller : les classes de force brute, peu nombreuses.
+          \item \texttt{class\_weight} compense le déséquilibre, pas le manque de diversité.
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{.48\linewidth}
+      \begin{block}{Diversité : le vrai point faible}
+        \begin{itemize}
+          \item 7 scénarios, deux familles d'attaques.
+          \item Un seul compte, un seul site, pas de profils d'utilisateurs.
+          \item Une topologie, une latence quasi nulle.
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \textbf{Conséquence :} de très bons scores prouveraient peu. Séparer un scan de la navigation web est facile, et le modèle peut s'appuyer sur des artefacts du lab.
+  \note{À vérifier sur de vrais datasets : décompte des étiquettes, scores par variante, effet d'un doublement des données, test sur une autre topologie. Aucun score n'est présenté ici.}
+\end{frame}
+
+\begin{frame}{Est-ce gênant pour le projet ?}
+  \textbf{Pas pour l'objectif :} montrer le principe d'une attaque, en action, dans le lab.
+  \vspace{.3em}
+  \begin{block}{Exemple visé}
+    Modifier les timings : l'IDS ne détecte plus, \textbf{et l'attaque fonctionne toujours}.
+  \end{block}
+  \vspace{.5em}
+  \textbf{Mais deux conditions pour que la démonstration ait du sens :}
+  \begin{enumerate}\espacement
+    \item \textbf{Une ligne de base solide :} le modèle doit bien détecter l'attaque non modifiée, y compris sur les variantes.
+    \item \textbf{Attribuer la cause :} ralentir une attaque change aussi le découpage en fenêtres de 5 s. La détection pourrait chuter à cause du découpage, pas du modèle. \textit{(Hypothèse à tester en faisant varier la fenêtre.)}
+  \end{enumerate}
+  \note{Les variantes rejouent déjà plusieurs vitesses : une évasion par timing doit aller au-delà de ce que le modèle a vu. L'atout du lab sur les attaques simulées sur des CSV : on vérifie réellement qu'hydra trouve encore le mot de passe.}
+\end{frame}
+
+\begin{frame}{La suite : plusieurs modèles, réentraînés sur nos données}
+  \textbf{Le sujet demande « plusieurs attaques » contre « plusieurs » modèles.} Ce qu'on reprend de la littérature, c'est l'\textbf{architecture}, pas les poids.
+  \vspace{.6em}
+
+  \small
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\linewidth}{@{}p{.12\linewidth}p{.26\linewidth}X@{}}
+    \toprule
+    \textbf{Priorité} & \textbf{Modèle} & \textbf{Intérêt} \\
+    \midrule
+    Fait & Random forest & cible de base (Das) \\
+    1 & MLP ou XGBoost & mêmes CSV, peu de travail ; test du \textbf{transfert} d'une attaque (Das, Ma, Okada) \\
+    2 & Autoencodeur sur flux & non supervisé, entraîné sur le bénin seul (Sharon) \\
+    Si possible & KitNET, GNN & pipeline différent : paquets (Han) ou graphe (Venturi) \\
+    \bottomrule
+  \end{tabularx}
+  \note{KitNET travaille sur les paquets : reprendre TrafficManipulator tel quel demande un pipeline supplémentaire, mais son idée de modifier les timings s'applique à nos flux. Attention : Han et Sharon ne visent pas directement des flux CICFlowMeter.}
+\end{frame}
+
+\begin{frame}{Notre positionnement : une preuve de concept mesurée}
+  \textbf{On ne construit pas le meilleur IDS :} le sujet demande de \textit{caractériser le réalisme} des scénarios d'attaque.
+  \vspace{.7em}
+
+  \textbf{Quatre mesures pour chaque attaque :}
+  \begin{enumerate}\espacement
+    \item \textbf{Détection} avant et après l'attaque.
+    \item \textbf{Efficacité conservée :} hydra trouve-t-il encore le mot de passe, nmap les ports ?
+    \item \textbf{Coût} pour l'attaquant : temps perdu, trafic ajouté.
+    \item \textbf{Hypothèses :} ce que l'attaquant doit savoir ou contrôler (boîte blanche ou noire, accès aux données d'entraînement).
+  \end{enumerate}
+  \vfill
+  \textbf{Limite assumée :} une évasion réussie ici ne prouve pas qu'elle marcherait telle quelle sur un IDS de production.
+  \note{Le point 4 est décisif pour l'empoisonnement : plusieurs articles reposent sur des hypothèses fortes, comme un contrôleur compromis (Das).}
+\end{frame}
+
+\begin{frame}{Prochaines étapes}
+  \begin{enumerate}\espacement
+    \item \textbf{Établir la ligne de base :} générer des datasets équilibrés et mesurer le modèle sur les variantes.
+    \item \textbf{Évasion par timing} sur le random forest, avec les quatre mesures.
+    \item \textbf{Deuxième modèle} (MLP ou XGBoost) et test de transfert.
+    \item \textbf{Empoisonnement ou porte dérobée :} injecter dans un dataset, puis jouer le déclencheur en direct (PCAP-Backdoor, Ma).
+  \end{enumerate}
+  \vfill
+  \textbf{En option :} comparaison avec un modèle entraîné sur CIC-IDS2017.
+\end{frame}
+
+\begin{frame}{Questions pour Grégory Blanc}
+  \begin{enumerate}\espacement
+    \item \textbf{Modèles :} combien en faut-il, et lesquels vous semblent prioritaires ?
+    \item \textbf{Réalisme :} les quatre mesures proposées correspondent-elles à ce que vous attendez ?
+    \item \textbf{Validité :} le lab seul suffit-il, ou faut-il une référence externe comme CIC-IDS2017 ?
+    \item \textbf{Attaques :} commencer par l'évasion par timing vous convient-il ? Quelle attaque d'empoisonnement privilégier ?
+  \end{enumerate}
+\end{frame}
+
+\end{document}
