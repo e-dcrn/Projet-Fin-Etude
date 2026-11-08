@@ -253,7 +253,7 @@ Rien n'est à configurer pour un usage local. Pour adapter :
 | Créer le réseau             | **✔ Valider la topologie** : bilan des problèmes, puis création avec barre de progression. Le bouton disparaît tant que le réseau tourne |
 | Éteindre le réseau          | **■ Arrêter** (visible quand le réseau est en fonctionnement)            |
 | Appliquer une modification  | Réseau en fonctionnement : **■ Arrêter**, modifier la topologie, puis **✔ Valider la topologie** |
-| Ouvrir un terminal          | Cliquer sur un **PC** ou un **serveur** allumé (pastille verte) : son terminal s'ouvre dans un onglet en bas de l'écran (`ping`, `traceroute`, `curl`, `ip route`…) |
+| Ouvrir un terminal          | Cliquer sur un **PC** ou un **serveur** allumé (pastille verte) : son terminal s'ouvre dans un onglet en bas de l'écran (`ping`, `traceroute`, `curl`, `ip route`…, et `nmap`, `hydra` sur les PC) |
 | Capturer le trafic d'un lien | Sélectionner un câble puis **Capturer le trafic** (ou double-clic sur le câble), réseau démarré : vue « Wireshark » dans un onglet du panneau du bas ; le câble capturé est animé |
 | Gérer les onglets du bas    | Un onglet par terminal ou capture, les sessions continuent en arrière-plan ; `×` ferme la session (et arrête ce qui y tourne) ; glisser le bord supérieur du panneau pour le redimensionner |
 | Afficher deux onglets côte à côte | Ouvrir une capture pendant qu'un terminal est affiché divise automatiquement le panneau (terminal à gauche, capture à droite) ; sinon **◫ Diviser**, ou glisser un onglet vers la moitié droite. `→` / `←` sur un onglet le change de volet, la séparation centrale se glisse ; les sessions continuent sans interruption |

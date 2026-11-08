@@ -55,7 +55,10 @@ image = "alpine:3.20"
 # nslookup…), pour tester chaque service d'un serveur (voir docs/SERVICES.md) :
 # curl (HTTP, HTTPS, FTP, SMTP), openssh-client (ssh, scp, sftp), busybox-extras
 # (telnet, ftpget, ftpput), mariadb-client (MySQL), bind-tools (dig).
-packages = ["curl", "openssh-client", "busybox-extras", "mariadb-client", "bind-tools"]
+# nmap et hydra : pour rejouer une attaque à la main depuis le terminal. Les attaques
+# automatiques (scénarios, datasets) passent toujours par la boîte à outils [traffic].
+packages = ["curl", "openssh-client", "busybox-extras", "mariadb-client", "bind-tools",
+            "nmap", "nmap-scripts", "hydra"]
 
 [devices.server]
 # La commande est remplacée par le gestionnaire de services (voir service_listener.py).

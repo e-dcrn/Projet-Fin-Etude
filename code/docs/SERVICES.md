@@ -524,6 +524,30 @@ Les scénarios (**⚡ Scénarios**, **🗂 Datasets**) visent ces mêmes service
 Pour que les forces brutes fonctionnent, la cible doit avoir le service correspondant (un service nommé
 `ssh` ou `ftp`).
 
+### Rejouer une attaque à la main depuis un PC
+
+`nmap` et `hydra` sont aussi installés sur les PC : on peut les lancer depuis le terminal d'un PC pour
+voir ce qui se passe (dans la capture d'un câble ou dans le panneau 🛡 Détection). Exemples, avec le
+serveur `10.0.1.10` du Petit LAN :
+
+```sh
+nmap -sn 10.0.1.0/24                 # balayage de découverte : quelles machines sont allumées ?
+nmap -sT -T4 10.0.1.10               # scan de ports (connexions complètes)
+nmap -sS -p- 10.0.1.10               # scan furtif (SYN) de tous les ports
+nmap -sV 10.0.1.10                   # identification des services et de leurs versions
+
+printf '%s\n' admin root 123456 password123 > /tmp/pw.txt
+hydra -l labuser -P /tmp/pw.txt -t 4 -f -I ssh://10.0.1.10   # force brute SSH
+hydra -l labuser -P /tmp/pw.txt -t 4 -f -I ftp://10.0.1.10   # force brute FTP
+```
+
+Les attaques **automatiques** (⚡ Scénarios, 🗂 Datasets) ne passent pas par ces outils-là : elles
+tournent dans une boîte à outils éphémère qui partage la pile réseau du PC (même IP, mêmes paquets),
+ce qui permet de les interrompre net et de connaître exactement leur fenêtre de temps.
+
+⚠ Pas de test à la main **pendant la génération d'un dataset** : il ne serait dans aucune fenêtre
+d'attaque déclarée et serait donc étiqueté BENIGN.
+
 ---
 
 ## 7. Exemples de topologies
