@@ -239,7 +239,7 @@ attaque en cours ; **Effacer** remet le bilan à zéro.
 | Sur le schéma | Dans Docker | Détail |
 | ------------- | ----------- | ------ |
 | Switch | un réseau Docker (bridge Linux) | un segment de niveau 2 avec son sous-réseau IP |
-| PC | conteneur Alpine Linux | avec les clients de chaque service (curl, ssh, telnet, mariadb, dig…) |
+| PC | conteneur Alpine Linux | avec les clients de chaque service (curl, ssh, telnet, mariadb, dig…), plus nmap et hydra pour les tests à la main |
 | Serveur | conteneur Python | lance les vrais démons des services déclarés |
 | Routeur | conteneur avec `ip_forward=1` | une interface par réseau, une table de routage |
 | Sonde IDS | conteneur relié au switch surveillé | le switch est passé en mode hub |
