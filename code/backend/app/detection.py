@@ -83,6 +83,7 @@ class Session:
     stats: Dict[str, int] = field(default_factory=lambda: {
         "flows": 0, "alerts": 0, "detected": 0, "missed": 0, "falseAlarms": 0, "benign": 0,
     })
+    by_attack: Dict[str, Dict[str, int]] = field(default_factory=dict)  # flux détectés / manqués, par type d'attaque
     events: Deque[dict] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
     attacks: Dict[str, AttackRun] = field(default_factory=dict)  # vérité terrain, par conteneur d'attaque
     finished: set = field(default_factory=set)                   # attaques terminées (fenêtre définitive)
@@ -160,6 +161,7 @@ class DetectionManager:
             elif session is not None:
                 session.events.clear()
                 session.stats = {key: 0 for key in session.stats}
+                session.by_attack = {}
         return self.status()
 
     def status(self) -> dict:
@@ -172,11 +174,12 @@ class DetectionManager:
             "running": session.running,
             "windowSec": WINDOW_SEC,
             "ids": {"node": session.ids, "name": session.ids_name},
-            "model": {"id": meta["id"], "name": meta["name"], "mode": meta["mode"]},
+            "model": {"id": meta["id"], "name": meta["name"]},
             "startedAt": session.started_at,
             "lastWindowAt": session.last_window_at,
             "error": session.error,
             "stats": dict(session.stats),
+            "byAttack": [{"label": k, **v} for k, v in sorted(session.by_attack.items())],
             "events": self._shown_events(session),
         }
 
@@ -258,6 +261,9 @@ class DetectionManager:
             stats["flows"] += 1
             stats["alerts"] += label != BENIGN
             stats[{"detected": "detected", "missed": "missed", "false-alarm": "falseAlarms", "benign": "benign"}[outcome]] += 1
+            if truth != BENIGN:
+                counters = session.by_attack.setdefault(truth, {"detected": 0, "missed": 0})
+                counters[outcome] += 1
             if outcome != "benign":
                 session.events.append({
                     "time": moment, "src": src, "dst": dst, "dstPort": int(row.get("Dst Port", 0) or 0),

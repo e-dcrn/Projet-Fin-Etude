@@ -11,7 +11,7 @@ const MODELS_API = {
   resultKey: 'model',
 };
 
-const NO_OPTIONS = { models: [], modes: [], splits: [] };
+const NO_OPTIONS = { models: [], splits: [] };
 
 /**
  * Modèles ML-IDS entraînés (voir backend/app/training.py) : modèles sauvegardés

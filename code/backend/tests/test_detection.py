@@ -37,7 +37,7 @@ def test_classify_compares_verdicts_with_ground_truth():
     # Modèle jouet : un flux court d'un seul paquet est une attaque.
     train = pd.DataFrame({"Flow Duration": [40, 70, 900000, 600000], "Tot Fwd Pkts": [1, 1, 20, 35]})
     model = RandomForestClassifier(n_estimators=10, random_state=0).fit(train, ["ATTACK", "ATTACK", "BENIGN", "BENIGN"])
-    bundle = {"model": model, "features": list(train.columns), "mode": "binary", "excludePort": True}
+    bundle = {"model": model, "features": list(train.columns), "excludePort": True}
     session = Session(ids="ids-1", ids_name="IDS-1", interface="eth0", model_meta={}, bundle=bundle)
 
     # Vérité terrain : un scan de 10.0.1.11 vers 10.0.1.10 entre 10:00:00 et 10:00:10.
@@ -54,6 +54,7 @@ def test_classify_compares_verdicts_with_ground_truth():
     assert outcomes == ["detected", "false-alarm", "missed"]
     detected = next(e for e in session.events if e["outcome"] == "detected")
     assert detected["truth"] == "port-scan" and detected["dstPort"] == 22
+    assert session.by_attack == {"port-scan": {"detected": 1, "missed": 1}}
 
 
 def test_feature_matrix_matches_model_features_order():
@@ -76,7 +77,7 @@ def test_shown_events_keep_model_errors_visible():
 def test_reset_clears_running_session_and_forgets_stopped_one():
     manager = DetectionManager.__new__(DetectionManager)
     manager._lock = threading.Lock()
-    session = Session(ids="ids-1", ids_name="IDS-1", interface="eth0", model_meta={"id": "m", "name": "M", "mode": "binary"}, bundle={})
+    session = Session(ids="ids-1", ids_name="IDS-1", interface="eth0", model_meta={"id": "m", "name": "M"}, bundle={})
     session.stats["detected"] = 5
     session.events.append({"time": T0, "outcome": "detected"})
     manager._session = session

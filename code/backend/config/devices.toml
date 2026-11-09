@@ -52,7 +52,7 @@ cap_add = ["NET_ADMIN", "NET_RAW"]
 [devices.pc]
 image = "alpine:3.20"
 # Clients disponibles dans le terminal (en plus de ceux de busybox : ping, nc, wget,
-# nslookup…), pour tester chaque service d'un serveur (voir docs/SERVICES.md) :
+# nslookup…), pour tester chaque service d'un serveur (voir docs/DOCUMENTATION.md) :
 # curl (HTTP, HTTPS, FTP, SMTP), openssh-client (ssh, scp, sftp), busybox-extras
 # (telnet, ftpget, ftpput), mariadb-client (MySQL), bind-tools (dig).
 # nmap et hydra : pour rejouer une attaque à la main depuis le terminal. Les attaques

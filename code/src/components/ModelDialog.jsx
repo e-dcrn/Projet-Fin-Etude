@@ -3,7 +3,6 @@ import JobProgress from './JobProgress.jsx';
 import { FlowCounts, GroupInfo } from './DatasetDialog.jsx';
 import { formatDate, formatDuration, formatPercent } from '../utils/format.js';
 
-const MODE_SHORT = { binary: 'binaire', multiclass: 'multiclasse' };
 
 /** Indicateurs clés d'un modèle, vus « comme un IDS » (détection / fausses alertes). */
 function Kpis({ metrics }) {
@@ -127,6 +126,30 @@ function ByDataset({ rows }) {
   );
 }
 
+/** Détection par type d'attaque : le score global peut masquer une attaque entièrement ratée. */
+function ByAttack({ rows }) {
+  return (
+    <section>
+      <h3 className="traffic-section__title">Détection par type d'attaque (test)</h3>
+      <table className="metrics-table">
+        <thead>
+          <tr><th>Attaque</th><th>Flux</th><th>Détectés</th><th>Taux</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label}>
+              <td>{r.label}</td>
+              <td>{r.flows}</td>
+              <td>{r.detected}</td>
+              <td>{formatPercent(r.detected / r.flows)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 /** Rapport complet d'un modèle : indicateurs, matrice de confusion, métriques par classe, features. */
 function ModelReport({ model }) {
   const { metrics, train, test } = model;
@@ -158,6 +181,7 @@ function ModelReport({ model }) {
           Classes du test absentes de l'entraînement : {metrics.unseenClasses.join(', ')} (le modèle ne peut pas les reconnaître sous leur nom).
         </div>
       )}
+      {metrics.byAttack?.length > 0 && <ByAttack rows={metrics.byAttack} />}
       <div className="model-report__grid">
         <section>
           <h3 className="traffic-section__title">Matrice de confusion (test)</h3>
@@ -166,8 +190,13 @@ function ModelReport({ model }) {
           <PerClass rows={metrics.perClass} />
         </section>
         <section>
-          <h3 className="traffic-section__title">Features les plus utiles</h3>
+          <h3 className="traffic-section__title">Importance des features (Gini)</h3>
           <TopFeatures features={model.topFeatures} />
+          <p className="field__hint">
+            Part de la baisse d'impureté de Gini apportée par chaque feature, moyennée sur les arbres et calculée sur
+            le jeu d'entraînement (total : 100 %). Elle décrit ce que le modèle a utilisé, pas ce qui généralise, et se
+            répartit de façon arbitraire entre features corrélées.
+          </p>
         </section>
       </div>
     </div>
@@ -250,7 +279,7 @@ function ListContent({ models, hasDatasets, onNew, onClose }) {
               <div className="dataset__line">
                 <strong className="dataset__name">{m.name}</strong>
                 <span className="dataset__meta">
-                  {formatDate(m.createdAt)} · {MODE_SHORT[m.mode]} · {m.topologies?.map((t) => t.name).join(', ') || 'topologie inconnue'}
+                  {formatDate(m.createdAt)} · {m.topologies?.map((t) => t.name).join(', ') || 'topologie inconnue'}
                   {!m.flowWindowSec && ' · ancien format'} · détection {formatPercent(m.metrics.detectionRate)} ·
                   fausses alertes {formatPercent(m.metrics.falsePositiveRate)}
                 </span>
@@ -318,7 +347,6 @@ function FormContent({ models, datasets, onBack }) {
   const [test, setTest] = useState(() => new Set(defaults.test));
   const [split, setSplit] = useState(defaults.test.length ? 'dataset' : 'temporal');
   const [testFraction, setTestFraction] = useState(30);
-  const [mode, setMode] = useState('binary');
   const [model, setModel] = useState('random-forest');
   const [nEstimators, setNEstimators] = useState(100);
   const [maxDepth, setMaxDepth] = useState('');
@@ -352,7 +380,6 @@ function FormContent({ models, datasets, onBack }) {
         test: split === 'dataset' ? [...test] : [],
         split,
         testFraction: testFraction / 100,
-        mode,
         model,
         nEstimators: Number(nEstimators),
         maxDepth: maxDepth ? Number(maxDepth) : null,
@@ -420,12 +447,6 @@ function FormContent({ models, datasets, onBack }) {
             <span className="field__label">Algorithme</span>
             <select className="field__input" value={model} onChange={(e) => setModel(e.target.value)}>
               {options.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-          </label>
-          <label className="field field--compact">
-            <span className="field__label">Classes</span>
-            <select className="field__input" value={mode} onChange={(e) => setMode(e.target.value)}>
-              {options.modes.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
           <label className="field field--compact">

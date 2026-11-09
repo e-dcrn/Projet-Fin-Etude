@@ -10,7 +10,7 @@ programme complet sur la topologie déployée :
   2. des agents de trafic bénin tournent pendant toute la durée ;
   3. les attaques du programme s'enchaînent (une à la fois, entrecoupées de
      trafic bénin seul), chacune dans une fenêtre de temps enregistrée ;
-  4. le pcap est converti en flux CICFlowMeter (repli : exporteur interne) ;
+  4. le pcap est converti en flux CICFlowMeter ;
   5. chaque flux est étiqueté : il est « attaque » s'il va de la source vers la
      cible d'une attaque ET commence pendant la fenêtre de cette attaque,
      « BENIGN » sinon. Pendant son attaque, la source ne fait pas de trafic
@@ -35,7 +35,6 @@ from typing import Dict, List, Optional
 from docker.errors import DockerException
 
 from .cicflowmeter import FLOW_WINDOW_SEC, parse_timestamp, relabel_csv, windowed_flows_csv
-from .flows import build_flows, flows_to_csv, parse_pcap, split_pcap
 from .jobs import Job
 from .settings import BACKEND_DIR
 from .store import RecordStore
@@ -135,22 +134,11 @@ class DatasetPlan:
     group: dict = field(default_factory=dict)                 # base / variante (voir make_variant)
 
 
-def _timestamp_value(value: str) -> Optional[float]:
-    """Horodatage d'un flux : format CICFlowMeter, ou secondes epoch (exporteur interne)."""
-    parsed = parse_timestamp(value)
-    if parsed is not None:
-        return parsed
-    try:
-        return float(value)
-    except ValueError:
-        return None
-
-
 def label_dataset_csv(csv_text: str, runs: List[AttackRun]):
     """Étiquette les flux d'un dataset d'après les fenêtres de ses attaques → (CSV, décompte, total)."""
 
     def label_of(src: str, dst: str, ts: str) -> str:
-        moment = _timestamp_value(ts)
+        moment = parse_timestamp(ts)
         for run in runs:
             if run.matches(src, dst, moment):
                 return run.subcategory
@@ -376,18 +364,14 @@ class DatasetBuilder:
         finally:
             self._remove(capture)
 
+        # Découpé en fenêtres comme en détection en direct : le modèle apprend sur des
+        # flux préparés exactement comme ceux qu'il classera (un ping n'y forme pas
+        # un seul long flux, mais un court flux par fenêtre).
         try:
-            # Découpé en fenêtres comme en détection en direct : le modèle apprend sur des
-            # flux préparés exactement comme ceux qu'il classera (un ping n'y forme pas
-            # un seul long flux, mais un court flux par fenêtre).
             raw_csv = windowed_flows_csv(self.lab, pcap)
-            engine = "CICFlowMeter"
-        except Exception as exc:  # noqa: BLE001 - Docker/image absents : repli sur l'exporteur interne
-            log.warning("CICFlowMeter indisponible (%s) : repli sur l'exporteur interne", exc)
-            job.warn("CICFlowMeter indisponible : flux calculés par l'exporteur interne (colonnes réduites).")
-            parts = [flows_to_csv(build_flows(parse_pcap(chunk))) for chunk in split_pcap(pcap, FLOW_WINDOW_SEC)]
-            raw_csv = parts[0] + "".join(part.split("\n", 1)[1] for part in parts[1:]) if parts else ""
-            engine = "interne"
+        except (DockerException, RuntimeError, ValueError) as exc:
+            log.warning("Extraction des flux impossible : %s", exc)
+            raise DatasetError("CICFlowMeter n'a pas pu extraire les flux de la capture (voir les journaux du serveur).") from exc
 
         step("Étiquetage et sauvegarde")
         csv_text, counts, total = label_dataset_csv(raw_csv, runs)
@@ -395,9 +379,9 @@ class DatasetBuilder:
             job.warn("Aucun flux d'attaque n'a été vu par la Sonde IDS : surveille-t-elle le switch traversé par les attaques ?")
 
         dataset_id = self.store.new_id()
-        meta = self._meta(dataset_id, plan, began, engine, counts, total, len(pcap))
+        meta = self._meta(dataset_id, plan, began, counts, total, len(pcap))
         self.store.save(dataset_id, meta, {"flows.csv": csv_text, "capture.pcap": pcap})
-        log.info("Dataset %s : %d flux %s (%s)", dataset_id, total, counts, engine)
+        log.info("Dataset %s : %d flux %s", dataset_id, total, counts)
         return meta
 
     def _start_benign(self, plan: DatasetPlan, source: BenignSource) -> None:
@@ -441,6 +425,7 @@ class DatasetBuilder:
                 run.end = time.time()
             self._remove(helper)
             if paused:
+                time.sleep(WINDOW_AFTER)  # l'agent ne reprend qu'après la marge de fin d'attaque de l'étiquetage
                 for source in plan.benign:
                     if source.node == run.source:
                         self._start_benign(plan, source)
@@ -455,14 +440,13 @@ class DatasetBuilder:
             pass
 
     @staticmethod
-    def _meta(dataset_id: str, plan: DatasetPlan, began: float, engine: str, counts: Dict[str, int], total: int, pcap_size: int) -> dict:
+    def _meta(dataset_id: str, plan: DatasetPlan, began: float, counts: Dict[str, int], total: int, pcap_size: int) -> dict:
         iso = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="seconds")
         return {
             "id": dataset_id,
             "name": plan.name,
             "createdAt": iso(began),
             "durationSec": round(time.time() - began),
-            "engine": engine,
             "total": total,
             "counts": counts,
             "pcapBytes": pcap_size,

@@ -265,6 +265,8 @@ def start_sshd(port, _hosts):
          "-o", "PermitRootLogin=no",
          "-o", "UsePAM=no",
          "-o", "Subsystem=sftp internal-sftp",
+         # Protections d'OpenSSH désactivées : elles coupent la force brute du lab (« Connection reset »).
+         "-o", "PerSourcePenalties=no", "-o", "MaxStartups=100",
          "-o", f"PidFile=/run/sshd-{port}.pid"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )

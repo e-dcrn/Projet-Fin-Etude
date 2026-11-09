@@ -1,14 +1,9 @@
 """
-Export de flux au format CICFlowMeter RÉEL — les mêmes ~90 colonnes que les jeux
-CIC-IDS (CIC-IDS2017/2018). On réutilise l'image conteneurisée de ConCap
-(ghcr.io/idlab-discover/concap/cicflowmeter) : un pcap capturé pendant un
-scénario est converti en CSV de flux, puis chaque flux est étiqueté « attaque »
-ou « BENIGN » selon le scénario (même règle que flows.label_flows).
-
-Pourquoi en plus de flows.py ? flows.py reste un exporteur interne, autonome et
-testable (repli si Docker/l'image manquent) ; CICFlowMeter donne, lui, des
-features STRICTEMENT identiques aux datasets publics, pour entraîner/évaluer un
-ML-IDS de façon comparable (voir docs/ARCHITECTURE.md, « le pont »).
+Extraction des flux : les mêmes colonnes que les jeux CIC-IDS (CIC-IDS2017/2018),
+grâce à l'image CICFlowMeter conteneurisée de ConCap
+(ghcr.io/idlab-discover/concap/cicflowmeter). Un pcap est découpé en fenêtres de
+FLOW_WINDOW_SEC secondes, comme le fait la détection en direct, et chaque fenêtre
+est convertie en flux.
 
 Détails d'exécution (validés) :
   - le pcap est injecté dans /tmp du conteneur (put_archive), pas monté : un
@@ -25,14 +20,13 @@ import csv
 import io
 import logging
 import os
+import struct
 import tarfile
 from datetime import datetime, timezone
 from ipaddress import ip_address, ip_network
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from docker.errors import DockerException
-
-from .flows import split_pcap
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +41,14 @@ CFM_IMAGE = os.environ.get(
 # windowed_flows_csv). Un flux plus long qu'une fenêtre est vu en morceaux.
 FLOW_WINDOW_SEC = 5
 
+# Boutisme + horodatage selon le nombre magique pcap (voir capture.py).
+_PCAP_MAGIC = {
+    b"\xd4\xc3\xb2\xa1": ("<", False),
+    b"\xa1\xb2\xc3\xd4": (">", False),
+    b"\x4d\x3c\xb2\xa1": ("<", True),
+    b"\xa1\xb2\x3c\x4d": (">", True),
+}
+
 # pcap injecté dans /tmp/dump.pcap ; sortie vers un dossier interne ; CSV sur stdout.
 _CMD = "mkdir -p /out && /CICFlowMeter/bin/cfm /tmp/dump.pcap /out >/dev/null 2>&1 && cat /out/*_Flow.csv"
 
@@ -59,34 +61,6 @@ def _tar_bytes(name: str, data: bytes) -> bytes:
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
-
-
-def run_cicflowmeter(lab, pcap_bytes: bytes, timeout: int = 180) -> str:
-    """Convertit un pcap en CSV de flux CICFlowMeter (brut, colonne Label vide)."""
-    client = lab.client
-    try:
-        client.images.get(CFM_IMAGE)
-    except DockerException:
-        log.info("Téléchargement de l'image CICFlowMeter %s…", CFM_IMAGE)
-        client.images.pull(CFM_IMAGE)
-
-    container = client.containers.create(CFM_IMAGE, entrypoint=["sh", "-c"], command=[_CMD])
-    try:
-        container.put_archive("/tmp", _tar_bytes("dump.pcap", pcap_bytes))
-        container.start()
-        container.wait(timeout=timeout)
-        output = container.logs(stdout=True, stderr=False)
-    finally:
-        try:
-            container.remove(force=True)
-        except DockerException:
-            pass
-
-    text = output.decode(errors="replace")
-    lines = text.splitlines()
-    if not lines or "Src IP" not in lines[0]:
-        raise RuntimeError("CICFlowMeter n'a pas produit de CSV exploitable")
-    return text
 
 
 class FlowMeterWorker:
@@ -126,6 +100,33 @@ class FlowMeterWorker:
             pass
 
 
+def split_pcap(data: bytes, window: float) -> List[bytes]:
+    """
+    Découpe un pcap en pcap successifs de `window` secondes (fenêtres consécutives,
+    à partir du premier paquet ; une fenêtre sans paquet est omise). C'est le
+    découpage que subit le trafic en détection en direct : appliqué aussi aux
+    datasets, il garantit que le modèle apprend sur des flux préparés exactement
+    comme ceux qu'il classera.
+    """
+    if len(data) < 24 or data[:4] not in _PCAP_MAGIC:
+        raise ValueError("flux pcap invalide ou vide")
+    endian, nanoseconds = _PCAP_MAGIC[data[:4]]
+    header = data[:24]
+    windows: Dict[int, List[bytes]] = {}
+    first = None
+    offset = 24
+    while offset + 16 <= len(data):
+        sec, frac, incl, _orig = struct.unpack_from(endian + "IIII", data, offset)
+        record = data[offset:offset + 16 + incl]
+        offset += 16 + incl
+        if len(record) < 16 + incl:
+            break
+        ts = sec + (frac / 1e9 if nanoseconds else frac / 1e6)
+        first = ts if first is None else first
+        windows.setdefault(int((ts - first) // window), []).append(record)
+    return [header + b"".join(windows[k]) for k in sorted(windows)]
+
+
 def windowed_flows_csv(lab, pcap_bytes: bytes, window: float = FLOW_WINDOW_SEC) -> str:
     """
     pcap → CSV CICFlowMeter, fenêtre par fenêtre (comme en détection en direct) :
@@ -148,7 +149,7 @@ def windowed_flows_csv(lab, pcap_bytes: bytes, window: float = FLOW_WINDOW_SEC) 
 
 
 def _is_attack(src: str, dst: str, attack_src: str, target: str, needs: str, net, target_ip) -> bool:
-    """Même règle d'étiquetage que flows.label_flows."""
+    """Le flux va-t-il de la source de l'attaque vers sa cible ?"""
     if src != attack_src:
         return False
     try:
@@ -218,4 +219,4 @@ def label_cic_csv(csv_text: str, attack_src: str, target: str, needs: str, subca
 
 def pcap_to_labeled_csv(lab, pcap_bytes: bytes, attack_src: str, target: str, needs: str, subcategory: str) -> Tuple[str, Dict[str, int], int]:
     """pcap → CSV CICFlowMeter étiqueté. Lève si l'outil n'est pas disponible."""
-    return label_cic_csv(run_cicflowmeter(lab, pcap_bytes), attack_src, target, needs, subcategory)
+    return label_cic_csv(windowed_flows_csv(lab, pcap_bytes), attack_src, target, needs, subcategory)

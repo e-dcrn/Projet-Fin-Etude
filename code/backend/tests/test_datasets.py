@@ -50,11 +50,10 @@ def test_label_by_source_target_and_window():
     assert total == 5
 
 
-def test_label_subnet_attack_and_epoch_timestamps():
-    # Exporteur interne : Timestamp en secondes epoch ; balayage d'un sous-réseau.
+def test_label_subnet_attack():
     rows = [
-        ("10.0.1.2", "10.0.1.50", str(T0 + 3)),
-        ("10.0.1.2", "10.0.2.50", str(T0 + 3)),
+        ("10.0.1.2", "10.0.1.50", "2026-10-30 10:00:03.000000"),
+        ("10.0.1.2", "10.0.2.50", "2026-10-30 10:00:03.000000"),
     ]
     run = _run(needs="subnet", target="10.0.1.0/24", subcategory="ping-sweep")
     text, counts, _ = label_dataset_csv(_csv(rows), [run])

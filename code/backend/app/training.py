@@ -16,8 +16,7 @@ Une tâche de fond (voir jobs.py) :
   5. sauvegarde le modèle (model.joblib) et ses métriques (meta.json) dans
      data/models/<id>/.
 
-Les étiquettes sont soit binaires (BENIGN / ATTACK), soit celles des attaques
-(port-scan, ssh-patator…) : classification multiclasse.
+Classification binaire : BENIGN / ATTACK (toutes les attaques sont regroupées).
 """
 
 from __future__ import annotations
@@ -35,6 +34,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 
 from .datasets import DatasetError, DatasetStore
@@ -61,7 +61,6 @@ ID_COLUMNS = ("Flow ID", "Src IP", "Src Port", "Dst IP", "Timestamp", "Label")
 PORT_COLUMN = "Dst Port"
 
 MODELS = {"random-forest": "Random forest"}
-MODES = {"binary": "Binaire (BENIGN / ATTACK)", "multiclass": "Multiclasse (une classe par attaque)"}
 SPLITS = {"dataset": "Dataset(s) de test séparé(s)", "temporal": "Découpage temporel (fin du jeu en test)"}
 
 TOP_FEATURES = 15
@@ -85,7 +84,6 @@ class TrainingPlan:
     test: List[dict]           # métadonnées des datasets de test (split « dataset »)
     split: str
     test_fraction: float
-    mode: str
     model: str
     n_estimators: int
     max_depth: Optional[int]
@@ -107,10 +105,10 @@ def load_frames(store: DatasetStore, datasets: List[dict]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def targets(labels: pd.Series, mode: str) -> pd.Series:
-    """Étiquettes à apprendre : celles du dataset (multiclasse) ou BENIGN / ATTACK (binaire)."""
+def targets(labels: pd.Series) -> pd.Series:
+    """Étiquettes à apprendre : BENIGN, ou ATTACK pour toutes les attaques."""
     labels = labels.astype(str).str.strip()
-    return labels if mode == "multiclass" else labels.where(labels == BENIGN, ATTACK)
+    return labels.where(labels == BENIGN, ATTACK)
 
 
 def feature_matrix(frame: pd.DataFrame, exclude_port: bool, columns: Optional[List[str]] = None) -> pd.DataFrame:
@@ -166,6 +164,18 @@ def evaluate(y_true: pd.Series, y_pred: np.ndarray, train_classes: List[str]) ->
     }
 
 
+def by_attack(labels: pd.Series, predicted: np.ndarray) -> List[dict]:
+    """
+    Détection par type d'attaque : le score global d'un IDS binaire est dominé par
+    l'attaque la plus volumineuse et peut masquer une attaque entièrement ratée.
+    """
+    labels = labels.astype(str).str.strip().reset_index(drop=True)
+    return [
+        {"label": label, "flows": int(mask.sum()), "detected": int((predicted[mask] != BENIGN).sum())}
+        for label, mask in ((name, (labels == name).to_numpy()) for name in sorted(set(labels) - {BENIGN}))
+    ]
+
+
 def topologies(datasets: List[dict]) -> List[dict]:
     """Topologies (distinctes, par empreinte) sur lesquelles des datasets ont été générés."""
     seen: Dict[str, dict] = {}
@@ -198,8 +208,6 @@ class Trainer:
         """Vérifie la demande de l'interface (avant de lancer la tâche)."""
         if spec["model"] not in MODELS:
             raise TrainingError(f"Modèle inconnu « {spec['model']} ».")
-        if spec["mode"] not in MODES:
-            raise TrainingError(f"Mode inconnu « {spec['mode']} ».")
         if spec["split"] not in SPLITS:
             raise TrainingError(f"Découpage inconnu « {spec['split']} ».")
         train = [self._dataset(i) for i in dict.fromkeys(spec.get("train") or [])]
@@ -212,9 +220,6 @@ class Trainer:
             shared = {m["id"] for m in train} & {m["id"] for m in test}
             if shared:
                 raise TrainingError("Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
-        engines = {m.get("engine") for m in train + test}
-        if len(engines) > 1:
-            raise TrainingError("Ces datasets n'ont pas les mêmes colonnes (CICFlowMeter et exporteur interne mélangés).")
         # Des flux découpés en fenêtres et des flux entiers n'ont pas les mêmes caractéristiques.
         windows = {m.get("flowWindowSec") for m in train + test}
         if len(windows) > 1:
@@ -223,11 +228,11 @@ class Trainer:
                 "régénérez les plus anciens."
             )
 
-        default_name = f"{MODELS[spec['model']]} · {'binaire' if spec['mode'] == 'binary' else 'multiclasse'}"
+        default_name = MODELS[spec["model"]]
         return TrainingPlan(
             name=(spec.get("name") or "").strip()[:80] or default_name,
             train=train, test=test, split=spec["split"], test_fraction=float(spec["testFraction"]),
-            mode=spec["mode"], model=spec["model"], n_estimators=int(spec["nEstimators"]),
+            model=spec["model"], n_estimators=int(spec["nEstimators"]),
             max_depth=int(spec["maxDepth"]) if spec.get("maxDepth") else None,
             exclude_port=bool(spec.get("excludePort", True)),
             flow_window=next(iter(windows)),
@@ -250,8 +255,8 @@ class Trainer:
         job.check_cancelled()
 
         job.step("Préparation des features")
-        y_train = targets(train_frame["Label"], plan.mode)
-        y_test = targets(test_frame["Label"], plan.mode)
+        y_train = targets(train_frame["Label"])
+        y_test = targets(test_frame["Label"])
         if y_train.nunique() < 2:
             raise TrainingError(
                 f"Le jeu d'entraînement ne contient qu'une classe ({y_train.iloc[0]}) : il faut des flux bénins ET des attaques."
@@ -263,14 +268,16 @@ class Trainer:
         job.check_cancelled()
 
         job.step(f"Entraînement ({MODELS[plan.model].lower()}, {plan.n_estimators} arbres, {len(x_train)} flux)")
-        # class_weight « balanced » : les datasets du lab sont très déséquilibrés (beaucoup
-        # plus de flux d'attaque que de bénin, ou l'inverse) ; sans lui le modèle ignore la minorité.
+        # Poids équilibrés par ÉTIQUETTE d'origine (bénin, port-scan, ssh-patator…), pas seulement
+        # BENIGN / ATTACK : un scan produit des milliers de flux, une force brute quelques dizaines,
+        # et un simple équilibrage binaire laissait le scan décider de ce qu'est une attaque.
+        weights = compute_sample_weight("balanced", train_frame["Label"].astype(str).str.strip())
         model = RandomForestClassifier(
-            n_estimators=plan.n_estimators, max_depth=plan.max_depth, class_weight="balanced",
+            n_estimators=plan.n_estimators, max_depth=plan.max_depth,
             n_jobs=-1, random_state=42,
         )
         fit_began = time.perf_counter()
-        model.fit(x_train, y_train)
+        model.fit(x_train, y_train, sample_weight=weights)
         train_seconds = time.perf_counter() - fit_began
         job.check_cancelled()
 
@@ -278,6 +285,7 @@ class Trainer:
         # Classes du test absentes de l'entraînement : signalées dans le rapport (metrics.unseenClasses).
         predicted = model.predict(x_test)
         metrics = evaluate(y_test.reset_index(drop=True), predicted, list(model.classes_))
+        metrics["byAttack"] = by_attack(test_frame["Label"], predicted)
         # Score sur chaque dataset de test séparément : un modèle qui réussit l'un et rate
         # l'autre ne se voit pas dans la moyenne.
         names = {m["id"]: m["name"] for m in plan.test or plan.train}
@@ -294,7 +302,7 @@ class Trainer:
         model_id = self.models.new_id()
         buffer = io.BytesIO()
         # Tout ce qu'il faut pour classer de nouveaux flux (détection en direct, à venir).
-        joblib.dump({"model": model, "features": list(x_train.columns), "mode": plan.mode,
+        joblib.dump({"model": model, "features": list(x_train.columns),
                      "excludePort": plan.exclude_port, "flowWindowSec": plan.flow_window}, buffer)
         meta = {
             "id": model_id,
@@ -303,12 +311,12 @@ class Trainer:
             "durationSec": round(time.time() - began, 1),
             "trainSeconds": round(train_seconds, 3),
             "model": plan.model,
-            "mode": plan.mode,
             "params": {"nEstimators": plan.n_estimators, "maxDepth": plan.max_depth,
                        "excludePort": plan.exclude_port, "split": plan.split,
                        "testFraction": plan.test_fraction if plan.split == "temporal" else None},
             "train": {"datasets": [{"id": m["id"], "name": m["name"]} for m in plan.train],
-                      "rows": len(x_train), "counts": _counts(y_train)},
+                      "rows": len(x_train), "counts": _counts(y_train),
+                      "attacks": _counts(train_frame["Label"].astype(str).str.strip())},
             "test": {"datasets": [{"id": m["id"], "name": m["name"]} for m in (plan.test or plan.train)],
                      "rows": len(x_test), "counts": _counts(y_test)},
             "featureCount": len(x_train.columns),

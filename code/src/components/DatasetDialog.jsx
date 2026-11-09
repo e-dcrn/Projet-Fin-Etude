@@ -130,7 +130,6 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
                   {formatDate(ds.createdAt)} · {formatDuration(ds.durationSec)} · {ds.total} flux · sonde {ds.probe?.name}
                   {' '}· topologie {ds.topology?.name ?? 'inconnue'}
                   {!ds.flowWindowSec && ' · ancien format (flux non découpés)'}
-                  {ds.engine !== 'CICFlowMeter' && ' · exporteur interne'}
                 </span>
               </div>
               <GroupInfo dataset={ds} />
@@ -450,7 +449,7 @@ function RunContent({ run, datasets, onClose, onDone }) {
           <div className="dataset__line">
             <strong className="dataset__name">{ds.name}</strong>
             <span className="dataset__meta">
-              {formatDuration(ds.durationSec)} · sonde {ds.probe?.name} · {ds.engine}
+              {formatDuration(ds.durationSec)} · sonde {ds.probe?.name}
             </span>
           </div>
           <GroupInfo dataset={ds} />
