@@ -438,8 +438,10 @@ d'un dataset.
 Dans **📡 Trafic** :
 
 - **Presets** : raccourcis qui cochent des types et choisissent une fréquence (« Navigation web »,
-  « Pings réseau », « Connexions services », « Mixte intense ») ;
-- **Type de trafic** : `Ping (ICMP)`, `Web (HTTP, HTTPS)`, `Services (SSH, FTP, SMTP, MySQL, DNS…)` ;
+  « Pings réseau », « Connexions services », « Mixte intense »), parmi les types disponibles ;
+- **Type de trafic** : `Ping (ICMP)`, puis **une case par service ouvert chez les destinataires cochés**
+  (`HTTP`, `HTTPS`, `SSH`, `FTP`, `SMTP`, `MySQL`, `Telnet`, `DNS`, `Autres ports TCP`). La liste suit
+  les destinataires : décocher le seul serveur FTP fait disparaître la case FTP ;
 - **Fréquence** : voir le tableau plus bas ;
 - **Émetteurs** : les équipements qui génèrent du trafic (un agent par émetteur) ;
 - **Destinataires** : les équipements visés. Seuls les **services ouverts** des destinataires reçoivent
@@ -471,8 +473,8 @@ haut :
 | Services | autre service (simulé) | ouverture de connexion, lecture de la bannière, fermeture |
 | Ping | **ICMP** | 1 à 4 pings ; taille 56 octets le plus souvent, parfois 100, 500 ou 1000 |
 
-Le **DNS** n'est utilisé que si l'un des destinataires a un service DNS et que le type « Services »
-(panneau Trafic) ou « DNS » (formulaire de dataset) est coché.
+Le **DNS** n'est utilisé que si l'un des destinataires a un service DNS et que la case « DNS » est
+cochée.
 
 **Poids des sessions** : quand un émetteur choisit sa prochaine action, la navigation web domine,
 comme sur un vrai réseau :
@@ -500,7 +502,7 @@ onglets, un transfert pendant la navigation).
 
 ### Pendant la génération d'un dataset
 
-- Le formulaire ne propose **que les types réellement disponibles** : `Ping (ICMP)` dès qu'il y a un
+- Comme dans le panneau Trafic, le formulaire ne propose **que les types réellement disponibles** : `Ping (ICMP)` dès qu'il y a un
   destinataire, puis une case par service ouvert dans la topologie (`HTTP`, `HTTPS`, `SSH`, `FTP`,
   `SMTP`, `MySQL`, `Telnet`, `DNS`, `Autres ports TCP`). Avec un seul serveur qui n'ouvre que le port 80,
   on n'a donc que `Ping (ICMP)` et `HTTP`. Le survol d'une case indique les équipements visés.
