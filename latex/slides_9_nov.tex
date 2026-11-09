@@ -185,12 +185,12 @@
 
 \begin{frame}{Pourquoi entraîner plutôt que prendre un modèle préentraîné ?}
   \begin{enumerate}\espacement
-    \item \textbf{Il faudrait quand même nos données.} Pour l'adapter à notre réseau, la génération de datasets reste nécessaire.
-    \item \textbf{Un modèle appris ailleurs apprend aussi cet ailleurs :} latences, services, trafic normal. Notre lab est différent.
-    \item \textbf{Entraîner n'est pas le coût principal.} C'est la production de données étiquetées qui l'est.
-    \item \textbf{Le fine-tuning s'applique mal à un random forest :} pas de poids à réajuster, les anciens arbres continuent de voter.
-    \item \textbf{Le sujet demande la maîtrise du modèle.} L'évasion s'appuie sur ce qu'il a appris, l'empoisonnement sur ses données.
+    \item \textbf{Un modèle appris ailleurs} ne connaît pas notre réseau.
+    \item \textbf{Il faudrait quand même nos données} pour l'adapter.
+    \item \textbf{Un random forest} se prête mal au fine-tuning.
+    \item \textbf{Nos attaques} exigent de maîtriser le modèle et ses données.
   \end{enumerate}
+  \note{Un modèle appris ailleurs apprend aussi les latences, les services et le trafic normal de cet endroit. Le coût principal n'est pas l'entraînement, mais la production de données étiquetées. Random forest : pas de poids à réajuster, les anciens arbres continuent de voter. L'évasion s'appuie sur ce que le modèle a appris, l'empoisonnement sur ses données.}
 \end{frame}
 
 \begin{frame}{Construire un dataset : qui fait quoi ?}
@@ -372,7 +372,6 @@
 \begin{frame}{Questions pour Grégory Blanc}
   \begin{enumerate}\espacement
     \item \textbf{Modèles :} combien en faut-il, et lesquels vous semblent prioritaires ?
-    \item \textbf{Réalisme :} les quatre mesures proposées correspondent-elles à ce que vous attendez ?
     \item \textbf{Validité :} le lab seul suffit-il, ou faut-il une référence externe comme CIC-IDS2017 ?
     \item \textbf{Attaques :} commencer par l'évasion par timing vous convient-il ? Quelle attaque d'empoisonnement privilégier ?
   \end{enumerate}
