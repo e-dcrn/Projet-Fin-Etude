@@ -3,15 +3,13 @@ import { formatPercent } from '../utils/format.js';
 
 // Issue d'un verdict comparé à la vérité terrain (voir backend/app/detection.py).
 const OUTCOMES = {
-  detected: { icon: '✔', label: 'Détectée', className: 'det-event--detected' },
+  alert: { icon: '✔', label: 'Attaque détectée', className: 'det-event--detected' },
   missed: { icon: '✕', label: 'Manquée', className: 'det-event--missed' },
-  'false-alarm': { icon: '⚠', label: 'Fausse alerte', className: 'det-event--false' },
 };
 
 const PROTOCOLS = { 1: 'ICMP', 6: 'TCP', 17: 'UDP' };
 
 const clock = (epoch) => (epoch ? new Date(epoch * 1000).toLocaleTimeString('fr-FR') : '');
-const ratio = (a, b) => (b ? a / b : null);
 
 /** Adresse IP → nom de l'équipement, d'après les câbles de la topologie. */
 function useIpNames(nodes, edges) {
@@ -23,9 +21,9 @@ function useIpNames(nodes, edges) {
 
 /**
  * Panneau de détection en direct : une Sonde IDS (reliée au switch qu'elle
- * surveille) analyse le trafic avec un modèle entraîné. Chaque verdict est
- * comparé aux attaques réellement lancées (scénarios, datasets) : attaques
- * détectées, manquées, et fausses alertes, en conditions réelles.
+ * surveille) analyse le trafic avec un modèle entraîné. Tout flux classé ATTACK
+ * est affiché comme une attaque détectée ; les attaques lancées depuis l'interface
+ * permettent en plus de signaler celles que le modèle a manquées.
  */
 export default function DetectionPanel({ detection, models, topology, nodes, edges, onlineIds, onClose }) {
   const probes = useMemo(
@@ -71,8 +69,6 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
   };
 
   const { running, stats } = detection;
-  const attacks = stats ? stats.detected + stats.missed : 0;
-  const benign = stats ? stats.falseAlarms + stats.benign : 0;
   const ago = detection.lastWindowAt ? Math.max(0, Math.round(Date.now() / 1000 - detection.lastWindowAt)) : null;
 
   return (
@@ -149,20 +145,16 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
           </div>
           <div className="det-kpis">
             <div className="det-kpi">
-              <span className="det-kpi__value">{attacks ? `${stats.detected}/${attacks}` : '—'}</span>
-              <span className="det-kpi__label">attaques détectées {attacks ? `(${formatPercent(ratio(stats.detected, attacks))})` : ''}</span>
+              <span className="det-kpi__value">{stats.alerts}</span>
+              <span className="det-kpi__label">flux détectés comme attaque</span>
             </div>
             <div className="det-kpi">
-              <span className="det-kpi__value">{stats.falseAlarms}</span>
-              <span className="det-kpi__label">fausses alertes {benign ? `(${formatPercent(ratio(stats.falseAlarms, benign))} du bénin)` : ''}</span>
+              <span className="det-kpi__value">{stats.missed}</span>
+              <span className="det-kpi__label">flux d'attaque manqués</span>
             </div>
             <div className="det-kpi">
               <span className="det-kpi__value">{stats.flows}</span>
               <span className="det-kpi__label">flux analysés</span>
-            </div>
-            <div className="det-kpi">
-              <span className="det-kpi__value">{stats.alerts}</span>
-              <span className="det-kpi__label">alertes levées</span>
             </div>
           </div>
           {detection.byAttack?.length > 0 && (
@@ -176,8 +168,8 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
             </ul>
           )}
           <p className="field__hint">
-            Vérité terrain : les attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets (source, cible, moment). Lancez-en une
-            pour voir la sonde réagir.
+            « Manqué » n'est possible que pour les attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets : le moteur ne connaît
+            pas celles tapées dans un terminal. Le taux de fausses alertes se lit dans le rapport du modèle (🧠 IDS).
           </p>
         </section>
       )}
@@ -196,7 +188,7 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
                     <span className="traffic-list__dest"> {PROTOCOLS[ev.protocol] ?? ev.protocol}{ev.dstPort ? ` :${ev.dstPort}` : ''}</span>
                   </span>
                   <span className="det-event__meta">
-                    {clock(ev.time)} · modèle : {ev.predicted} ({formatPercent(ev.confidence)}) · réel : {ev.truth}
+                    {clock(ev.time)} · modèle : {ev.predicted} ({formatPercent(ev.confidence)}){ev.truth !== 'BENIGN' ? ` · scénario : ${ev.truth}` : ''}
                   </span>
                 </li>
               );

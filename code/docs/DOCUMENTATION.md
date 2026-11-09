@@ -224,6 +224,9 @@ vitesse de chaque attaque et l'intensité du bénin. On vérifie ainsi que le mo
 
 **Durées par défaut** : bénin seul 30 s au début, 10 s entre attaques, 20 s à la fin ; attaque limitée à 60 s.
 
+Une attaque dont l'outil échoue (service absent sur la cible, par exemple) déclenche un avertissement pendant la
+génération : ses flux ne représentent pas l'attaque annoncée.
+
 **Sortie** : `backend/data/datasets/<id>/` avec `flows.csv`, `capture.pcap`, `meta.json` (paramètres,
 fenêtres, décompte, topologie), téléchargeables depuis l'interface.
 
@@ -283,13 +286,17 @@ l'attaque la plus volumineuse et peut masquer une attaque ratée.
 1. `tcpdump` tourne sur la sonde et écrit un fichier par fenêtre de 5 s ;
 2. chaque fenêtre terminée passe dans un conteneur CICFlowMeter permanent ;
 3. le modèle classe chaque flux ;
-4. chaque verdict est comparé à la vérité terrain : les attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets
-   (source, cible, début, fin), avec la règle d'étiquetage des datasets.
+4. tout flux classé `ATTACK` est affiché comme **attaque détectée**, que le moteur connaisse l'attaque ou non ;
+5. la vérité terrain (attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets : source, cible, début, fin) sert seulement à
+   repérer les flux d'attaque que le modèle a **manqués**, et à donner le score par attaque.
 
 L'agent bénin de la source est suspendu pendant son attaque, comme dans un dataset, puis relancé à la fin : sans
 cela, ses sessions seraient comptées comme des attaques manquées.
 
 Le modèle ne reconnaît que ce qu'il a appris : le panneau signale une attaque absente de l'entraînement.
+
+Une attaque tapée dans un terminal apparaît donc normalement si elle est repérée, mais ne peut pas être comptée comme
+manquée. Le taux de fausses alertes se mesure dans le rapport d'entraînement, sur des données étiquetées.
 
 Le bilan compte des **flux**, pas des attaques : une attaque de 200 flux dont 190 sont reconnus donne 190/200.
 Les équipements impliqués dans une alerte récente sont entourés de rouge.

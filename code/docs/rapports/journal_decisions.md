@@ -112,6 +112,8 @@ Problèmes de la démo : attaques manquées sans explication, importance des fea
 | 70 | Importance des features **expliquée** dans le rapport et la documentation (Gini, sur l'entraînement). | Question posée en réunion. | `ModelDialog.jsx`, `DOCUMENTATION.md` §8 | ✅ |
 | 72 | Recommander un dataset couvrant **toutes les attaques montrées**, et vérifier le score par attaque avant une démo. | Un modèle supervisé ne reconnaît que ce qu'il a appris. | `code/docs/rapports/rapport_ids.md` | ✅ |
 | 71 | L'arrêt du réseau tolère un conteneur déjà en cours de suppression. | Il renvoyait une erreur 500 si un scénario se terminait au même moment. | `deployer.py` | ✅ |
+| 73 | Une alerte sans attaque connue devient **« Alerte non vérifiée »** ; une attaque de dataset en échec déclenche un avertissement. | Le moteur ne connaît pas les attaques manuelles (voir `rapport_scan_manuel.md`) ; le dataset Simple contenait des forces brutes échouées sans alerte. | `DetectionPanel.jsx`, `datasets.py` | ✅ |
+| 74 | **Le verdict du modèle prime** : tout flux classé `ATTACK` est affiché comme attaque détectée. La vérité terrain ne sert qu'à signaler les attaques manquées ; les fausses alertes se lisent dans le rapport d'entraînement. Remplace le n° 73 pour le libellé. | Reléguer une détection en « fausse alerte » ou « non vérifiée » contredisait le modèle sans information supplémentaire : le moteur ne peut pas savoir si une attaque manuelle a eu lieu. | `detection.py`, `DetectionPanel.jsx` | ✅ |
 
 ## 6. Questions encore ouvertes
 

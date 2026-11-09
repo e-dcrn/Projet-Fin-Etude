@@ -147,6 +147,15 @@ def label_dataset_csv(csv_text: str, runs: List[AttackRun]):
     return relabel_csv(csv_text, label_of)
 
 
+def failure_warning(run: AttackRun) -> Optional[str]:
+    """Message si l'outil d'attaque a échoué : ses flux ne représentent alors pas l'attaque annoncée."""
+    if run.stopped_at_limit or run.exit_code in (None, 0):
+        return None  # terminée normalement, ou arrêtée par la durée maximale du programme
+    detail = run.output.strip().splitlines()[-1] if run.output.strip() else "aucune sortie"
+    return (f"{run.name} ({run.source_name} → {run.target}) a échoué (code {run.exit_code}) : {detail[:160]}. "
+            "Ses flux ne représentent pas cette attaque : vérifiez que la cible ouvre le service visé.")
+
+
 def topology_info(raw: Optional[dict]) -> dict:
     """
     Topologie sur laquelle un dataset est généré, telle que décrite par l'interface :
@@ -340,6 +349,9 @@ class DatasetBuilder:
                     f"— {run.source_name} → {run.target}"
                 )
                 self._play(plan, run, job, paused=run.source in running_agents)
+                warning = failure_warning(run)
+                if warning:
+                    job.warn(tag + warning)
 
             step(f"Trafic bénin final ({plan.cooldown} s)")
             job.sleep(plan.cooldown)
