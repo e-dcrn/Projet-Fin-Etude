@@ -104,7 +104,7 @@
   \begin{itemize}\espacement
     \item \textbf{Aucun modèle préentraîné :} il est entraîné sur les datasets générés dans le lab.
     \item \textbf{Entrée :} des flux décrits par environ 80 features CICFlowMeter.
-    \item \textbf{Réglages :} 100 arbres par défaut, classes binaires ou multiclasses, \texttt{class\_weight="balanced"}.
+    \item \textbf{Réglages :} 100 arbres par défaut, classes binaires, \texttt{class\_weight="balanced"}.
     \item \textbf{Features retirées :} identifiants, adresses IP, ports. Sinon le modèle apprendrait « PC-1 attaque » plutôt qu'un comportement.
     \item \textbf{Test :} sur des variantes séparées (autres machines, vitesses, intensité du bénin). Pas de découpage aléatoire, qui gonflerait les scores.
   \end{itemize}
@@ -120,7 +120,6 @@
         \begin{itemize}
           \item La méthode : scénario, capture, CICFlowMeter, étiquetage connu d'avance.
           \item L'\textbf{image CICFlowMeter conteneurisée}, utilisée telle quelle.
-          \item Des noms de classes proches des jeux CIC.
         \end{itemize}
       \end{block}
     \end{column}
@@ -137,28 +136,6 @@
   \vfill
   Mêmes colonnes que ConCap et CIC-IDS : \textbf{les données restent comparables}.
   \note{Deux scénarios ConCap restent fournis dans code/concap, en option, pour produire des datasets hors du lab. On ne recode pas ConCap : on reprend sa méthode dans un outil qui répond à un autre besoin.}
-\end{frame}
-
-\begin{frame}{Les attaques disponibles : nmap et hydra}
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\linewidth}{@{}Xp{.14\linewidth}p{.22\linewidth}@{}}
-    \toprule
-    \textbf{Scénario} & \textbf{Outil} & \textbf{Classe} \\
-    \midrule
-    Balayage de découverte & nmap \texttt{-sn} & ping-sweep \\
-    Scan de ports (connect, 200 ports) & nmap \texttt{-sT} & port-scan \\
-    Scan furtif (SYN, tous les ports) & nmap \texttt{-sS} & syn-scan \\
-    Identification des services & nmap \texttt{-sV} & service-detection \\
-    Scan approfondi & nmap \texttt{-A} & aggressive-scan \\
-    Force brute SSH & hydra & ssh-patator \\
-    Force brute FTP & hydra & ftp-patator \\
-    \bottomrule
-  \end{tabularx}
-  \vfill
-  \normalsize
-  Quatre vitesses, depuis n'importe quel équipement. Couverture limitée à la \textbf{reconnaissance} et à la \textbf{force brute} : pas de DoS, ni d'attaque web, ni d'exploitation.
-  \note{Ce sont les attaques que le modèle apprend à reconnaître, à ne pas confondre avec les attaques contre le modèle, qui restent à faire. nmap de -T2 à -T5, hydra de 1 à 16 connexions parallèles.}
 \end{frame}
 
 \begin{frame}{Pourquoi ne pas utiliser ConCap tel quel ?}
@@ -184,6 +161,28 @@
   \note{Sources : README et runbook k3s du dépôt officiel de ConCap, consultés par Hugo le 6 novembre 2026 (voir GUIDE.md, section 7). La sonde ne voit que le switch qu'elle surveille : ne pas dire qu'elle a une vue globale du réseau.}
 \end{frame}
 
+\begin{frame}{Les attaques disponibles : nmap et hydra}
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}Xp{.14\linewidth}p{.22\linewidth}@{}}
+    \toprule
+    \textbf{Scénario} & \textbf{Outil} & \textbf{Classe} \\
+    \midrule
+    Balayage de découverte & nmap \texttt{-sn} & ping-sweep \\
+    Scan de ports (connect, 200 ports) & nmap \texttt{-sT} & port-scan \\
+    Scan furtif (SYN, tous les ports) & nmap \texttt{-sS} & syn-scan \\
+    Identification des services & nmap \texttt{-sV} & service-detection \\
+    Scan approfondi & nmap \texttt{-A} & aggressive-scan \\
+    Force brute SSH & hydra & ssh-patator \\
+    Force brute FTP & hydra & ftp-patator \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  \normalsize
+  Quatre vitesses, depuis n'importe quel équipement. Couverture limitée à la \textbf{reconnaissance} et à la \textbf{force brute} : pas de DoS, ni d'attaque web, ni d'exploitation.
+  \note{Ce sont les attaques que le modèle apprend à reconnaître, à ne pas confondre avec les attaques contre le modèle, qui restent à faire. nmap de -T2 à -T5, hydra de 1 à 16 connexions parallèles.}
+\end{frame}
+
 \begin{frame}{Pourquoi entraîner plutôt que prendre un modèle préentraîné ?}
   \begin{enumerate}\espacement
     \item \textbf{Il faudrait quand même nos données.} Pour l'adapter à notre réseau, la génération de datasets reste nécessaire.
@@ -192,9 +191,6 @@
     \item \textbf{Le fine-tuning s'applique mal à un random forest :} pas de poids à réajuster, les anciens arbres continuent de voter.
     \item \textbf{Le sujet demande la maîtrise du modèle.} L'évasion s'appuie sur ce qu'il a appris, l'empoisonnement sur ses données.
   \end{enumerate}
-  \vfill
-  \textbf{Piste :} un random forest entraîné sur CIC-IDS2017, testé sur notre lab, comme point de comparaison externe.
-  \note{La piste CIC-IDS2017 suppose de vérifier que les colonnes correspondent. Quel que soit le résultat, il est utile : s'il s'effondre, le choix d'entraîner localement est chiffré ; s'il tient, on a une seconde cible.}
 \end{frame}
 
 \begin{frame}{Construire un dataset : qui fait quoi ?}
@@ -213,9 +209,6 @@
     Capture & tcpdump sur la sonde & enregistre un pcap unique, depuis le port miroir \\
     \bottomrule
   \end{tabularx}
-  \vfill
-  \normalsize
-  L'agent partage la pile réseau de l'émetteur : pour la sonde, c'est bien le PC qui parle.
   \note{Le trafic bénin contient parfois une unique erreur de mot de passe (une connexion sur 20 en SSH, FTP et MySQL), pour que le modèle ne confonde pas une erreur isolée avec une force brute. La navigation web domine les sessions.}
 \end{frame}
 
@@ -259,18 +252,6 @@
     \item L'entraînement doit voir les flux \textbf{de la même façon}, sinon le modèle ne les reconnaît pas.
     \item Limite : une conversation longue est coupée (SSH de 12 s $\approx$ 3 flux).
   \end{itemize}
-  \vspace{.3em}
-
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\linewidth}{@{}p{.2\linewidth}XX@{}}
-    \toprule
-    \textbf{À ne pas confondre} & \textbf{Fenêtre de 5 s} & \textbf{Fenêtre d'attaque} \\
-    \midrule
-    Durée & fixe & celle de l'attaque, $-1$ s et $+2$ s de marge \\
-    Rôle & découper les flux & attribuer l'étiquette \\
-    \bottomrule
-  \end{tabularx}
   \note{Règle d'étiquetage : un flux reçoit le nom de l'attaque s'il va de la source vers la cible pendant la fenêtre d'attaque, sinon BENIGN. Exemple qui justifie le découpage : sans lui, une minute de pings entre deux machines formerait un seul flux à l'entraînement, alors qu'en détection ce serait des flux de quelques secondes.}
 \end{frame}
 
@@ -290,7 +271,7 @@
         Bénin entre deux attaques & 10 s \\
         Bénin seul à la fin & 20 s \\
         Durée maximale d'une attaque & 60 s \\
-        Répétitions par ligne (max.\ 10) & 2 \\
+        Répétitions par attaque & 2 \\
         Variantes de test & 2 \\
         \bottomrule
       \end{tabular}
@@ -375,22 +356,6 @@
     \bottomrule
   \end{tabularx}
   \note{KitNET travaille sur les paquets : reprendre TrafficManipulator tel quel demande un pipeline supplémentaire, mais son idée de modifier les timings s'applique à nos flux. Attention : Han et Sharon ne visent pas directement des flux CICFlowMeter.}
-\end{frame}
-
-\begin{frame}{Notre positionnement : une preuve de concept mesurée}
-  \textbf{On ne construit pas le meilleur IDS :} le sujet demande de \textit{caractériser le réalisme} des scénarios d'attaque.
-  \vspace{.7em}
-
-  \textbf{Quatre mesures pour chaque attaque :}
-  \begin{enumerate}\espacement
-    \item \textbf{Détection} avant et après l'attaque.
-    \item \textbf{Efficacité conservée :} hydra trouve-t-il encore le mot de passe, nmap les ports ?
-    \item \textbf{Coût} pour l'attaquant : temps perdu, trafic ajouté.
-    \item \textbf{Hypothèses :} ce que l'attaquant doit savoir ou contrôler (boîte blanche ou noire, accès aux données d'entraînement).
-  \end{enumerate}
-  \vfill
-  \textbf{Limite assumée :} une évasion réussie ici ne prouve pas qu'elle marcherait telle quelle sur un IDS de production.
-  \note{Le point 4 est décisif pour l'empoisonnement : plusieurs articles reposent sur des hypothèses fortes, comme un contrôleur compromis (Das).}
 \end{frame}
 
 \begin{frame}{Prochaines étapes}
