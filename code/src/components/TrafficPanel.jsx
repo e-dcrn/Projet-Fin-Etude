@@ -1,23 +1,19 @@
 import { useMemo, useState } from 'react';
-import { benignTargetsForDests, reachableDevices, trafficSources } from '../utils/trafficTargets.js';
+import { availableBenignKinds, benignTargetsForDests, reachableDevices, trafficSources } from '../utils/trafficTargets.js';
 
-// Types de trafic bénin (cases à cocher) → `kinds` envoyé à l'agent (groupes : voir
-// KIND_GROUPS dans traffic_agent.py).
-const KINDS = [
-  { id: 'icmp', label: 'Ping (ICMP)' },
-  { id: 'web', label: 'Web (HTTP, HTTPS)' },
-  { id: 'service', label: 'Services (SSH, FTP, SMTP, MySQL, DNS…)' },
-];
+// Types de trafic bénin : une case par service ouvert chez les destinataires
+// (voir availableBenignKinds), identifiants de traffic_agent.py.
+const WEB = ['http', 'https'];
+const SERVICES = ['ssh', 'ftp', 'smtp', 'mysql', 'telnet', 'dns', 'tcp'];
 
-// Presets : combinaisons prêtes à l'emploi (types + fréquence).
+// Presets : combinaisons prêtes à l'emploi (types + fréquence). Seuls les types
+// disponibles chez les destinataires sont effectivement cochés.
 const PRESETS = [
-  { id: 'web', label: 'Navigation web', kinds: { web: true }, profile: 'moderate' },
-  { id: 'ping', label: 'Pings réseau', kinds: { icmp: true }, profile: 'steady' },
-  { id: 'services', label: 'Connexions services', kinds: { service: true }, profile: 'slow' },
-  { id: 'mixte', label: 'Mixte intense', kinds: { icmp: true, web: true, service: true }, profile: 'intense' },
+  { id: 'web', label: 'Navigation web', kinds: WEB, profile: 'moderate' },
+  { id: 'ping', label: 'Pings réseau', kinds: ['icmp'], profile: 'steady' },
+  { id: 'services', label: 'Connexions services', kinds: SERVICES, profile: 'slow' },
+  { id: 'mixte', label: 'Mixte intense', kinds: ['icmp', ...WEB, ...SERVICES], profile: 'intense' },
 ];
-
-const NO_KINDS = { icmp: false, web: false, service: false };
 
 /** Liste de cases à cocher (émetteurs / destinataires), avec « tous / aucun ». */
 function CheckList({ label, items, off, onToggle, onAll, onNone, empty }) {
@@ -49,7 +45,7 @@ function CheckList({ label, items, off, onToggle, onAll, onNone, empty }) {
 
 /**
  * Panneau de génération de trafic de fond « bénin » : on choisit les types
- * (ping / web / services), les émetteurs et les destinataires par cases à cocher,
+ * (ping et un par service ouvert chez les destinataires), les émetteurs et les destinataires par cases à cocher,
  * ainsi que la fréquence. Le trafic « normal » de référence pour la sonde IDS.
  * Distinct des scénarios d'audit (voir ScenarioPanel).
  */
@@ -59,7 +55,7 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
 
   // Sélections stockées « à l'envers » (ids DÉcochés) : par défaut tout est coché,
   // et un nouvel équipement est coché d'office.
-  const [kinds, setKinds] = useState({ icmp: true, web: false, service: false });
+  const [kinds, setKinds] = useState(() => new Set(['icmp'])); // types cochés
   const [profile, setProfile] = useState('moderate');
   const [emittersOff, setEmittersOff] = useState(() => new Set());
   const [destsOff, setDestsOff] = useState(() => new Set());
@@ -88,7 +84,9 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
 
   const selectedEmitters = emitterList.filter((e) => !emittersOff.has(e.id));
   const selectedDestIds = destList.filter((d) => !destsOff.has(d.id)).map((d) => d.id);
-  const kindsArr = KINDS.map((k) => k.id).filter((id) => kinds[id]);
+  // Types proposés : seulement ceux des services ouverts chez les destinataires cochés.
+  const kindList = availableBenignKinds(nodes, edges, selectedDestIds);
+  const kindsArr = kindList.map((k) => k.id).filter((id) => kinds.has(id));
 
   const destLabel =
     selectedDestIds.length === destList.length ? 'tous'
@@ -96,7 +94,7 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
         : `${selectedDestIds.length} cibles`;
 
   const applyPreset = (preset) => {
-    setKinds({ ...NO_KINDS, ...preset.kinds });
+    setKinds(new Set(preset.kinds));
     setProfile(preset.profile);
   };
 
@@ -143,19 +141,19 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
         </div>
 
         <div className="traffic-field">
-          <span className="field__label">Type de trafic</span>
-          <div className="check-row">
-            {KINDS.map((k) => (
-              <label key={k.id} className="check">
-                <input
-                  type="checkbox"
-                  checked={kinds[k.id]}
-                  onChange={() => setKinds((prev) => ({ ...prev, [k.id]: !prev[k.id] }))}
-                />
-                <span>{k.label}</span>
-              </label>
-            ))}
-          </div>
+          <span className="field__label">Type de trafic (services ouverts chez les destinataires)</span>
+          {kindList.length === 0 ? (
+            <p className="panel-hint panel-hint--tight">Cochez au moins un destinataire.</p>
+          ) : (
+            <div className="check-row">
+              {kindList.map((k) => (
+                <label key={k.id} className="check" title={`Vers : ${k.hosts.join(', ')}`}>
+                  <input type="checkbox" checked={kinds.has(k.id)} onChange={() => toggleOff(setKinds)(k.id)} />
+                  <span>{k.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <label className="field field--compact">
