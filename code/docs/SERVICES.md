@@ -471,8 +471,8 @@ haut :
 | Services | autre service (simulé) | ouverture de connexion, lecture de la bannière, fermeture |
 | Ping | **ICMP** | 1 à 4 pings ; taille 56 octets le plus souvent, parfois 100, 500 ou 1000 |
 
-Le **DNS** n'est utilisé que si l'un des destinataires a un service DNS et que le type « Services » est
-coché.
+Le **DNS** n'est utilisé que si l'un des destinataires a un service DNS et que le type « Services »
+(panneau Trafic) ou « DNS » (formulaire de dataset) est coché.
 
 **Poids des sessions** : quand un émetteur choisit sa prochaine action, la navigation web domine,
 comme sur un vrai réseau :
@@ -500,6 +500,10 @@ onglets, un transfert pendant la navigation).
 
 ### Pendant la génération d'un dataset
 
+- Le formulaire ne propose **que les types réellement disponibles** : `Ping (ICMP)` dès qu'il y a un
+  destinataire, puis une case par service ouvert dans la topologie (`HTTP`, `HTTPS`, `SSH`, `FTP`,
+  `SMTP`, `MySQL`, `Telnet`, `DNS`, `Autres ports TCP`). Avec un seul serveur qui n'ouvre que le port 80,
+  on n'a donc que `Ping (ICMP)` et `HTTP`. Le survol d'une case indique les équipements visés.
 - Le trafic bénin tourne pendant **toute** la durée du dataset, y compris pendant les attaques.
 - Pendant une attaque, l'agent bénin de la **machine d'attaque** est mis en pause : ainsi, tout flux de la
   source vers la cible pendant la fenêtre de l'attaque est bien de l'attaque, et l'étiquetage est exact.

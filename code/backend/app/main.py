@@ -148,7 +148,7 @@ class BenignRequest(BaseModel):
     node: str
     profile: str = "moderate"
     dest: str = "all"           # libellé des destinataires (affichage)
-    kinds: List[str] = []       # types de trafic : « icmp », « http », « service »
+    kinds: List[str] = []       # types de trafic : « icmp », un service (« http », « ssh »…) ou un groupe (« web », « service »)
     targets: List[Target] = []
 
 
@@ -255,7 +255,7 @@ class DatasetRequest(BaseModel):
     topology: DatasetTopology = DatasetTopology()  # réseau sur lequel le dataset est généré
     probe: str = ""                             # Sonde IDS : seul point de capture d'un dataset
     benign: List[DatasetBenign] = []
-    kinds: List[str] = []                       # types de trafic bénin (« icmp », « http », « service »)
+    kinds: List[str] = []                       # types de trafic bénin : « icmp » et un par service (« http », « ssh »…)
     profile: str = "moderate"
     attacks: List[DatasetAttack] = []
     warmup: int = Field(30, ge=0, le=600)       # trafic bénin seul avant la première attaque (s)

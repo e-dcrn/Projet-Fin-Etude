@@ -146,7 +146,7 @@ ouvert ou que ce qu'il a lancé tourne encore : 📡 Trafic (« actif »), ⚡ S
 
 1. **Point de capture** : toujours la Sonde IDS, ce n'est pas un choix. Ainsi, l'entraînement et la détection
    voient le trafic du même point du réseau. Sans Sonde IDS dans la topologie, aucun dataset n'est possible ;
-2. **Trafic bénin** : émetteurs, fréquence et types (ping, web, services) ;
+2. **Trafic bénin** : émetteurs, fréquence et types (le ping, puis une case par service ouvert dans la topologie) ;
 3. **Attaques** : ajouter une ou plusieurs lignes avec l'attaque (scan de ports, force brute SSH…), la source,
    la cible, la vitesse et le nombre de répétitions ;
 4. **Datasets de test** : laisser **2** variantes (valeur par défaut). Chaque variante rejoue le même programme
@@ -475,7 +475,7 @@ Bouton **🗂 Datasets** → **Nouveau dataset** (réseau démarré). On décrit
 
 - la **sonde** : l'équipement dont le trafic est capturé, comme un NIDS placé devant lui (par défaut le
   premier serveur). Seul le trafic qui le traverse finit dans le dataset ;
-- le **trafic bénin** : émetteurs, types (ping, web, services) et fréquence. Il tourne pendant toute la durée
+- le **trafic bénin** : émetteurs, types (le ping et un par service ouvert) et fréquence. Il tourne pendant toute la durée
   (voir [ce qu'il contient](#services-des-serveurs-et-trafic-bénin)) ;
 - les **attaques**, jouées l'une après l'autre : attaque, source, cible, vitesse (nmap `-T2` à `-T5`,
   hydra `-t 1` à `-t 16`) et nombre de répétitions ;

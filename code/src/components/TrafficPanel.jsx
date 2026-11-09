@@ -1,22 +1,23 @@
 import { useMemo, useState } from 'react';
 import { benignTargetsForDests, reachableDevices, trafficSources } from '../utils/trafficTargets.js';
 
-// Types de trafic bénin (cases à cocher) → `kinds` envoyé à l'agent.
+// Types de trafic bénin (cases à cocher) → `kinds` envoyé à l'agent (groupes : voir
+// KIND_GROUPS dans traffic_agent.py).
 const KINDS = [
   { id: 'icmp', label: 'Ping (ICMP)' },
-  { id: 'http', label: 'Web (HTTP, HTTPS)' },
+  { id: 'web', label: 'Web (HTTP, HTTPS)' },
   { id: 'service', label: 'Services (SSH, FTP, SMTP, MySQL, DNS…)' },
 ];
 
 // Presets : combinaisons prêtes à l'emploi (types + fréquence).
 const PRESETS = [
-  { id: 'web', label: 'Navigation web', kinds: { http: true }, profile: 'moderate' },
+  { id: 'web', label: 'Navigation web', kinds: { web: true }, profile: 'moderate' },
   { id: 'ping', label: 'Pings réseau', kinds: { icmp: true }, profile: 'steady' },
   { id: 'services', label: 'Connexions services', kinds: { service: true }, profile: 'slow' },
-  { id: 'mixte', label: 'Mixte intense', kinds: { icmp: true, http: true, service: true }, profile: 'intense' },
+  { id: 'mixte', label: 'Mixte intense', kinds: { icmp: true, web: true, service: true }, profile: 'intense' },
 ];
 
-const NO_KINDS = { icmp: false, http: false, service: false };
+const NO_KINDS = { icmp: false, web: false, service: false };
 
 /** Liste de cases à cocher (émetteurs / destinataires), avec « tous / aucun ». */
 function CheckList({ label, items, off, onToggle, onAll, onNone, empty }) {
@@ -58,7 +59,7 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
 
   // Sélections stockées « à l'envers » (ids DÉcochés) : par défaut tout est coché,
   // et un nouvel équipement est coché d'office.
-  const [kinds, setKinds] = useState({ icmp: true, http: false, service: false });
+  const [kinds, setKinds] = useState({ icmp: true, web: false, service: false });
   const [profile, setProfile] = useState('moderate');
   const [emittersOff, setEmittersOff] = useState(() => new Set());
   const [destsOff, setDestsOff] = useState(() => new Set());
