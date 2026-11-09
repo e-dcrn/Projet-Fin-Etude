@@ -14,11 +14,11 @@ Chaîne de détection, par fenêtres de WINDOW_SEC secondes :
   2. chaque fenêtre terminée est convertie en flux par un conteneur
      CICFlowMeter permanent (mêmes features que les datasets) ;
   3. le modèle classe chaque flux (bénin / attaque) ;
-  4. le verdict est comparé à la VÉRITÉ TERRAIN : les attaques lancées depuis
-     l'interface (scénarios d'audit, programmes de dataset) sont connues, avec
-     leur source, leur cible et leur fenêtre de temps (même règle que l'étiquetage
-     des datasets). On obtient ainsi, en conditions réelles, les attaques
-     détectées, manquées, et les fausses alertes.
+  4. tout flux classé ATTACK est une alerte, que l'attaque soit connue ou non
+     (un nmap tapé dans un terminal en est une comme une autre). La VÉRITÉ TERRAIN
+     (attaques lancées depuis l'interface : source, cible, fenêtre de temps) sert
+     seulement à repérer ce que le modèle a manqué. Le taux de fausses alertes se
+     mesure à l'entraînement, sur des données étiquetées.
 
 Limite connue : un flux à cheval sur deux fenêtres est vu en deux morceaux
 (features un peu différentes de celles d'un flux complet). Les flux courts
@@ -59,9 +59,9 @@ class DetectionError(Exception):
 
 
 def outcome_of(predicted_attack: bool, truly_attack: bool) -> str:
-    """Issue d'un verdict comparé à la vérité terrain."""
+    """Issue d'un flux : le verdict du modèle prime ; la vérité terrain ne révèle que les attaques manquées."""
     if predicted_attack:
-        return "detected" if truly_attack else "false-alarm"
+        return "alert"
     return "missed" if truly_attack else "benign"
 
 
@@ -81,7 +81,7 @@ class Session:
     running: bool = True
     error: Optional[str] = None
     stats: Dict[str, int] = field(default_factory=lambda: {
-        "flows": 0, "alerts": 0, "detected": 0, "missed": 0, "falseAlarms": 0, "benign": 0,
+        "flows": 0, "alerts": 0, "missed": 0, "benign": 0,
     })
     by_attack: Dict[str, Dict[str, int]] = field(default_factory=dict)  # flux détectés / manqués, par type d'attaque
     events: Deque[dict] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
@@ -186,14 +186,14 @@ class DetectionManager:
     @staticmethod
     def _shown_events(session: Session, limit: int = 100) -> List[dict]:
         """
-        Événements affichés, du plus récent au plus ancien. Les erreurs du modèle
-        (attaques manquées, fausses alertes) sont toujours gardées : un scan de
-        200 ports détecté ne doit pas faire disparaître la seule attaque manquée.
+        Événements affichés, du plus récent au plus ancien. Les attaques manquées
+        sont toujours gardées : un scan de 200 ports détecté ne doit pas faire
+        disparaître la seule attaque manquée.
         """
         events = list(reversed(session.events))
-        errors = [e for e in events if e["outcome"] != "detected"][:limit // 2]
-        detected = [e for e in events if e["outcome"] == "detected"][:limit - len(errors)]
-        return sorted(errors + detected, key=lambda e: e["time"] or 0, reverse=True)
+        missed = [e for e in events if e["outcome"] == "missed"][:limit // 2]
+        alerts = [e for e in events if e["outcome"] == "alert"][:limit - len(missed)]
+        return sorted(missed + alerts, key=lambda e: e["time"] or 0, reverse=True)
 
     # ------------------------------------------------------------------ boucle d'analyse
 
@@ -259,11 +259,10 @@ class DetectionManager:
             truth = next((r.subcategory for r in runs if r.matches(src, dst, moment)), BENIGN)
             outcome = outcome_of(label != BENIGN, truth != BENIGN)
             stats["flows"] += 1
-            stats["alerts"] += label != BENIGN
-            stats[{"detected": "detected", "missed": "missed", "false-alarm": "falseAlarms", "benign": "benign"}[outcome]] += 1
+            stats[{"alert": "alerts", "missed": "missed", "benign": "benign"}[outcome]] += 1
             if truth != BENIGN:
                 counters = session.by_attack.setdefault(truth, {"detected": 0, "missed": 0})
-                counters[outcome] += 1
+                counters["detected" if outcome == "alert" else "missed"] += 1
             if outcome != "benign":
                 session.events.append({
                     "time": moment, "src": src, "dst": dst, "dstPort": int(row.get("Dst Port", 0) or 0),

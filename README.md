@@ -73,7 +73,8 @@ Les boutons sont dans la barre d'outils. Un bouton reste jaune tant que ce qu'il
 4. **Détection** : **🛡 Détection** → sonde et modèle → **▶ Démarrer**.
 5. **Trafic bénin** : **📡 Trafic** → preset → **▶ Démarrer**. Les flux analysés augmentent, avec peu ou
    pas d'alertes.
-6. **Attaque** : **⚡ Scénarios** → source, attaque, cible (dans le segment surveillé) → **⚡ Lancer**. Le
-   bilan compte l'attaque détectée ou manquée, et les équipements impliqués sont entourés de rouge.
+6. **Attaque** : **⚡ Scénarios** → source, attaque, cible (dans le segment surveillé) → **⚡ Lancer**. Chaque
+   flux classé attaque s'affiche comme détecté, les flux manqués sont signalés, et les équipements impliqués sont
+   entourés de rouge.
 
 **■ Arrêter** supprime le réseau. Datasets et modèles restent sur le disque (`code/backend/data/`).

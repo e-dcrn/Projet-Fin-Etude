@@ -97,7 +97,7 @@ export const clearScenarios = () => request('/lab/scenarios', { method: 'DELETE'
 
 /**
  * État de la détection : { running, ids, model, startedAt, lastWindowAt, windowSec, error,
- * stats: { flows, alerts, detected, missed, falseAlarms, benign }, events: [...] }
+ * stats: { flows, alerts, missed, benign }, byAttack, events: [...] }
  */
 export const fetchDetection = () => request('/lab/detection');
 

@@ -6,7 +6,7 @@ import io
 import pytest
 
 from app.cicflowmeter import parse_timestamp
-from app.datasets import AttackRun, DatasetError, DatasetStore, label_dataset_csv
+from app.datasets import AttackRun, DatasetError, DatasetStore, failure_warning, label_dataset_csv
 
 # 2026-10-30 10:00:00 UTC
 T0 = 1793354400.0
@@ -127,3 +127,16 @@ def test_variant_changes_sources_speeds_and_benign_profile():
     assert [r.source for r in make_variant(plan, 2).runs] != [r.source for r in variant.runs]
     # Déterministe
     assert [(r.source, r.speed) for r in make_variant(plan, 1).runs] == [(r.source, r.speed) for r in variant.runs]
+
+
+def test_failed_attack_is_reported_but_not_a_time_limit():
+    run = _run()
+    assert failure_warning(run) is None  # pas encore jouée
+    run.exit_code, run.output = 0, "done"
+    assert failure_warning(run) is None
+    run.exit_code, run.stopped_at_limit = 137, True
+    assert failure_warning(run) is None  # arrêtée par la durée maximale
+    run.stopped_at_limit, run.exit_code = False, 255
+    run.output = "[DATA] attacking\n[ERROR] could not connect - Connection refused\n"
+    message = failure_warning(run)
+    assert "code 255" in message and "Connection refused" in message

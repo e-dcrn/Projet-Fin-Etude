@@ -1,4 +1,4 @@
-"""Tests de la détection en direct (app/detection.py) : verdicts comparés à la vérité terrain."""
+"""Tests de la détection en direct (app/detection.py) : alertes du modèle et attaques manquées."""
 
 import io
 import threading
@@ -27,9 +27,9 @@ def test_docker_time():
 
 
 def test_outcome_of():
-    assert outcome_of(True, True) == "detected"
+    assert outcome_of(True, True) == "alert"
     assert outcome_of(False, True) == "missed"
-    assert outcome_of(True, False) == "false-alarm"
+    assert outcome_of(True, False) == "alert"  # une attaque inconnue du moteur reste une alerte
     assert outcome_of(False, False) == "benign"
 
 
@@ -48,11 +48,11 @@ def test_classify_compares_verdicts_with_ground_truth():
     manager._known_attacks = lambda _session: [run]
 
     manager._classify(session, CSV)
-    # a : scan détecté ; b : flux du scan classé bénin (manqué) ; c : fausse alerte ; d : bénin.
-    assert session.stats == {"flows": 4, "alerts": 2, "detected": 1, "missed": 1, "falseAlarms": 1, "benign": 1}
+    # a : scan détecté ; b : flux du scan classé bénin (manqué) ; c : alerte hors attaque connue ; d : bénin.
+    assert session.stats == {"flows": 4, "alerts": 2, "missed": 1, "benign": 1}
     outcomes = sorted(e["outcome"] for e in session.events)
-    assert outcomes == ["detected", "false-alarm", "missed"]
-    detected = next(e for e in session.events if e["outcome"] == "detected")
+    assert outcomes == ["alert", "alert", "missed"]
+    detected = next(e for e in session.events if e["truth"] == "port-scan" and e["outcome"] == "alert")
     assert detected["truth"] == "port-scan" and detected["dstPort"] == 22
     assert session.by_attack == {"port-scan": {"detected": 1, "missed": 1}}
 
@@ -67,7 +67,7 @@ def test_shown_events_keep_model_errors_visible():
     session = Session(ids="ids-1", ids_name="IDS-1", interface="eth0", model_meta={}, bundle={})
     session.events.append({"time": T0, "outcome": "missed"})
     for i in range(200):
-        session.events.append({"time": T0 + 1 + i, "outcome": "detected"})
+        session.events.append({"time": T0 + 1 + i, "outcome": "alert"})
     shown = DetectionManager._shown_events(session)
     assert len(shown) == 100
     assert any(e["outcome"] == "missed" for e in shown)
@@ -78,10 +78,10 @@ def test_reset_clears_running_session_and_forgets_stopped_one():
     manager = DetectionManager.__new__(DetectionManager)
     manager._lock = threading.Lock()
     session = Session(ids="ids-1", ids_name="IDS-1", interface="eth0", model_meta={"id": "m", "name": "M"}, bundle={})
-    session.stats["detected"] = 5
-    session.events.append({"time": T0, "outcome": "detected"})
+    session.stats["alerts"] = 5
+    session.events.append({"time": T0, "outcome": "alert"})
     manager._session = session
     status = manager.reset()
-    assert status["running"] and status["stats"]["detected"] == 0 and status["events"] == []
+    assert status["running"] and status["stats"]["alerts"] == 0 and status["events"] == []
     session.running = False
     assert manager.reset() == {"running": False, "windowSec": 5}
