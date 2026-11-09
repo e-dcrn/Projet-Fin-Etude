@@ -181,7 +181,10 @@ class LabManager:
     def teardown(self) -> None:
         client = self.client
         for c in client.containers.list(all=True, filters={"label": self.label}):
-            c.remove(force=True)
+            try:
+                c.remove(force=True)
+            except DockerException as exc:  # déjà en cours de suppression (fin d'un scénario, par exemple)
+                log.info("Conteneur %s déjà supprimé : %s", c.short_id, exc)
         for n in client.networks.list(filters={"label": self.label}):
             n.remove()
 

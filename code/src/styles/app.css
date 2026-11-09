@@ -480,32 +480,6 @@ body { background: var(--bg); }
 /* Génération et visualisation du trafic =====================================
    ========================================================================== */
 
-/* Mode simulation : une boule par paquet réel, parcourant son chemin (SimulationLayer).
-   Couleur selon le protocole ; liseré blanc + léger halo pour bien les détacher. */
-.sim-packet { stroke: #fff; stroke-width: 1.2; pointer-events: none; filter: drop-shadow(0 0 2px rgba(15, 23, 42, .4)); }
-.sim-packet--tcp { fill: var(--primary); }
-.sim-packet--icmp { fill: #0d9488; }
-.sim-packet--udp { fill: #d97706; }
-.sim-packet--arp { fill: #9333ea; }
-.sim-packet--other { fill: #64748b; }
-.sim-layer { z-index: 6; }
-
-/* Légende des paquets, posée en haut à gauche du canvas */
-.sim-controls {
-  position: absolute; top: 12px; left: 12px; z-index: 7;
-  padding: 10px 12px; border-radius: var(--radius);
-  background: rgba(255, 255, 255, .95); border: 1px solid var(--border);
-  box-shadow: 0 2px 10px rgba(15, 23, 42, .12); font-size: 12px;
-}
-.sim-controls__head { margin-bottom: 8px; }
-.sim-legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--text-muted); }
-.sim-legend__item { display: inline-flex; align-items: center; gap: 4px; }
-.sim-dot { width: 9px; height: 9px; border-radius: 50%; }
-.sim-dot--tcp { background: var(--primary); }
-.sim-dot--icmp { background: #0d9488; }
-.sim-dot--udp { background: #d97706; }
-.sim-dot--arp { background: #9333ea; }
-
 .traffic-list__dest { color: var(--text-muted); font-size: 11px; }
 
 /* Panneau de contrôle du trafic (colonne de droite, à la place des propriétés) */
@@ -698,3 +672,5 @@ body { background: var(--bg); }
 .field--inline-row .field__input { width: 72px; }
 .model-report .metrics-table { margin-bottom: 4px; }
 .det-warning { margin: 0 0 12px; font-size: 12px; }
+
+.det-attacks { margin: 10px 0; padding-left: 16px; font-size: 12px; }

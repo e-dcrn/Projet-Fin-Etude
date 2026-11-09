@@ -18,7 +18,6 @@ import { useTraffic } from '../hooks/useTraffic.js';
 import { useDatasets } from '../hooks/useDatasets.js';
 import { useModels } from '../hooks/useModels.js';
 import { useDetection } from '../hooks/useDetection.js';
-import { useSimulation } from '../hooks/useSimulation.js';
 import { serializeTopology } from '../utils/serializeTopology.js';
 import { deserializeTopology } from '../utils/deserializeTopology.js';
 import { validateTopology } from '../utils/validators.js';
@@ -44,7 +43,7 @@ export default function TopologyEditor() {
   const dock = useDock();
   const { keepOnly, open: openTab } = dock;
 
-  // Génération et visualisation du trafic (actives seulement réseau allumé)
+  // Génération du trafic (active seulement réseau allumé)
   const labRunning = deployment.lab.status === 'running';
   const traffic = useTraffic(labRunning);
   useEffect(() => {
@@ -76,10 +75,6 @@ export default function TopologyEditor() {
     () => new Set(detection.running && detection.ids ? [detection.ids.node] : []),
     [detection.running, detection.ids],
   );
-
-  // Visualisation des paquets : chaque paquet réel capturé devient une boule
-  // animée le long de son chemin, en temps réel (voir useSimulation).
-  const { balls } = useSimulation(labRunning, topology.nodes, topology.edges);
 
   // Un équipement (ou un câble) supprimé de la topologie emporte son terminal (ou sa capture)
   useEffect(
@@ -197,8 +192,6 @@ export default function TopologyEditor() {
             onOpenTerminal={openTerminal}
             onOpenCapture={openCapture}
             capturedEdgeIds={capturedEdgeIds}
-            balls={balls}
-            simActive={labRunning}
             alertNodeIds={alertNodeIds}
             watchingNodeIds={watchingNodeIds}
           />

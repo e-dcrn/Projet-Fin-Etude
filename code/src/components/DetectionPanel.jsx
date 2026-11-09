@@ -165,6 +165,16 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
               <span className="det-kpi__label">alertes levées</span>
             </div>
           </div>
+          {detection.byAttack?.length > 0 && (
+            <ul className="det-attacks">
+              {detection.byAttack.map((a) => (
+                <li key={a.label}>
+                  <strong>{a.label}</strong> : {a.detected}/{a.detected + a.missed} flux détectés
+                  {modelMeta?.train?.attacks && !modelMeta.train.attacks[a.label] && ' (attaque absente de l\'entraînement)'}
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="field__hint">
             Vérité terrain : les attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets (source, cible, moment). Lancez-en une
             pour voir la sonde réagir.

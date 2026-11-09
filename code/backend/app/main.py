@@ -16,7 +16,6 @@ API HTTP du moteur de simulation.
   GET    /api/lab/scenarios/{id}/logs     résultat (sortie) d'un scénario
   POST   /api/lab/scenarios/stop          interrompt les scénarios en cours (?id=… pour un seul)
   DELETE /api/lab/scenarios               supprime les scénarios terminés
-  WS     /api/lab/simulation              flux des paquets du réseau en temps réel (voir simulation.py)
 
   GET    /api/datasets                    datasets sauvegardés (voir datasets.py) + génération en cours
   POST   /api/datasets                    lance la génération d'un dataset → { id } (tâche de fond)
@@ -65,9 +64,8 @@ from .settings import load_settings
 from .capture import CaptureSession
 from .sessions import Session, SessionError, SessionRegistry
 from .terminal import TerminalSession
-from .training import FILES as MODEL_FILES, MODELS, MODES, SPLITS, ModelStore, Trainer, TrainingError
+from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer, TrainingError
 from .traffic import BENIGN_PROFILES, TrafficError, TrafficManager, attack_catalog, speed_catalog
-from .simulation import SimulationCapture
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
 
@@ -331,7 +329,6 @@ class TrainingRequest(BaseModel):
     test: List[str] = []                        # datasets de test (split « dataset »)
     split: str = "dataset"                      # « dataset » ou « temporal »
     testFraction: float = Field(0.3, ge=0.1, le=0.5)  # part du jeu gardée pour le test (split « temporal »)
-    mode: str = "binary"                        # « binary » ou « multiclass »
     model: str = "random-forest"
     nEstimators: int = Field(100, ge=10, le=500)
     maxDepth: Optional[int] = Field(None, ge=2, le=100)
@@ -348,7 +345,7 @@ def list_models():
     return {
         "models": models.list(),
         "job": current.id if current else None,
-        "options": {"models": options(MODELS), "modes": options(MODES), "splits": options(SPLITS)},
+        "options": {"models": options(MODELS), "splits": options(SPLITS)},
     }
 
 
@@ -430,63 +427,6 @@ def delete_model(model_id: str):
     except TrainingError as exc:
         return error_response(404, str(exc))
     return {"ok": True}
-
-
-@app.websocket("/api/lab/simulation")
-async def lab_simulation(websocket: WebSocket):
-    """Diffuse chaque paquet du réseau (capture temps réel) pour l'animer dans l'interface."""
-    origin = websocket.headers.get("origin")
-    if origin is not None and not settings.origin_allowed(origin):
-        await websocket.close(code=1008)
-        return
-    await websocket.accept()
-
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
-    capture = SimulationCapture(lab)
-
-    def on_packet(event: dict) -> None:
-        if queue.qsize() < 4000:  # borne : sous un flot intense, on laisse tomber le surplus
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, event)
-            except RuntimeError:
-                pass
-
-    try:
-        await asyncio.to_thread(capture.start, on_packet)
-    except EngineUnavailable:
-        await websocket.send_json({"type": "error", "message": ENGINE_DOWN})
-        await websocket.close()
-        return
-
-    async def send_packets() -> None:
-        while True:
-            event = await queue.get()
-            await websocket.send_json({"type": "packet", **event})
-
-    async def watch_close() -> None:
-        while True:  # rien à recevoir : on attend juste la fermeture côté navigateur
-            message = await websocket.receive()
-            if message["type"] == "websocket.disconnect":
-                raise WebSocketDisconnect(message.get("code", 1000))
-
-    out = watch = None
-    try:
-        out = asyncio.ensure_future(send_packets())
-        watch = asyncio.ensure_future(watch_close())
-        await asyncio.wait({out, watch}, return_when=asyncio.FIRST_COMPLETED)
-    except (WebSocketDisconnect, RuntimeError, OSError):
-        pass
-    finally:
-        for task in (out, watch):
-            if task is not None:
-                task.cancel()
-        await asyncio.gather(*(t for t in (out, watch) if t), return_exceptions=True)
-        await asyncio.to_thread(capture.stop)
-        try:
-            await websocket.close()
-        except (RuntimeError, OSError):
-            pass
 
 
 @app.post("/api/deployments", status_code=202)

@@ -83,7 +83,7 @@ export const runScenario = (source, attack, target, speed = 'fast') =>
 /** Résultat (sortie) d'un scénario terminé ou en cours. */
 export const fetchScenarioLogs = (id) => request(`/lab/scenarios/${encodeURIComponent(id)}/logs`);
 
-/** URL de téléchargement du CSV des flux étiquetés d'un scénario (voir backend/app/flows.py). */
+/** URL de téléchargement du CSV des flux étiquetés d'un scénario (voir backend/app/traffic.py). */
 export const scenarioFlowsUrl = (id) => `${API_BASE_URL}/lab/scenarios/${encodeURIComponent(id)}/flows`;
 
 /** Supprime les scénarios terminés. */
@@ -110,8 +110,6 @@ export const stopDetection = () => request('/lab/detection', { method: 'DELETE' 
 /** Efface le bilan et les événements (la détection en cours continue, repartie de zéro). */
 export const resetDetection = () => request('/lab/detection/reset', { method: 'POST' });
 
-/** URL WebSocket du flux des paquets du réseau en temps réel (voir backend/app/simulation.py). */
-export const simulationUrl = () => websocketUrl('/lab/simulation');
 
 /**
  * Lance l'instanciation d'une topologie sérialisée (serializeTopology()).
@@ -166,10 +164,10 @@ export const datasetFileUrl = (id, name) => `${API_BASE_URL}/datasets/${encodeUR
 
 // --- Modèles ML-IDS (voir backend/app/training.py) -------------------------
 
-/** Modèles entraînés : { models: [meta…], job, options: { models, modes, splits } } */
+/** Modèles entraînés : { models: [meta…], job, options: { models, splits } } */
 export const fetchModels = () => request('/models');
 
-/** Lance l'entraînement d'un modèle (datasets, découpage, mode, hyperparamètres) → { id } */
+/** Lance l'entraînement d'un modèle (datasets, découpage, hyperparamètres) → { id } */
 export const startTraining = (spec) => request('/models', { method: 'POST', body: JSON.stringify(spec) });
 
 /** Suit un entraînement : mêmes événements qu'un déploiement ; `done` porte { model }. */
