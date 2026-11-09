@@ -57,7 +57,7 @@ def labels(actions):
 
 
 def test_actions_follow_the_checked_kinds():
-    assert labels(agent.build_actions(TARGETS, {"http"}, "pc-1")) == [
+    assert labels(agent.build_actions(TARGETS, {"web"}, "pc-1")) == [
         "http 10.0.20.10:80", "https 10.0.20.10:443"]
     assert labels(agent.build_actions(TARGETS, {"service"}, "pc-1")) == [
         "mysql 10.0.20.10:3306", "ssh 10.0.20.11:22"]  # le DNS n'est pas une session à part
@@ -65,8 +65,22 @@ def test_actions_follow_the_checked_kinds():
         "ping 10.0.10.11", "ping 10.0.20.10", "ping 10.0.20.11"]
 
 
+def test_one_kind_per_service_only_reaches_that_service():
+    assert labels(agent.build_actions(TARGETS, {"http"}, "pc-1")) == ["http 10.0.20.10:80"]
+    assert labels(agent.build_actions(TARGETS, {"ssh", "mysql"}, "pc-1")) == [
+        "mysql 10.0.20.10:3306", "ssh 10.0.20.11:22"]
+    # un type coché sans service ouvert correspondant ne produit rien
+    assert agent.build_actions(TARGETS, {"ftp"}, "pc-1") == []
+
+
+def test_unknown_tcp_ports_are_the_tcp_kind():
+    targets = [{"ip": "10.0.0.5", "name": "S", "services": [{"port": 110, "protocol": "tcp", "name": "pop3"}]}]
+    assert labels(agent.build_actions(targets, {"tcp"}, "pc")) == ["tcp 10.0.0.5:110"]
+    assert agent.build_actions(targets, {"http"}, "pc") == []
+
+
 def test_web_weighs_more_than_other_sessions():
-    weights = {label.split()[0]: w for w, label, _, _, _ in agent.build_actions(TARGETS, {"http", "service"}, "pc")}
+    weights = {label.split()[0]: w for w, label, _, _, _ in agent.build_actions(TARGETS, {"web", "service"}, "pc")}
     assert weights["http"] > weights["ssh"] and weights["https"] > weights["mysql"]
 
 

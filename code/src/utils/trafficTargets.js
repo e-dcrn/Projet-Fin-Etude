@@ -84,3 +84,53 @@ export function scenarioTargets(nodes, edges, needs) {
     .filter((t) => t.ip)
     .map((t) => ({ label: `${t.label} (${t.ip})`, value: t.ip }));
 }
+
+/** Type d'un service (même correspondance nom/port que traffic_agent.service_kind). */
+export function serviceKind(service) {
+  const name = (service.name || '').trim().toLowerCase();
+  const port = Number(service.port) || 0;
+  if (['http', 'https', 'ssh', 'ftp', 'telnet', 'smtp', 'dns', 'mysql'].includes(name)) return name;
+  if (name.startsWith('https') || [443, 8443].includes(port)) return 'https';
+  if (name.startsWith('http') || [80, 8080].includes(port)) return 'http';
+  const byPort = { 22: 'ssh', 21: 'ftp', 23: 'telnet', 25: 'smtp', 53: 'dns', 3306: 'mysql' };
+  return name ? null : (byPort[port] ?? null);
+}
+
+// Types de trafic bénin, dans l'ordre d'affichage (identifiants de traffic_agent.py).
+const BENIGN_KIND_LABELS = [
+  ['icmp', 'Ping (ICMP)'],
+  ['http', 'HTTP'],
+  ['https', 'HTTPS'],
+  ['ssh', 'SSH'],
+  ['ftp', 'FTP'],
+  ['smtp', 'SMTP'],
+  ['mysql', 'MySQL'],
+  ['telnet', 'Telnet'],
+  ['dns', 'DNS'],
+  ['tcp', 'Autres ports TCP'],
+];
+
+/**
+ * Types de trafic bénin réellement possibles vers `destIds` : le ping dès qu'il y a
+ * un destinataire, puis un type par service ouvert sur l'un d'eux (les services
+ * UDP autres que le DNS ne sont pas joués par l'agent). Chaque type porte la
+ * liste des équipements qui l'offrent : { id, label, hosts: [nom…] }.
+ */
+export function availableBenignKinds(nodes, edges, destIds) {
+  const wanted = new Set(destIds);
+  const hosts = new Map();
+  const add = (kind, name) => {
+    if (!hosts.has(kind)) hosts.set(kind, new Set());
+    hosts.get(kind).add(name);
+  };
+  for (const node of nodes) {
+    if (!wanted.has(node.id) || !deviceIp(edges, node.id)) continue;
+    add('icmp', nameOf(node));
+    for (const svc of servicesOf(node)) {
+      const kind = serviceKind(svc) ?? 'tcp';
+      if (svc.protocol === 'tcp' || kind === 'dns') add(kind, nameOf(node));
+    }
+  }
+  return BENIGN_KIND_LABELS.filter(([id]) => hosts.has(id))
+    .map(([id, label]) => ({ id, label, hosts: [...hosts.get(id)] }));
+}

@@ -357,13 +357,29 @@ WEIGHTS = {"http": 5, "https": 5, "ssh": 2, "ftp": 1.5, "smtp": 1.5, "mysql": 2,
            "dns": 1, "ping": 1.5, "other": 0.5}
 
 
+# Types de trafic qu'on peut cocher : un par service réel, plus le ping et les
+# ports TCP sans service connu (« tcp » : simple ouverture de connexion).
+SESSION_KINDS = ("http", "https", "ssh", "ftp", "smtp", "mysql", "telnet", "dns", "tcp")
+# Regroupements (panneau Trafic) : « web » = HTTP + HTTPS, « service » = tout le reste.
+KIND_GROUPS = {"web": {"http", "https"}, "service": {"ssh", "ftp", "smtp", "mysql", "telnet", "dns", "tcp"}}
+
+
+def expand_kinds(kinds):
+    """Types cochés → ensemble de types élémentaires (« icmp » et SESSION_KINDS)."""
+    out = set()
+    for kind in kinds:
+        out |= KIND_GROUPS.get(kind, {kind})
+    return out
+
+
 def build_actions(targets, kinds, me):
     """Liste pondérée des sessions possibles : (poids, libellé, ip, nom de la cible, fonction(user)).
 
-    - « icmp »    : ping de chaque cible ;
-    - « http »    : navigation sur chaque service web (HTTP et HTTPS) ;
-    - « service » : sessions sur les autres services (SSH, FTP, SMTP, MySQL, Telnet, DNS…).
-    Rien n'est implicite : un type non coché ne produit aucun trafic."""
+    `kinds` : types cochés, élémentaires (« icmp », « http », « ssh »…) ou regroupés
+    (« web », « service », voir KIND_GROUPS). Seuls les services ouverts de chaque
+    cible sont contactés, et rien n'est implicite : un type non coché ne produit
+    aucun trafic. Le DNS n'est pas une session à part (voir worker)."""
+    kinds = expand_kinds(kinds)
     actions = []
     for target in targets:
         ip = target.get("ip")
@@ -375,8 +391,7 @@ def build_actions(targets, kinds, me):
             if not port:
                 continue
             kind = service_kind(svc)
-            web = kind in ("http", "https")
-            if (web and "http" not in kinds) or (not web and "service" not in kinds):
+            if (kind or "tcp") not in kinds:
                 continue
             if kind == "dns":
                 continue  # le DNS est utilisé par les autres sessions (voir resolve) et seul
@@ -441,7 +456,7 @@ def main():
     targets = config.get("targets", [])
     me = host_slug(socket.gethostname()) or "poste"
     actions = build_actions(targets, kinds, me)
-    resolvers = dns_servers(targets) if "service" in kinds else []
+    resolvers = dns_servers(targets) if "dns" in expand_kinds(kinds) else []
 
     if not actions and not resolvers:
         log("aucune action à générer : agent de trafic inactif")

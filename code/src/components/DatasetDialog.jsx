@@ -1,14 +1,7 @@
 import { useMemo, useState } from 'react';
 import JobProgress from './JobProgress.jsx';
 import { formatDate, formatDuration } from '../utils/format.js';
-import { benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
-
-// Types de trafic bénin (mêmes identifiants que TrafficPanel / traffic_agent.py).
-const KINDS = [
-  { id: 'icmp', label: 'Ping (ICMP)' },
-  { id: 'http', label: 'Web (HTTP, HTTPS)' },
-  { id: 'service', label: 'Services (SSH, FTP, SMTP, MySQL, DNS…)' },
-];
+import { availableBenignKinds, benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
 
 // Durées du programme (secondes) : bornes identiques à DatasetRequest (backend/app/main.py).
 const DURATIONS = [
@@ -175,6 +168,8 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
   // Point de capture : toujours une Sonde IDS (tout le segment, comme la détection en direct).
   const probes = useMemo(() => idsProbes(nodes, onlineIds), [nodes, onlineIds]);
   const dests = useMemo(() => reachableDevices(nodes, edges), [nodes, edges]);
+  // Types de trafic bénin proposés : seulement ceux des services ouverts dans la topologie.
+  const kindList = useMemo(() => availableBenignKinds(nodes, edges, dests.map((d) => d.id)), [nodes, edges, dests]);
   const ipTargets = useMemo(() => scenarioTargets(nodes, edges, 'ip'), [nodes, edges]);
   const subnetTargets = useMemo(() => scenarioTargets(nodes, edges, 'subnet'), [nodes, edges]);
 
@@ -186,7 +181,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
   const defaultTarget = () => serverIp || ipTargets[0]?.value || '';
   const [name, setName] = useState('');
   const [emittersOff, setEmittersOff] = useState(() => new Set(sources.filter((s) => s.type !== 'pc').map((s) => s.id)));
-  const [kinds, setKinds] = useState({ icmp: true, http: true, service: true });
+  const [kindsOff, setKindsOff] = useState(() => new Set()); // types décochés (un type disponible est coché d'office)
   const [profile, setProfile] = useState('moderate');
   const [rows, setRows] = useState(() => {
     const pc = sources.find((s) => s.type === 'pc');
@@ -208,7 +203,14 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
     });
 
   const emitters = sources.filter((s) => !emittersOff.has(s.id));
-  const kindsArr = KINDS.map((k) => k.id).filter((id) => kinds[id]);
+  const kindsArr = kindList.map((k) => k.id).filter((id) => !kindsOff.has(id));
+  const toggleKind = (id) =>
+    setKindsOff((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const runCount = rows.reduce((n, r) => n + Number(r.repeat || 0), 0);
   // Pire cas : chaque attaque va jusqu'à sa durée maximale (+ ~30 s d'extraction des flux).
   const maxSeconds = (durations.warmup + runCount * durations.maxAttack + Math.max(runCount - 1, 0) * durations.gap
@@ -310,15 +312,18 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
           </label>
         </div>
         <div className="traffic-field">
-          <span className="field__label">Types</span>
+          <span className="field__label">Types (services ouverts dans la topologie)</span>
           <div className="check-row">
-            {KINDS.map((k) => (
-              <label key={k.id} className="check">
-                <input type="checkbox" checked={kinds[k.id]} onChange={() => setKinds((prev) => ({ ...prev, [k.id]: !prev[k.id] }))} />
+            {kindList.map((k) => (
+              <label key={k.id} className="check" title={`Vers : ${k.hosts.join(', ')}`}>
+                <input type="checkbox" checked={!kindsOff.has(k.id)} onChange={() => toggleKind(k.id)} />
                 <span>{k.label}</span>
               </label>
             ))}
           </div>
+          {kindList.some((k) => k.id === 'dns') && (
+            <p className="field__hint">Le DNS n'est pas une session à part : ce sont des résolutions de noms avant les autres sessions.</p>
+          )}
         </div>
 
         <h3 className="traffic-section__title">Attaques (jouées l'une après l'autre)</h3>

@@ -243,7 +243,7 @@ class TrafficManager:
     def start_benign(self, node_id: str, profile: str, targets: List[dict], dest: str = "all", kinds: Optional[List[str]] = None) -> dict:
         """(Re)lance l'agent de trafic bénin sur un PC. Un seul agent par équipement.
         `dest` est un libellé conservé pour l'affichage (vers qui animer le trafic) ;
-        `kinds` liste les types de trafic à générer (« icmp », « http », « service »)."""
+        `kinds` liste les types de trafic à générer (voir traffic_agent.build_actions)."""
         if profile not in BENIGN_PROFILES:
             raise TrafficError(f"Profil de trafic inconnu « {profile} ».")
         device = self.require_device(node_id, "Trafic de fond")

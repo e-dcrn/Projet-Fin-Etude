@@ -190,7 +190,7 @@ choisir le switch surveillé par la sonde (section **Surveillance**).
 **🗂 Datasets** → **Nouveau dataset** :
 
 - **Sonde** : la Sonde IDS (choix par défaut) ;
-- **Trafic bénin** : émetteurs, types (ping, web, services), fréquence ;
+- **Trafic bénin** : émetteurs, types (le ping, puis une case par service ouvert dans la topologie), fréquence ;
 - **Attaques** : ajouter des lignes (attaque, source, cible, vitesse, répétitions), par exemple un scan
   de ports et une force brute SSH depuis PC-1 vers Serveur-Fichiers ;
 - **Variantes de test** : laisser **2**.

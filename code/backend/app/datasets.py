@@ -40,6 +40,7 @@ from .jobs import Job
 from .settings import BACKEND_DIR
 from .store import RecordStore
 from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficError, TrafficManager
+from .traffic_agent import SESSION_KINDS
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ FILES = {
     "meta.json": "application/json",
 }
 
-BENIGN_KINDS = ("icmp", "http", "service")
+BENIGN_KINDS = ("icmp", *SESSION_KINDS)  # un type par service (voir traffic_agent.py)
 
 # Marges autour de la fenêtre d'une attaque (secondes) : l'horloge de l'hôte et
 # celle de la machine Docker, qui horodate les paquets, peuvent légèrement différer.
