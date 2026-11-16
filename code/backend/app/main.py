@@ -52,7 +52,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from docker.errors import DockerException
 from pydantic import BaseModel, Field
-from starlette.websockets import WebSocketDisconnect
 
 from .deployer import DeploymentError, EngineUnavailable, LabManager
 from .detection import DetectionError, DetectionManager
@@ -60,7 +59,7 @@ from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetError, Data
 from .jobs import Job, JobRegistry
 from .models import Service, Topology
 from .planner import TopologyError, build_plan
-from .settings import load_settings
+from .settings import LOCAL_ORIGIN_REGEX, load_settings, origin_allowed
 from .capture import CaptureSession
 from .sessions import Session, SessionError, SessionRegistry
 from .terminal import TerminalSession
@@ -96,8 +95,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="IDS Lab – moteur de simulation", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_origin_regex=settings.cors_origin_regex,
+    allow_origin_regex=LOCAL_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -178,38 +176,32 @@ def traffic_overview():
 
 @app.post("/api/lab/traffic/benign")
 def start_benign(req: BenignRequest):
-    lab.client  # vérifie la disponibilité du moteur
     targets = [t.model_dump() for t in req.targets]
     return traffic_guard(lambda: traffic.start_benign(req.node, req.profile, targets, req.dest, req.kinds))
 
 
 @app.delete("/api/lab/traffic/benign")
 def stop_benign(node: Optional[str] = None):
-    lab.client
     return {"stopped": traffic.stop_benign(node)}
 
 
 @app.post("/api/lab/scenarios", status_code=201)
 def run_scenario(req: ScenarioRequest):
-    lab.client
     return traffic_guard(lambda: traffic.run_scenario(req.source, req.attack, req.target, req.speed))
 
 
 @app.post("/api/lab/scenarios/stop")
 def stop_scenarios(id: Optional[str] = None):
-    lab.client
     return {"stopped": traffic.stop_scenarios(id)}
 
 
 @app.get("/api/lab/scenarios/{scenario_id}/logs")
 def scenario_logs(scenario_id: str):
-    lab.client
     return traffic_guard(lambda: {"logs": traffic.scenario_logs(scenario_id)})
 
 
 @app.delete("/api/lab/scenarios")
 def clear_scenarios():
-    lab.client
     return {"cleared": traffic.clear_scenarios()}
 
 
@@ -250,7 +242,6 @@ def list_datasets():
 
 @app.post("/api/datasets", status_code=202)
 def create_dataset(req: DatasetRequest):
-    lab.client
     if jobs.busy:
         return error_response(409, "Un déploiement est en cours.")
     if dataset_jobs.busy:
@@ -382,7 +373,6 @@ def detection_status():
 
 @app.post("/api/lab/detection", status_code=201)
 def start_detection(req: DetectionRequest):
-    lab.client
     try:
         return detection.start(req.ids, req.model)
     except DetectionError as exc:
@@ -468,7 +458,7 @@ async def open_session(websocket: WebSocket, factory: Callable[[], Session]) -> 
     # Les WebSockets échappent à CORS : sans ce contrôle, n'importe quelle page
     # ouverte dans le navigateur pourrait obtenir un shell sur les équipements.
     origin = websocket.headers.get("origin")
-    if origin is not None and not settings.origin_allowed(origin):
+    if origin is not None and not origin_allowed(origin):
         await websocket.close(code=1008)
         return None
 

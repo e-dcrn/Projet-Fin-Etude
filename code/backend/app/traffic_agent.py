@@ -57,10 +57,7 @@ import warnings
 from email.message import EmailMessage
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-try:
-    import telnetlib  # retiré de Python 3.13 ; présent (déprécié) en 3.12
-except ImportError:  # pragma: no cover
-    telnetlib = None
+import telnetlib  # noqa: E402 - déprécié mais présent en Python 3.12 (image de la boîte à outils)
 
 # Compte de démonstration des serveurs (voir service_listener.py).
 LAB_USER = "labuser"
@@ -279,8 +276,6 @@ class User:
     # ---------------------------------------------------------------- Telnet
 
     def telnet(self, ip, port):
-        if telnetlib is None:
-            return tcp_touch(ip, port)
         rng = self.rng
         with telnetlib.Telnet(ip, port, timeout=10) as t:
             t.read_until(b"login: ", 10)

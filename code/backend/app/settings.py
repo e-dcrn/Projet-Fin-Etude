@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -15,12 +14,13 @@ else:  # Python 3.9 / 3.10
     import tomli as tomllib
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_PATH = BACKEND_DIR / "config" / "devices.toml"
+CONFIG_PATH = BACKEND_DIR / "config" / "devices.toml"
+DATA_DIR = BACKEND_DIR / "data"  # datasets et modèles sauvegardés
 
 # Types d'équipements instanciés comme machines (les switches deviennent des réseaux)
 MACHINE_TYPES = ("pc", "server", "router", "ids")
 
-# Origines autorisées par défaut : l'interface servie en local, quel que soit son port
+# Origines autorisées : l'interface servie en local, quel que soit son port
 # (Vite passe à 5174, 5175… si 5173 est occupé).
 LOCAL_ORIGIN_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
@@ -38,61 +38,33 @@ class Settings:
     prefix: str
     helper_image: str
     capture: DeviceRuntime  # outil de capture du trafic (tcpdump), lancé à côté d'un équipement
-    traffic: DeviceRuntime  # boîte à outils de génération de trafic (agent bénin, scans), lancée à côté d'un équipement
+    traffic: DeviceRuntime  # boîte à outils de génération de trafic (agent bénin, attaques), lancée à côté d'un équipement
     devices: Dict[str, DeviceRuntime]
-    cors_origins: List[str]  # origines autorisées explicitement (IDSLAB_CORS_ORIGINS)
-    cors_origin_regex: Optional[str]  # sinon : toute origine locale
-
-    def origin_allowed(self, origin: str) -> bool:
-        """Même règle que CORS, appliquée aussi aux WebSockets (qui y échappent)."""
-        if origin in self.cors_origins:
-            return True
-        return bool(self.cors_origin_regex and re.fullmatch(self.cors_origin_regex, origin))
 
 
-def load_settings(path: Path | None = None) -> Settings:
-    path = Path(path or os.environ.get("IDSLAB_DEVICES_CONFIG", DEFAULT_CONFIG_PATH))
+def origin_allowed(origin: str) -> bool:
+    """Même règle que CORS, appliquée aussi aux WebSockets (qui y échappent)."""
+    return re.fullmatch(LOCAL_ORIGIN_REGEX, origin) is not None
+
+
+def load_settings(path: Path = CONFIG_PATH) -> Settings:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
-    lab = raw.get("lab", {})
-    defaults = raw.get("defaults", {})
-    devices = {}
-    for device_type in MACHINE_TYPES:
-        entry = raw.get("devices", {}).get(device_type)
-        if not entry or "image" not in entry:
-            raise ValueError(f"{path} : aucune image définie pour le type « {device_type} »")
-        devices[device_type] = DeviceRuntime(
+    defaults = raw["defaults"]
+
+    def runtime(entry: dict) -> DeviceRuntime:
+        return DeviceRuntime(
             image=entry["image"],
-            command=list(entry.get("command", defaults.get("command", ["sleep", "infinity"]))),
-            cap_add=list(entry.get("cap_add", defaults.get("cap_add", []))),
-            packages=list(entry.get("packages", defaults.get("packages", []))),
+            command=defaults["command"],
+            cap_add=defaults["cap_add"],
+            packages=entry.get("packages", []),
         )
 
-    capture = raw.get("capture", {})
-    capture_runtime = DeviceRuntime(
-        image=capture.get("image", "alpine:3.20"),
-        command=["sleep", "infinity"],
-        cap_add=["NET_ADMIN", "NET_RAW"],
-        packages=list(capture.get("packages", ["tcpdump"])),
-    )
-
-    traffic = raw.get("traffic", {})
-    traffic_runtime = DeviceRuntime(
-        image=traffic.get("image", "python:3.12-alpine"),
-        command=["sleep", "infinity"],  # remplacée au lancement (agent bénin ou commande d'audit)
-        # NET_RAW : scans en mode SYN (nmap -sS) et ping ; NET_ADMIN : réglages réseau éventuels.
-        cap_add=["NET_ADMIN", "NET_RAW"],
-        packages=list(traffic.get("packages", ["nmap", "curl"])),
-    )
-
-    origins = os.environ.get("IDSLAB_CORS_ORIGINS", "")
     return Settings(
-        prefix=lab.get("prefix", "idslab"),
-        helper_image=lab.get("helper_image", "alpine:3.20"),
-        capture=capture_runtime,
-        traffic=traffic_runtime,
-        devices=devices,
-        cors_origins=[o.strip() for o in origins.split(",") if o.strip()],
-        cors_origin_regex=None if origins.strip() else LOCAL_ORIGIN_REGEX,
+        prefix=raw["lab"]["prefix"],
+        helper_image=raw["lab"]["helper_image"],
+        capture=runtime(raw["capture"]),
+        traffic=runtime(raw["traffic"]),
+        devices={device_type: runtime(raw["devices"][device_type]) for device_type in MACHINE_TYPES},
     )

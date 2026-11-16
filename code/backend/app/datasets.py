@@ -24,7 +24,6 @@ capture.pcap, meta.json) : il survit à l'arrêt du réseau et reste traçable
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
@@ -36,14 +35,13 @@ from docker.errors import DockerException
 
 from .cicflowmeter import FLOW_WINDOW_SEC, parse_timestamp, relabel_csv, windowed_flows_csv
 from .jobs import Job
-from .settings import BACKEND_DIR
+from .settings import DATA_DIR
 from .store import RecordStore
 from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficError, TrafficManager
 from .traffic_agent import SESSION_KINDS
 
 log = logging.getLogger(__name__)
 
-DATA_DIR = Path(os.environ.get("IDSLAB_DATA_DIR", BACKEND_DIR / "data")) / "datasets"
 
 # Fichiers d'un dataset téléchargeables depuis l'interface → type MIME.
 FILES = {
@@ -196,7 +194,7 @@ def make_variant(plan: DatasetPlan, k: int) -> DatasetPlan:
 class DatasetStore(RecordStore):
     """Datasets sauvegardés sur disque : un dossier par dataset (voir store.py)."""
 
-    def __init__(self, root: Path = DATA_DIR):
+    def __init__(self, root: Path = DATA_DIR / "datasets"):
         super().__init__(root, FILES, DatasetError, "Dataset")
 
 

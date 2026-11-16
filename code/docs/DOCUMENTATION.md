@@ -397,9 +397,6 @@ docker network rm $(docker network ls -q --filter label=idslab.managed=true)
 docker image rm $(docker image ls -q 'idslab/*')
 ```
 
-Variables optionnelles : `VITE_API_BASE_URL` (`code/.env`), `IDSLAB_CORS_ORIGINS`, `IDSLAB_DEVICES_CONFIG`,
-`IDSLAB_DATA_DIR`, `IDSLAB_CICFLOWMETER_IMAGE`.
-
 ---
 
 ## 14. Limites connues

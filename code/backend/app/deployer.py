@@ -29,7 +29,7 @@ from .settings import DeviceRuntime, Settings
 
 log = logging.getLogger(__name__)
 
-# Docker ≥ 28 : nom de l'interface dans le container (eth0, eth1…)
+# Nom de l'interface dans le container (eth0, eth1…) : option reconnue par Docker ≥ 28
 IFNAME_OPT = "com.docker.network.endpoint.ifname"
 LISTENER_SOURCE = (Path(__file__).parent / "service_listener.py").read_text(encoding="utf-8")
 
@@ -233,7 +233,7 @@ class LabManager:
 
             for device in plan.devices:
                 reporter.step(self._configure_label(device))
-                self._configure_device(plan, device, containers[device.id])
+                self._configure_device(device, containers[device.id])
 
             for device in monitored:
                 net = plan.network(device.monitored_network)
@@ -359,10 +359,9 @@ class LabManager:
             details.append("services " + ", ".join(s.name or str(s.port) for s in device.services))
         return f"Configuration de {device.name} ({', '.join(details)})"
 
-    def _configure_device(self, plan: Plan, device: DevicePlan, container) -> None:
+    def _configure_device(self, device: DevicePlan, container) -> None:
         if not device.endpoints:
             return
-        self._ensure_interface_names(plan, device, container)
 
         # Seules les routes définies par l'utilisateur subsistent : la route par
         # défaut posée automatiquement est retirée (pas d'accès hors de la topologie).
@@ -372,39 +371,6 @@ class LabManager:
             iface = next(ep.interface for ep in device.endpoints if ep.network_id == device.monitored_network)
             lines.append(f"ip link set dev {shlex.quote(iface)} promisc on")
         self._exec(container, "\n".join(lines), device.name)
-
-    def _ensure_interface_names(self, plan: Plan, device: DevicePlan, container) -> None:
-        """
-        Vérifie que chaque interface porte le nom choisi par l'utilisateur.
-        Docker ≥ 28 l'applique via IFNAME_OPT ; sur une version plus ancienne,
-        on renomme à la main (identification par adresse MAC).
-        """
-        attached = container.attrs["NetworkSettings"]["Networks"]
-        expected = {}  # mac → nom voulu
-        for ep in device.endpoints:
-            mac = attached.get(self._resource_name(ep.network_id), {}).get("MacAddress", "").lower()
-            if mac:
-                expected[mac] = ep.interface
-
-        listing = self._exec(
-            container, 'for i in /sys/class/net/*; do echo "${i##*/} $(cat $i/address)"; done', device.name
-        )
-        current = {}  # mac → nom actuel
-        for line in listing.splitlines():
-            name, _, mac = line.partition(" ")
-            current[mac.lower()] = name
-
-        renames = [(current[mac], want) for mac, want in expected.items() if mac in current and current[mac] != want]
-        if not renames:
-            return
-        log.info("%s : renommage des interfaces %s", device.name, renames)
-        # Deux passes (via des noms temporaires) pour permettre les échanges eth0 ↔ eth1
-        script = ["set -e"]
-        for i, (old, _) in enumerate(renames):
-            script += [f"ip link set dev {old} down", f"ip link set dev {old} name tmpif{i}"]
-        for i, (_, new) in enumerate(renames):
-            script += [f"ip link set dev tmpif{i} name {new}", f"ip link set dev {new} up"]
-        self._exec(container, "\n".join(script), device.name)
 
     def _enable_hub_mode(self, client, net: NetworkPlan) -> None:
         """

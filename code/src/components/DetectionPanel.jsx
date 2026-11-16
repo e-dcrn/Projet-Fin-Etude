@@ -38,16 +38,7 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
 
   const chosenIds = ids || probes[0]?.id || '';
   const chosenModel = model || models[0]?.id || '';
-  // Le modèle utilisé (ou choisi) a-t-il été entraîné dans les mêmes conditions que cette détection ?
   const modelMeta = models.find((m) => m.id === (detection.running ? detection.model?.id : chosenModel));
-  const warnings = [];
-  if (modelMeta && modelMeta.flowWindowSec !== (detection.windowSec ?? 5)) {
-    warnings.push(
-      'Ce modèle a été entraîné sur des flux non découpés en fenêtres : les flux de la détection (pings, connexions '
-      + 'longues coupées toutes les 5 s) lui sont inconnus et risquent de lever de fausses alertes. Réentraînez-le sur un '
-      + 'dataset récent.',
-    );
-  }
   const name = (ip) => ipNames.get(ip) ?? ip;
 
   const guard = async (fn) => {
@@ -73,9 +64,6 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
       </header>
 
       {(error || detection.error) && <div className="traffic-error" role="alert">{error || detection.error}</div>}
-      {warnings.map((w) => (
-        <div key={w} className="issue-group issue-group--warning det-warning">{w}</div>
-      ))}
 
       <section className="traffic-section traffic-section--first">
         <p className="panel-hint panel-hint--tight">

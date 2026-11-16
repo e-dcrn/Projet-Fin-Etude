@@ -85,10 +85,7 @@ def ensure_lab_user():
     with _user_lock:
         if os.path.isdir(LAB_HOME) and os.path.exists(f"{LAB_HOME}/notes.txt"):
             return
-        if shutil.which("useradd"):
-            run(["useradd", "-m", "-s", "/bin/sh", LAB_USER])
-        else:  # busybox
-            run(["adduser", "-D", LAB_USER])
+        run(["useradd", "-m", "-s", "/bin/sh", LAB_USER])
         subprocess.run(["chpasswd"], input=f"{LAB_USER}:{LAB_PASSWORD}".encode(),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         rng = random.Random(7)
@@ -390,8 +387,8 @@ FLUSH PRIVILEGES;
 
 def start_mariadb(port, _hosts):
     """Vrai serveur MySQL (MariaDB) avec une base « boutique » et le compte labuser."""
-    mariadbd = shutil.which("mariadbd") or shutil.which("mysqld")
-    install = shutil.which("mariadb-install-db") or shutil.which("mysql_install_db")
+    mariadbd = shutil.which("mariadbd")
+    install = shutil.which("mariadb-install-db")
     if not mariadbd or not install:
         return False
     datadir = "/var/lib/mysql"
@@ -409,8 +406,7 @@ def start_mariadb(port, _hosts):
         if not wait_for_port(port, 60):
             log("MySQL (MariaDB) : le serveur n'a pas démarré")
             return
-        client = shutil.which("mariadb") or shutil.which("mysql")
-        ok = client and run([client, "--socket=/run/mysqld/mysqld.sock", "-uroot"], input=MYSQL_INIT.encode())
+        ok = run(["mariadb", "--socket=/run/mysqld/mysqld.sock", "-uroot"], input=MYSQL_INIT.encode())
         log(f"MySQL (MariaDB) réel en écoute sur {port} — base « boutique », compte {LAB_USER}"
             + ("" if ok else " (initialisation de la base incomplète)"))
 

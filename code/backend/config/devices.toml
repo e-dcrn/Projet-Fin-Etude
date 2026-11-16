@@ -74,5 +74,5 @@ packages = ["curl", "openssh", "vsftpd", "shadow", "busybox-extras", "opensmtpd"
 image = "alpine:3.20"
 
 [devices.ids]
-# Image provisoire : à remplacer par l'image de la sonde ML.
+# La sonde n'exécute rien elle-même : la capture et l'analyse tournent à côté (voir detection.py).
 image = "alpine:3.20"
