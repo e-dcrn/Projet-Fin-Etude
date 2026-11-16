@@ -8,8 +8,7 @@ import { nextSubnet, planIpam } from '../utils/ipam.js';
  * et expose toutes les actions métier.
  *
  * Les composants d'UI ne manipulent jamais directement setNodes/setEdges :
- * ils passent par ces actions. Le jour où l'état devra être synchronisé avec
- * un backend, c'est ici (et uniquement ici) qu'il faudra intervenir.
+ * ils passent par ces actions.
  *
  * Format d'un nœud React Flow :
  *   { id, type: 'device', position: {x, y},

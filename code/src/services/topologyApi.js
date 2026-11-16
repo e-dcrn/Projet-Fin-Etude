@@ -9,8 +9,8 @@
  * des WebSockets (terminalUrl / captureUrl, voir TerminalView et CaptureView).
  */
 
-// URL du backend, configurable via un fichier .env (VITE_API_BASE_URL=...)
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
+// URL du moteur de simulation (backend/), lancé sur le port 8000
+const API_BASE_URL = 'http://localhost:8000/api';
 
 /** Erreur renvoyée par le serveur : `messages` est une liste de textes affichables. */
 export class ApiError extends Error {

@@ -27,7 +27,7 @@ Réseau et vrais services → Trafic bénin et attaques → Datasets étiquetés
 
 ## Installation
 
-Prérequis : **Docker** démarré, **Python 3.9+**, **Node.js 20.19+ ou 22.12+**, Git, et Internet au
+Prérequis : **Docker 28 ou plus récent** démarré, **Python 3.9+**, **Node.js 20.19+ ou 22.12+**, Git, et Internet au
 premier déploiement. Sous Linux, l'utilisateur doit être dans le groupe `docker`.
 
 ```bash

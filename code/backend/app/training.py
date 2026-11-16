@@ -8,7 +8,7 @@ Une tâche de fond (voir jobs.py) :
      source, Flow ID, Timestamp) qui feraient apprendre un raccourci (« telle IP
      = attaque ») au lieu d'un comportement, on nettoie les inf / NaN fréquents
      dans les sorties de CICFlowMeter, on écarte les colonnes constantes ;
-  3. entraîne le modèle (random forest pour l'instant) ;
+  3. entraîne le modèle (voir MODELS) ;
   4. l'évalue sur des données qu'il n'a JAMAIS vues : un autre dataset (le plus
      sûr), ou la fin chronologique du jeu (découpage temporel). Un découpage
      aléatoire des lignes mettrait des flux quasi identiques des deux côtés et
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import io
 import logging
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -37,14 +36,14 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 
+from .cicflowmeter import FLOW_WINDOW_SEC
 from .datasets import DatasetError, DatasetStore
 from .jobs import Job
-from .settings import BACKEND_DIR
+from .settings import DATA_DIR
 from .store import RecordStore
 
 log = logging.getLogger(__name__)
 
-MODELS_DIR = Path(os.environ.get("IDSLAB_DATA_DIR", BACKEND_DIR / "data")) / "models"
 
 FILES = {
     "model.joblib": "application/octet-stream",
@@ -73,7 +72,7 @@ class TrainingError(Exception):
 class ModelStore(RecordStore):
     """Modèles entraînés sauvegardés sur disque : un dossier par modèle (voir store.py)."""
 
-    def __init__(self, root: Path = MODELS_DIR):
+    def __init__(self, root: Path = DATA_DIR / "models"):
         super().__init__(root, FILES, TrainingError, "Modèle")
 
 
@@ -88,7 +87,6 @@ class TrainingPlan:
     n_estimators: int
     max_depth: Optional[int]
     exclude_port: bool
-    flow_window: Optional[int] = None  # découpage des flux des datasets (s) ; None : non découpés
 
 
 # --------------------------------------------------------------------------- préparation des données
@@ -210,13 +208,6 @@ class Trainer:
             shared = {m["id"] for m in train} & {m["id"] for m in test}
             if shared:
                 raise TrainingError("Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
-        # Des flux découpés en fenêtres et des flux entiers n'ont pas les mêmes caractéristiques.
-        windows = {m.get("flowWindowSec") for m in train + test}
-        if len(windows) > 1:
-            raise TrainingError(
-                "Ces datasets n'ont pas été préparés de la même façon (flux découpés en fenêtres ou non) : "
-                "régénérez les plus anciens."
-            )
 
         default_name = MODELS[spec["model"]]
         return TrainingPlan(
@@ -225,7 +216,6 @@ class Trainer:
             model=spec["model"], n_estimators=int(spec["nEstimators"]),
             max_depth=int(spec["maxDepth"]) if spec.get("maxDepth") else None,
             exclude_port=bool(spec.get("excludePort", True)),
-            flow_window=next(iter(windows)),
         )
 
     def run(self, plan: TrainingPlan, job: Job) -> dict:
@@ -289,9 +279,8 @@ class Trainer:
         job.step("Sauvegarde du modèle")
         model_id = self.models.new_id()
         buffer = io.BytesIO()
-        # Tout ce qu'il faut pour classer de nouveaux flux (détection en direct, à venir).
-        joblib.dump({"model": model, "features": list(x_train.columns),
-                     "excludePort": plan.exclude_port, "flowWindowSec": plan.flow_window}, buffer)
+        # Tout ce qu'il faut pour classer de nouveaux flux (détection en direct, voir detection.py).
+        joblib.dump({"model": model, "features": list(x_train.columns), "excludePort": plan.exclude_port}, buffer)
         meta = {
             "id": model_id,
             "name": plan.name,
@@ -308,8 +297,7 @@ class Trainer:
             "test": {"datasets": [{"id": m["id"], "name": m["name"]} for m in (plan.test or plan.train)],
                      "rows": len(x_test), "counts": _counts(y_test)},
             "featureCount": len(x_train.columns),
-            # Conditions d'utilisation : la détection en direct les compare aux siennes.
-            "flowWindowSec": plan.flow_window,
+            "flowWindowSec": FLOW_WINDOW_SEC,  # flux découpés comme en détection (voir cicflowmeter.py)
             "topFeatures": [{"name": n, "importance": float(v)} for n, v in importances[:TOP_FEATURES]],
             "metrics": metrics,
         }

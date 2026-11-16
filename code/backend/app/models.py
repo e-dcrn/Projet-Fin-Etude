@@ -8,24 +8,20 @@ Schéma de la topologie envoyée par l'interface (format version 2).
   "links":    [{ "id", "node", "network", "interface", "port", "ip", "mask" }]
 }
 
-Ce module ne vérifie que la forme ; la cohérence réseau (sous-réseaux,
+`version` et `position` servent à l'interface (recharger un fichier) : le
+serveur les ignore. Ce module ne vérifie que la forme ; la cohérence réseau (sous-réseaux,
 passerelles, routes…) est vérifiée par planner.py.
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
 # Identifiants techniques générés par l'interface (pc-1, switch-2…)
 ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$"
-
-
-class Position(BaseModel):
-    x: float = 0
-    y: float = 0
 
 
 class Route(BaseModel):
@@ -51,14 +47,12 @@ class Node(BaseModel):
     id: str = Field(pattern=ID_PATTERN)
     type: Literal["pc", "server", "router", "ids"]
     name: str
-    position: Optional[Position] = None
     config: NodeConfig = NodeConfig()
 
 
 class Network(BaseModel):
     id: str = Field(pattern=ID_PATTERN)
     name: str
-    position: Optional[Position] = None
     # Réseau du switch (« 10.0.1.0/24 »), attribué par l'IPAM de l'interface.
     # Vide : déduit des adresses des interfaces reliées.
     subnet: str = ""
@@ -75,7 +69,6 @@ class Link(BaseModel):
 
 
 class Topology(BaseModel):
-    version: int = 2
     nodes: List[Node] = []
     networks: List[Network] = []
     links: List[Link] = []

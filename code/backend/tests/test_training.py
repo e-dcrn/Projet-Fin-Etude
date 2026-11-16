@@ -103,16 +103,6 @@ def test_train_on_one_dataset_and_test_on_another(stores):
     assert "Dst Port" not in saved["features"]
 
 
-def test_prepare_rejects_datasets_prepared_differently(stores, tmp_path):
-    datasets, models = stores
-    datasets.save("20261030-100003", {"id": "20261030-100003", "name": "fenêtré", "engine": "CICFlowMeter",
-                                      "flowWindowSec": 5}, {"flows.csv": _csv(seed=3)})
-    trainer = Trainer(datasets, models)
-    with pytest.raises(TrainingError):
-        trainer.prepare(_spec(test=["20261030-100003"]))
-    assert trainer.prepare(_spec(train=["20261030-100003"], split="temporal", test=[])).flow_window == 5
-
-
 def test_prepare_rejects_leaky_or_incomplete_requests(stores):
     trainer = Trainer(*stores)
     with pytest.raises(TrainingError):  # même dataset des deux côtés

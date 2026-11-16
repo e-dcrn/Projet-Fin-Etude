@@ -19,7 +19,6 @@ from __future__ import annotations
 import csv
 import io
 import logging
-import os
 import struct
 import tarfile
 from datetime import datetime, timezone
@@ -29,11 +28,8 @@ from docker.errors import DockerException
 
 log = logging.getLogger(__name__)
 
-# Image CICFlowMeter de ConCap (surchargeable). Contient l'outil `cfm`.
-CFM_IMAGE = os.environ.get(
-    "IDSLAB_CICFLOWMETER_IMAGE",
-    "ghcr.io/idlab-discover/concap/cicflowmeter:tools-1.0.0",
-)
+# Image CICFlowMeter de ConCap. Contient l'outil `cfm`.
+CFM_IMAGE = "ghcr.io/idlab-discover/concap/cicflowmeter:tools-1.0.0"
 
 # Durée des fenêtres d'analyse (secondes) : la détection en direct classe le trafic
 # fenêtre par fenêtre, et les datasets sont découpés de la même façon (voir

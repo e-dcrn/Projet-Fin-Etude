@@ -127,7 +127,6 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
                 <strong className="dataset__name">{ds.name}</strong>
                 <span className="dataset__meta">
                   {formatDate(ds.createdAt)} · {formatDuration(ds.durationSec)} · {ds.total} flux · sonde {ds.probe?.name}
-                  {!ds.flowWindowSec && ' · ancien format (flux non découpés)'}
                 </span>
               </div>
               <GroupInfo dataset={ds} />
