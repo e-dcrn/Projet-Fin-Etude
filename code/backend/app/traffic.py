@@ -56,20 +56,11 @@ TARGET_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$")
 # Vitesses d'attaque : faire varier le rythme diversifie les flux d'un dataset
 # (un scan lent n'a pas les mêmes durées / inter-arrivées qu'un scan rapide).
 #   nmap  : modèle de temporisation -T ;  hydra : nombre de connexions parallèles -t.
-#   cadence : ce que la vitesse change concrètement, pour l'interface.
 SPEEDS = {
-    "slow": {"label": "Lente", "nmap": "-T2", "hydra": "1", "cadence": {
-        "nmap": "une sonde à la fois, 0,4 s d'attente entre deux (≈ 2,5 sondes / s)",
-        "hydra": "1 connexion à la fois"}},
-    "normal": {"label": "Normale", "nmap": "-T3", "hydra": "2", "cadence": {
-        "nmap": "sondes en parallèle, rythme adapté aux réponses du réseau (réglage par défaut de nmap)",
-        "hydra": "2 connexions en parallèle"}},
-    "fast": {"label": "Rapide", "nmap": "-T4", "hydra": "4", "cadence": {
-        "nmap": "sondes en parallèle, délais d'attente courts (≈ des centaines de sondes / s)",
-        "hydra": "4 connexions en parallèle"}},
-    "insane": {"label": "Très rapide", "nmap": "-T5", "hydra": "16", "cadence": {
-        "nmap": "parallélisme maximal, quasiment aucune attente (peut perdre des réponses)",
-        "hydra": "16 connexions en parallèle"}},
+    "slow": {"label": "Lente", "nmap": "-T2", "hydra": "1"},
+    "normal": {"label": "Normale", "nmap": "-T3", "hydra": "2"},
+    "fast": {"label": "Rapide", "nmap": "-T4", "hydra": "4"},
+    "insane": {"label": "Très rapide", "nmap": "-T5", "hydra": "16"},
 }
 DEFAULT_SPEED = "fast"
 
@@ -99,9 +90,9 @@ BENIGN_PROFILES = {
     "intense": "Intense (~3 sessions / s, 3 en parallèle)",
 }
 
-# Catalogue de scénarios d'audit. Tous sont de la RECONNAISSANCE réseau (nmap),
-# la famille « port scan » des jeux de données de référence (CIC-IDS…), et ne
-# visent que des équipements de la topologie isolée.
+# Catalogue des attaques : reconnaissance réseau (nmap, famille « port scan » des
+# jeux CIC-IDS) et force brute (hydra, famille « Patator »). Elles ne visent que
+# des équipements de la topologie isolée.
 #   needs   : "ip" (une cible) ou "subnet" (un sous-réseau entier)
 #   label   : (catégorie, sous-catégorie) attachée au trafic produit
 #   command : construit la commande à partir de la cible et de la vitesse (SPEEDS)
@@ -111,7 +102,6 @@ ATTACKS = {
         "description": "Repère les machines actives d'un sous-réseau (nmap -sn).",
         "needs": "subnet",
         "tool": "nmap",
-        "volume": "≈ 4 paquets de découverte (ping ICMP, TCP 80 et 443…) par adresse du sous-réseau : 254 adresses pour un /24",
         "label": ("reconnaissance", "ping-sweep"),
         "command": _nmap_cmd("-sn"),
     },
@@ -120,7 +110,6 @@ ATTACKS = {
         "description": "Teste les 200 ports les plus courants d'une machine (nmap -sT).",
         "needs": "ip",
         "tool": "nmap",
-        "volume": "200 ports testés, une connexion TCP complète par port (≈ 200 flux)",
         "label": ("reconnaissance", "port-scan"),
         "command": _nmap_cmd("-sT", "--top-ports", "200"),
     },
@@ -129,7 +118,6 @@ ATTACKS = {
         "description": "Scan SYN de tous les ports, sans ouvrir de connexion complète (nmap -sS).",
         "needs": "ip",
         "tool": "nmap",
-        "volume": "65 535 ports testés, un seul paquet SYN par port, connexion jamais terminée (jusqu'à 65 535 flux)",
         "label": ("reconnaissance", "syn-scan"),
         "command": _nmap_cmd("-sS", "-p-"),
     },
@@ -138,7 +126,6 @@ ATTACKS = {
         "description": "Identifie les logiciels et versions derrière les ports ouverts (nmap -sV).",
         "needs": "ip",
         "tool": "nmap",
-        "volume": "100 ports testés, puis plusieurs requêtes de détection sur chaque port ouvert (≈ 100 à 150 flux)",
         "label": ("reconnaissance", "service-detection"),
         "command": _nmap_cmd("-sV", "--top-ports", "100"),
     },
@@ -147,7 +134,6 @@ ATTACKS = {
         "description": "Scan complet : services, système, scripts par défaut (nmap -A).",
         "needs": "ip",
         "tool": "nmap",
-        "volume": "1 000 ports testés + détection des services, du système et scripts (≈ 1 000 à 2 000 flux)",
         "label": ("reconnaissance", "aggressive-scan"),
         "command": _nmap_cmd("-A"),
     },
@@ -157,7 +143,6 @@ ATTACKS = {
         "needs": "ip",
         "tool": "hydra",
         "service": "ssh",
-        "volume": f"jusqu'à {len(WORDLIST)} mots de passe essayés, une connexion SSH par essai ; s'arrête au premier qui marche",
         "label": ("force-brute", "ssh-patator"),
         "command": lambda t, speed: _bruteforce_cmd("ssh", t, speed),
     },
@@ -167,7 +152,6 @@ ATTACKS = {
         "needs": "ip",
         "tool": "hydra",
         "service": "ftp",
-        "volume": f"jusqu'à {len(WORDLIST)} mots de passe essayés, une connexion FTP par essai ; s'arrête au premier qui marche",
         "label": ("force-brute", "ftp-patator"),
         "command": lambda t, speed: _bruteforce_cmd("ftp", t, speed),
     },
@@ -190,16 +174,14 @@ def attack_catalog() -> List[dict]:
     """Description des scénarios pour l'interface (sans les fonctions internes)."""
     return [
         {"id": key, "name": a["name"], "description": a["description"],
-         "needs": a["needs"], "category": a["label"][0], "subcategory": a["label"][1],
-         "tool": a["tool"], "volume": a["volume"],
-         "commands": {speed: command_preview(key, speed) for speed in SPEEDS}}
+         "needs": a["needs"], "category": a["label"][0], "subcategory": a["label"][1]}
         for key, a in ATTACKS.items()
     ]
 
 
 def speed_catalog() -> List[dict]:
-    """Vitesses proposées, avec leur effet concret pour nmap et pour hydra."""
-    return [{"id": k, "label": v["label"], "cadence": v["cadence"]} for k, v in SPEEDS.items()]
+    """Vitesses proposées à l'interface."""
+    return [{"id": k, "label": v["label"]} for k, v in SPEEDS.items()]
 
 
 def docker_time(value: str) -> Optional[float]:
