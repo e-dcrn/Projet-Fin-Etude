@@ -322,29 +322,7 @@ body { background: var(--bg); }
   background: none; color: inherit; font-size: 15px; line-height: 1; cursor: pointer;
 }
 .terminal-tab__close:hover { background: #334155; }
-.terminal-dock__main { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.terminal-dock__header { display: flex; flex-shrink: 0; background: #020617; }
-.terminal-dock__header .terminal-dock__tabs { flex: 1; min-width: 0; }
-/* Volet actif (panneau divisé) : liseré au-dessus de ses onglets */
-.terminal-dock__tabs--focused { box-shadow: inset 0 2px 0 var(--primary); }
-.terminal-dock__split {
-  flex-shrink: 0; align-self: center; margin-left: auto; padding: 3px 10px; border: 1px solid #334155; border-radius: 6px;
-  background: none; color: #94a3b8; font-size: 12px; white-space: nowrap; cursor: pointer;
-}
-.terminal-dock__split:hover { color: #f1f5f9; border-color: #64748b; }
 .terminal-dock__body { position: relative; flex: 1; min-height: 0; }
-.terminal-dock__slot { position: absolute; top: 0; bottom: 0; }
-/* Séparation des deux volets, à glisser pour régler leur largeur */
-.terminal-dock__splitter {
-  position: absolute; top: 0; bottom: 0; z-index: 5; width: 7px; transform: translateX(-50%);
-  cursor: ew-resize; touch-action: none;
-  background: linear-gradient(to right, transparent 3px, #334155 3px, #334155 4px, transparent 4px);
-}
-.terminal-dock__splitter:hover { background: rgba(37, 99, 235, .5); }
-.terminal-dock__dropzone {
-  position: absolute; top: 0; bottom: 0; left: 50%; right: 0; z-index: 6; display: grid; place-items: center;
-  border: 2px dashed var(--primary); background: rgba(37, 99, 235, .18); color: #bfdbfe; font-size: 13px;
-}
 .terminal-view { position: absolute; inset: 0; padding: 6px 4px 4px 10px; }
 /* visibility (et non display: none) : un terminal masqué garde ses dimensions et reste ajusté */
 .terminal-view--hidden { visibility: hidden; pointer-events: none; }

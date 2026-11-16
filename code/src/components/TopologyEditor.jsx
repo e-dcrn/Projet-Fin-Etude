@@ -188,15 +188,12 @@ export default function TopologyEditor() {
           />
           <Dock
             tabs={dock.tabs}
-            activeKeys={dock.activeKeys}
-            split={dock.split}
-            focusedPane={dock.focusedPane}
+            activeKey={dock.activeKey}
             requests={dock.requests}
             nodes={topology.nodes}
             edges={topology.edges}
             onSelect={dock.select}
             onClose={dock.close}
-            onMove={dock.move}
           />
         </div>
 
