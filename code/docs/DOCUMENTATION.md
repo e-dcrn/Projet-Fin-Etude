@@ -5,6 +5,7 @@ explique comment le lab fonctionne. L'historique des choix est dans
 [`rapports/journal_decisions.md`](rapports/journal_decisions.md).
 
 Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture) ·
+[Suivre le code](#suivre-le-code--ce-que-déclenche-chaque-bouton) ·
 [3. Le réseau](#3-le-réseau) · [4. Les services](#4-les-services) · [5. Le trafic bénin](#5-le-trafic-bénin) ·
 [6. Les attaques](#6-les-attaques) · [7. Les datasets](#7-les-datasets) ·
 [8. L'entraînement](#8-lentraînement) · [9. La détection en direct](#9-la-détection-en-direct) ·
@@ -57,26 +58,118 @@ L'interface ne parle jamais de Docker : le moteur traduit chaque action. REST se
 Server-Sent Events aux tâches longues (déploiement, dataset, entraînement), les WebSockets aux terminaux
 et captures. Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
 
-| Code | Rôle |
-| ---- | ---- |
-| `src/components/TopologyEditor.jsx` | assemblage de l'interface |
-| `src/components/{TrafficPanel,ScenarioPanel,DetectionPanel}.jsx` | panneaux de droite |
-| `src/components/{DatasetDialog,ModelDialog}.jsx` | datasets ; modèles et rapport |
-| `src/components/{TerminalView,CaptureView}.jsx`, `Dock.jsx` | onglets du bas |
-| `src/hooks/useRecords.js`, `src/utils/jobRun.js` | suivi des tâches de fond (datasets, modèles, déploiement) |
-| `src/utils/{ipam,validators,packetDissector,displayFilter}.js` | adressage, contrôles, décodage des paquets |
-| `backend/app/planner.py`, `deployer.py` | topologie → plan → conteneurs, mode hub |
-| `backend/app/service_listener.py` | vrais services des serveurs |
-| `backend/app/traffic.py`, `traffic_agent.py` | trafic bénin, attaques |
-| `backend/app/cicflowmeter.py` | découpage du pcap, flux CICFlowMeter |
-| `backend/app/datasets.py`, `training.py`, `detection.py` | les trois étapes ML |
-| `backend/app/capture.py`, `terminal.py` | sessions WebSocket |
-| `backend/app/jobs.py`, `errors.py` | tâches de fond ; erreurs affichées à l'utilisateur |
-| `docker/<rôle>/Dockerfile` | image de chaque rôle : `pc`, `server`, `router`, `ids`, `toolbox` |
+### Carte du code
+
+Chemins relatifs à `code/`. Les fichiers en gras sont ceux à lire en premier.
+
+**Interface** (`src/`, React) : les *composants* affichent, les *hooks* gardent l'état et appellent le moteur,
+les *utils* sont des fonctions pures (sans état), testables isolément.
+
+| Fichier | Rôle |
+| ------- | ---- |
+| `main.jsx`, `App.jsx` | point d'entrée ; `ReactFlowProvider` englobe toute l'application |
+| **`components/TopologyEditor.jsx`** | assemblage : relie les hooks aux composants, aucune logique métier |
+| `components/Toolbar.jsx`, `ExamplesMenu.jsx`, `Palette.jsx` | barre d'outils, menu des exemples, palette d'équipements |
+| `components/TopologyCanvas.jsx`, `DeviceNode.jsx`, `CableEdge.jsx` | schéma React Flow : équipements et câbles |
+| `components/PropertiesPanel.jsx`, `properties/*.jsx` | panneau de droite : nom, interfaces, passerelle, services, routes |
+| `components/DeployDialog.jsx` | bilan des contrôles puis progression du déploiement |
+| `components/TrafficPanel.jsx`, `ScenarioPanel.jsx`, `DetectionPanel.jsx` | panneaux Trafic bénin, Scénarios, Détection |
+| `components/DatasetDialog.jsx`, `ModelDialog.jsx`, `JobProgress.jsx` | datasets ; modèles et rapport ; progression d'une tâche |
+| `components/Dock.jsx`, `TerminalView.jsx`, `CaptureView.jsx` | onglets du bas : terminal (xterm.js), capture façon Wireshark |
+| **`hooks/useTopology.js`** | état du schéma (nœuds, câbles) et toutes les actions d'édition ; lance l'IPAM |
+| `hooks/useCableTool.js`, `useDock.js` | outil câble ; onglets du bas |
+| **`hooks/useDeployment.js`** | état du réseau (allumé, arrêté) et déploiement |
+| `hooks/useTraffic.js`, `useDetection.js` | état du trafic et de la détection, rafraîchi toutes les 2 s |
+| `hooks/useRecords.js`, `useDatasets.js`, `useModels.js` | listes de datasets et de modèles, et leur création (tâche de fond) |
+| `hooks/useAction.js` | `busy` / `error` d'un bouton qui appelle le moteur ; `toggled()` pour les cases à cocher |
+| **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, SSE, URL des WebSockets) |
+| `config/deviceTypes.js`, `exampleTopologies.js` | catalogue des types d'équipements et des services ; exemples |
+| `utils/serializeTopology.js`, `deserializeTopology.js` | schéma React Flow ↔ JSON envoyé au moteur (voir §15) |
+| `utils/ipv4.js`, `ipam.js`, `validators.js` | calcul d'adresses, adressage automatique, contrôles de cohérence |
+| `utils/topologyQueries.js`, `trafficTargets.js` | lectures du schéma : câbles d'un équipement, cibles et types de trafic possibles |
+| `utils/jobRun.js` | état affiché d'une tâche de fond, mis à jour à chaque événement reçu |
+| `utils/pcap.js`, `packetDissector.js`, `displayFilter.js` | capture : paquets reçus, décodage couche par couche, filtres |
+| `utils/format.js`, `styles/app.css` | mise en forme des dates et taux ; styles |
+
+**Moteur** (`backend/app/`, Python) :
+
+| Fichier | Rôle |
+| ------- | ---- |
+| **`main.py`** | toutes les routes de l'API (liste en tête du fichier) ; crée les objets ci-dessous |
+| `models.py` | forme du JSON de topologie (pydantic) ; type d'un service ; nom DNS d'un équipement |
+| **`planner.py`** | topologie → plan : vérifie tout, déduit réseaux, interfaces et routes |
+| **`deployer.py`** | `LabManager` : exécute le plan avec Docker, construit les images, lance les conteneurs auxiliaires |
+| `service_listener.py` | script exécuté **dans** chaque serveur : démarre les vrais services |
+| `traffic_agent.py` | script exécuté **dans** la boîte à outils : l'utilisateur simulé du trafic bénin |
+| **`traffic.py`** | `TrafficManager` : agents bénins, catalogue et lancement des attaques |
+| `cicflowmeter.py` | découpage d'un pcap en fenêtres de 5 s ; conversion en flux par CICFlowMeter |
+| **`datasets.py`** | `DatasetBuilder` : joue un programme, capture, étiquette, sauvegarde |
+| **`training.py`** | `Trainer` : features, entraînement, évaluation, sauvegarde du modèle |
+| **`detection.py`** | `DetectionManager` : capture continue sur la sonde, classement, vérité terrain |
+| `terminal.py`, `capture.py`, `sessions.py` | sessions WebSocket : terminal, capture, fermeture à l'arrêt |
+| `jobs.py` | tâches de fond (thread + suite d'événements) |
+| `store.py` | stockage sur disque des datasets et des modèles (un dossier + `meta.json`) |
+| `errors.py`, `settings.py` | `UserError` (message affiché à l'utilisateur) ; constantes (dossiers, préfixe `idslab`) |
+
+**Images** : `docker/<rôle>/Dockerfile` pour `pc`, `server`, `router`, `ids` et `toolbox` (voir §3).
 
 Pour **ajouter un modèle** : une entrée dans `MODELS` et sa construction dans `Trainer.run`
 (`training.py`) ; la détection le prend en charge sans changement, car `model.joblib` porte la liste
 ordonnée de ses features.
+
+### Suivre le code : ce que déclenche chaque bouton
+
+Le même schéma revient partout : un **composant** appelle un **hook**, qui appelle `topologyApi.js` ; une
+**route** de `main.py` appelle un **gestionnaire** du moteur (`LabManager`, `TrafficManager`…), qui pilote Docker.
+Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interface suit les événements.
+
+**✔ Valider la topologie** (déploiement)
+1. `TopologyEditor.handleValidate` : `serializeTopology` produit le JSON, `validateTopology` liste les problèmes ;
+2. `useDeployment.validate` : sans problème, `startDeployment` → `POST /api/deployments` ;
+3. `main.create_deployment` : `planner.build_plan` vérifie tout (erreur → réponse 400), puis
+   `jobs.start("deploy", …)` lance `LabManager.deploy` dans un thread ;
+4. `deploy` : construit les images, crée un réseau Docker par switch (`_create_network`), un conteneur par
+   équipement (`_create_device`), configure routes et interfaces (`_configure_device`), passe le switch surveillé
+   en hub (`_enable_hub_mode`) ; chaque étape publie un événement `progress` ;
+5. l'interface suit `GET /api/jobs/{id}/events` (`followJob`) ; `applyJobEvent` met à jour `DeployDialog`.
+
+**▶ Démarrer (trafic bénin)**
+1. `TrafficPanel.start` calcule pour chaque émetteur ses cibles (`benignTargetsForDests` : IP et services) ;
+2. `POST /api/lab/traffic/benign` → `TrafficManager.start_benign` ;
+3. le moteur lance un conteneur `toolbox` dans la pile réseau du PC, avec `python3 -c <traffic_agent.py>
+   <configuration JSON>` ;
+4. dans le conteneur, `traffic_agent.main` → `build_actions` (sessions possibles) → `worker` (boucle : choisit
+   une session au hasard selon les poids, la joue, attend).
+
+**⚡ Lancer le scénario** (attaque)
+1. `POST /api/lab/scenarios` → `TrafficManager.run_scenario` vérifie la cible, puis `_pause_benign` arrête
+   l'agent bénin de la source ;
+2. un conteneur `toolbox` lance la commande `nmap` ou `hydra` ; ses labels Docker (source, cible, attaque)
+   servent de **vérité terrain** à la détection ;
+3. un thread (`_resume_after`) attend la fin de l'attaque et relance l'agent bénin.
+
+**▶ Générer le dataset**
+1. `DatasetDialog.submit` → `POST /api/datasets` → `DatasetBuilder.prepare` vérifie le programme ;
+2. tâche de fond `DatasetBuilder.run` → `_generate` pour la base puis chaque variante (`make_variant`) :
+   `tcpdump` sur la sonde, agents bénins, chaque attaque jouée par `_play` (fenêtre de temps enregistrée) ;
+3. le pcap est découpé et converti (`windowed_flows_csv`), étiqueté (`label_dataset_csv`) et sauvegardé
+   (`store.py`).
+
+**▶ Entraîner** : `POST /api/models` → `Trainer.prepare` puis, en tâche de fond, `Trainer.run` :
+`load_frames` (CSV) → `feature_matrix` / `drop_constant` (features) → `RandomForestClassifier.fit` →
+`evaluate` et `by_attack` (métriques) → `model.joblib` + `meta.json`.
+
+**▶ Démarrer (détection)**
+1. `POST /api/lab/detection` → `DetectionManager.start` : `tcpdump -G 5` dans la sonde (un fichier par
+   fenêtre de 5 s) et un conteneur CICFlowMeter permanent ;
+2. un thread exécute `_tick` chaque seconde : chaque fenêtre terminée → flux → `_classify` ;
+3. `_classify` : le modèle prédit, `_known_attacks` reconstitue la vérité terrain à partir des conteneurs
+   d'attaque, `outcome_of` décide « alerte », « manquée » ou « bénin » ;
+4. `useDetection` interroge `GET /api/lab/detection` toutes les 2 s.
+
+**Terminal et capture** : `useDock.open` ajoute un onglet ; `TerminalView` (ou `CaptureView`) ouvre une
+WebSocket ; `TerminalSession` relaie un shell (`exec` Docker avec TTY), `CaptureSession` relaie la sortie de
+`tcpdump` paquet par paquet, que le navigateur décode (`packetDissector.js`).
 
 ---
 
@@ -370,11 +463,11 @@ cd code && npm run build    # l'interface compile
 | ------- | ------- |
 | `test_planner.py`, `test_examples.py` | topologie → plan ; chaque exemple est accepté et toute machine joint toute autre |
 | `test_capture.py` | découpage du flux de capture |
-| `test_cicflowmeter.py` | découpage en fenêtres, étiquetage d'un scénario |
+| `test_cicflowmeter.py` | découpage d'un pcap en fenêtres, remplissage de la colonne Label |
 | `test_datasets.py` | programmes, variantes, étiquetage par fenêtres |
 | `test_training.py` | features, découpages, entraînement, métriques |
 | `test_detection.py` | fenêtres, verdicts, vérité terrain |
-| `test_benign.py` | services et sessions de l'agent |
+| `test_benign.py` | type d'un service, nom DNS, sessions de l'agent, requête DNS |
 | `test_settings.py` | origines autorisées ; chaque rôle a son Dockerfile |
 
 ---
@@ -393,9 +486,9 @@ cd code && npm run build    # l'interface compile
 | Vite refuse de démarrer | Node trop ancien : `cd code && nvm install && nvm use` |
 | Import introuvable au build, `@rolldown/binding-…` | `node_modules` périmé : `npm ci` |
 | Un service ne répond pas juste après la validation | MySQL met quelques secondes à démarrer |
-| `ssh`, `mariadb`… « not found » sur un PC | réseau créé avant l'ajout de ces clients : ■ Arrêter puis ✔ Valider |
+| Un outil ajouté à un Dockerfile est absent | les images sont reconstruites au déploiement : ■ Arrêter puis ✔ Valider |
 | `curl: (60)` en HTTPS | certificat auto-signé : `-k` |
-| Service « simulé » dans le journal du serveur | nom non reconnu ou démon absent |
+| Service « simulé » dans le journal du serveur | son nom n'est pas l'un des 8 services réels, ou son démarrage a échoué |
 | Aucun flux d'attaque dans un dataset | la sonde ne surveille pas le switch traversé par l'attaque |
 
 Nettoyage manuel complet, moteur arrêté :
@@ -414,7 +507,8 @@ docker image rm $(docker image ls -q 'idslab/*')
 - **Timing** : tout tourne sur un hôte, latence quasi nulle, ce qui change les features temporelles.
 - **Couverture d'attaque** : reconnaissance et force brute seulement.
 - **Attaques connues seulement** : un modèle supervisé ne reconnaît que les familles apprises.
-- **Un modèle par topologie** : l'interface prévient en cas de mélange.
+- **Un modèle par topologie** : un modèle ne vaut que pour le réseau de ses datasets ; ne pas mélanger des
+  datasets de topologies différentes.
 - **Flux à cheval** : un flux qui chevauche deux fenêtres est vu en deux morceaux.
 - **La sonde ne voit que son switch.**
 - **Force brute** : les protections d'OpenSSH (`PerSourcePenalties`, `MaxStartups`) sont désactivées dans le lab, car
@@ -443,8 +537,11 @@ dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `
 
 Types de nœuds : `pc`, `server` (`config.services`), `router` (`config.routes`), `ids` (`config.monitoredSegment`).
 
-**Modèle sauvegardé** : `backend/data/models/<id>/model.joblib` (modèle, liste ordonnée des features,
-`excludePort`, `flowWindowSec`) et `meta.json` (paramètres et métriques).
+**Dataset sauvegardé** : `backend/data/datasets/<id>/` avec `flows.csv` (une ligne par flux, colonnes CICFlowMeter,
+colonne `Label`), `capture.pcap` et `meta.json` (programme, fenêtres des attaques, décompte des étiquettes).
+
+**Modèle sauvegardé** : `backend/data/models/<id>/model.joblib` (le modèle, la liste ordonnée de ses features
+et `excludePort` : tout ce que la détection doit savoir) et `meta.json` (paramètres et métriques du rapport).
 
 ---
 
