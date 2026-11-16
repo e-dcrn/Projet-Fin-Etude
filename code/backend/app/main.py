@@ -49,7 +49,7 @@ from typing import Callable, List, Optional
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from docker.errors import DockerException
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
@@ -205,20 +205,6 @@ def stop_scenarios(id: Optional[str] = None):
 def scenario_logs(scenario_id: str):
     lab.client
     return traffic_guard(lambda: {"logs": traffic.scenario_logs(scenario_id)})
-
-
-@app.get("/api/lab/scenarios/{scenario_id}/flows")
-def scenario_flows(scenario_id: str):
-    lab.client
-    try:
-        csv_text = traffic.scenario_flows_csv(scenario_id)
-    except TrafficError as exc:
-        return error_response(409, str(exc))
-    return Response(
-        content=csv_text,
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="flux-{scenario_id}.csv"'},
-    )
 
 
 @app.delete("/api/lab/scenarios")

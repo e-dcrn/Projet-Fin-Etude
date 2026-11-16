@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from app.cicflowmeter import label_cic_csv, split_pcap
+from app.cicflowmeter import relabel_csv, split_pcap
 
 
 def _pcap(timestamps):
@@ -32,7 +32,9 @@ def test_split_pcap_rejects_invalid():
         split_pcap(b"pas un pcap", 5)
 
 
-def test_label_only_flows_from_source_to_target():
+def test_relabel_fills_the_label_column():
     csv_text = "Src IP,Dst IP,Timestamp,Label\n10.0.0.2,10.0.0.9,t,x\n10.0.0.2,10.0.0.50,t,x\n10.0.0.9,10.0.0.2,t,x\n"
-    _, counts, total = label_cic_csv(csv_text, "10.0.0.2", "10.0.0.9", "ip", "port-scan")
+    label_of = lambda src, dst, _ts: "port-scan" if (src, dst) == ("10.0.0.2", "10.0.0.9") else "BENIGN"
+    text, counts, total = relabel_csv(csv_text, label_of)
     assert counts == {"port-scan": 1, "BENIGN": 2} and total == 3
+    assert text.splitlines()[1].endswith("port-scan")
