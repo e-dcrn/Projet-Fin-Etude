@@ -58,7 +58,7 @@ function DownloadLinks({ id, fileUrl }) {
  *   form → programme d'un nouveau dataset : sonde, trafic bénin, attaques, durées
  *   et, pendant / après une génération, sa progression.
  */
-export default function DatasetDialog({ open, datasets, traffic, nodes, edges, onlineIds, labRunning, topology, onClose }) {
+export default function DatasetDialog({ open, datasets, traffic, nodes, edges, onlineIds, labRunning, onClose }) {
   const [view, setView] = useState('list');
   if (!open) return null;
 
@@ -75,7 +75,6 @@ export default function DatasetDialog({ open, datasets, traffic, nodes, edges, o
           />
         ) : view === 'form' ? (
           <FormContent
-            topology={topology}
             datasets={datasets}
             traffic={traffic}
             nodes={nodes}
@@ -128,7 +127,6 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
                 <strong className="dataset__name">{ds.name}</strong>
                 <span className="dataset__meta">
                   {formatDate(ds.createdAt)} · {formatDuration(ds.durationSec)} · {ds.total} flux · sonde {ds.probe?.name}
-                  {' '}· topologie {ds.topology?.name ?? 'inconnue'}
                   {!ds.flowWindowSec && ' · ancien format (flux non découpés)'}
                 </span>
               </div>
@@ -162,7 +160,7 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
   );
 }
 
-function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onBack }) {
+function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
   const sources = useMemo(() => trafficSources(nodes, onlineIds), [nodes, onlineIds]);
   // Point de capture : toujours une Sonde IDS (tout le segment, comme la détection en direct).
   const probes = useMemo(() => idsProbes(nodes, onlineIds), [nodes, onlineIds]);
@@ -224,7 +222,6 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
     try {
       await datasets.generate({
         name,
-        topology,
         probe,
         kinds: kindsArr,
         profile,
@@ -243,8 +240,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, topology, onB
     <>
       <h2 id="dataset-title" className="modal__title">Nouveau dataset</h2>
       <p className="modal__text">
-        Sur la topologie <strong>{topology.name}</strong> ({topology.summary}) : un modèle entraîné sur ce dataset ne
-        vaudra que pour ce réseau.
+        Sur la topologie affichée : un modèle entraîné sur ce dataset ne vaudra que pour ce réseau.
       </p>
       {error && <div className="traffic-error" role="alert">{error}</div>}
       {probes.length === 0 && (

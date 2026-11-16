@@ -227,7 +227,7 @@ Une attaque dont l'outil échoue (service absent sur la cible, par exemple) déc
 génération : ses flux ne représentent pas l'attaque annoncée.
 
 **Sortie** : `backend/data/datasets/<id>/` avec `flows.csv`, `capture.pcap`, `meta.json` (paramètres,
-fenêtres, décompte, topologie), téléchargeables depuis l'interface.
+fenêtres, décompte), téléchargeables depuis l'interface.
 
 ---
 

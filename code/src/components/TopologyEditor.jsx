@@ -21,7 +21,6 @@ import { useDetection } from '../hooks/useDetection.js';
 import { serializeTopology } from '../utils/serializeTopology.js';
 import { deserializeTopology } from '../utils/deserializeTopology.js';
 import { validateTopology } from '../utils/validators.js';
-import { describeTopology, topologySignature } from '../utils/topologyInfo.js';
 
 /**
  * Composant d'assemblage : relie l'état (hooks) aux composants d'affichage.
@@ -33,12 +32,6 @@ export default function TopologyEditor() {
   // Panneau de droite : 'traffic' (trafic bénin), 'scenario' (audit), 'detection', ou null (propriétés).
   const [rightPanel, setRightPanel] = useState(null);
   const cableTool = useCableTool(topology.connectDevices, setToast);
-  // Exemple chargé ({ name, signature }) : nomme la topologie des datasets générés dessus.
-  const [loadedExample, setLoadedExample] = useState(null);
-  const topologyInfo = useMemo(
-    () => describeTopology(topology.nodes, topology.edges, loadedExample),
-    [topology.nodes, topology.edges, loadedExample],
-  );
   const deployment = useDeployment();
   const dock = useDock();
   const { keepOnly, open: openTab } = dock;
@@ -108,7 +101,6 @@ export default function TopologyEditor() {
   const handleClear = useCallback(() => {
     if (window.confirm('Effacer toute la topologie ?')) {
       topology.clearTopology();
-      setLoadedExample(null);
       cableTool.cancel();
     }
   }, [topology, cableTool]);
@@ -119,7 +111,6 @@ export default function TopologyEditor() {
       try {
         const loaded = deserializeTopology(example.topology);
         topology.loadTopology(loaded);
-        setLoadedExample({ name: example.name, signature: topologySignature(loaded.nodes, loaded.edges) });
         cableTool.cancel();
         setToast(`Exemple « ${example.name} » chargé`);
       } catch (err) {
@@ -222,7 +213,6 @@ export default function TopologyEditor() {
           <DetectionPanel
             detection={detection}
             models={models.models}
-            topology={topologyInfo}
             nodes={topology.nodes}
             edges={topology.edges}
             onlineIds={deployment.lab.onlineIds}
@@ -262,7 +252,6 @@ export default function TopologyEditor() {
         edges={topology.edges}
         onlineIds={deployment.lab.onlineIds}
         labRunning={labRunning}
-        topology={topologyInfo}
         onClose={() => setDatasetsOpen(false)}
       />
       <ModelDialog open={modelsOpen} models={models} datasets={datasets.datasets} onClose={() => setModelsOpen(false)} />
