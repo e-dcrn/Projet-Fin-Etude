@@ -1,6 +1,6 @@
 # Journal des décisions du projet
 
-Du sujet (septembre 2026) à la réunion du 9 novembre 2026 et au nettoyage qui l'a suivie.
+Du sujet (septembre 2026) à la réunion du 9 novembre 2026, au nettoyage qui l'a suivie et à la simplification du 16 novembre.
 
 **Sources** : `Sujet.pdf`, slides des 6 et 27 octobre et du 9 novembre, état de l'art, 34 commits du dépôt,
 ancienne documentation (`GUIDE.md`, `SERVICES.md`, `ARCHITECTURE.md`, supprimés le 9 novembre et disponibles
@@ -114,6 +114,25 @@ Problèmes de la démo : attaques manquées sans explication, importance des fea
 | 71 | L'arrêt du réseau tolère un conteneur déjà en cours de suppression. | Il renvoyait une erreur 500 si un scénario se terminait au même moment. | `deployer.py` | ✅ |
 | 73 | Une alerte sans attaque connue devient **« Alerte non vérifiée »** ; une attaque de dataset en échec déclenche un avertissement. | Le moteur ne connaît pas les attaques manuelles (voir `rapport_scan_manuel.md`) ; le dataset Simple contenait des forces brutes échouées sans alerte. | `DetectionPanel.jsx`, `datasets.py` | ✅ |
 | 74 | **Le verdict du modèle prime** : tout flux classé `ATTACK` est affiché comme attaque détectée. La vérité terrain ne sert qu'à signaler les attaques manquées ; les fausses alertes se lisent dans le rapport d'entraînement. Remplace le n° 73 pour le libellé. | Reléguer une détection en « fausse alerte » ou « non vérifiée » contredisait le modèle sans information supplémentaire : le moteur ne peut pas savoir si une attaque manuelle a eu lieu. | `detection.py`, `DetectionPanel.jsx` | ✅ |
+
+### Simplification du code (16 novembre 2026)
+
+But : un code que l'équipe sait expliquer entièrement avant de l'étudier en profondeur. Critère : retirer les
+gadgets, le code mort et les doublons, sans toucher à la chaîne réseau → données → entraînement → détection.
+
+| # | Décision | Justification | Source | État |
+| - | -------- | ------------- | ------ | ---- |
+| 75 | **Retirer le champ VLAN** des switches. | Validé et affiché, mais sans aucun effet sur le réseau. | décision de l'équipe | ✅ |
+| 76 | **Retirer l'export des flux d'un scénario.** Remplace le n° 62 pour cet export ; ceux des datasets restent. | Doublon des datasets, avec sa propre capture et son propre étiquetage. | décision de l'équipe | ✅ |
+| 77 | **Retirer l'empreinte de topologie** des datasets et des modèles. | Ne servait qu'à un avertissement. | décision de l'équipe | ✅ |
+| 78 | **Alléger le catalogue d'attaques** (plus de « volume », de « cadence » ni d'aperçu de commande par vitesse). | Textes décoratifs ; la commande réellement lancée reste affichée. | décision de l'équipe | ✅ |
+| 79 | **Panneau du bas à onglets simples** (plus de volets ni de glisser-déposer). | Confort d'interface sans lien avec le sujet. | décision de l'équipe | ✅ |
+| 80 | **Garder** la vue Wireshark et le choix du modèle. | Choix de l'équipe : d'autres modèles sont prévus. | décision de l'équipe | ✅ |
+| 81 | Retirer le code mort : compatibilité Docker < 28 et anciens datasets, variables d'environnement, replis inutiles. | Aucun de ces cas n'arrive dans le lab ; Docker ≥ 28 est exigé dans le README. | cette session | ✅ |
+| 82 | **Une seule classe d'erreur** (`UserError`) et **une seule route de suivi des tâches** (`/api/jobs/{id}`). | Sept classes et trois jeux de routes faisaient la même chose. | `errors.py`, `jobs.py`, `main.py` | ✅ |
+| 83 | **Le type d'un service est son nom** ; le moteur le transmet aux serveurs et aux agents, avec les noms DNS et le compte de démonstration. | La règle existait en trois copies, avec une déduction par le port difficile à expliquer. | `models.py` | ✅ |
+| 84 | **Un Dockerfile par rôle** dans `code/docker/`, à la place de `devices.toml` et des Dockerfiles générés en texte. Pas de Docker Compose. | Docker standard et lisible. Compose ne convient pas à un réseau dessiné à la volée, et le lancer pour l'application ajouterait de la complexité (socket Docker, volumes). | `code/docker/`, `deployer.py` | ✅ |
+| 85 | **Garder la validation de la topologie des deux côtés.** | Le frontend donne le retour immédiat pendant l'édition ; le serveur fait foi avant de créer les conteneurs. | `validators.js`, `planner.py` | ✅ |
 
 ## 6. Questions encore ouvertes
 
