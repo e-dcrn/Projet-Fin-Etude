@@ -62,7 +62,7 @@ export const DEVICE_TYPES = {
     Icon: SwitchIcon,
     description: 'Commutateur de niveau 2 : définit un réseau',
     isNetwork: true,
-    defaultProperties: () => ({ vlan: '', subnet: '' }), // subnet : attribué par l'IPAM à la création
+    defaultProperties: () => ({ subnet: '' }), // subnet : attribué par l'IPAM à la création
   },
   ids: {
     label: 'Sonde IDS',

@@ -5,7 +5,6 @@
     "description": "Deux postes dans le même sous-réseau 10.0.1.0/24 : le point de départ pour un premier ping. Une sonde IDS surveille le switch."
   },
   "version": 2,
-  "generatedAt": "2026-10-10T00:00:00.000Z",
   "nodes": [
     {
       "id": "pc-1",
@@ -52,7 +51,6 @@
         "x": 0,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.1.0/24"
     }
   ],

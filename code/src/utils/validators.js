@@ -51,12 +51,6 @@ export function portFieldError(value) {
   return Number.isInteger(port) && port >= 1 && port <= 65535 ? null : 'Port entre 1 et 65535';
 }
 
-export function vlanFieldError(value) {
-  if (String(value ?? '').trim() === '') return null;
-  const vlan = Number(value);
-  return Number.isInteger(vlan) && vlan >= 1 && vlan <= 4094 ? null : 'VLAN entre 1 et 4094';
-}
-
 export function interfaceNameError(value) {
   return INTERFACE_NAME_REGEX.test(value ?? '') ? null : 'Nom attendu : eth0, eth1…';
 }
@@ -139,7 +133,6 @@ export function validateTopology(topology) {
   const subnets = new Map(); // id du switch → { cidr, network, broadcast, prefix }
   for (const network of topology.networks) {
     const links = linksByNetwork.get(network.id) ?? [];
-    if (vlanFieldError(network.vlan)) error(`${network.name} : numéro de VLAN invalide.`, network.id);
     const subnetError = subnetFieldError(network.subnet);
     if (subnetError) {
       error(`${network.name} : réseau invalide (${subnetError.toLowerCase()}).`, network.id);

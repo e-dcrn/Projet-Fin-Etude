@@ -5,7 +5,7 @@ import ServicesSection from './ServicesSection.jsx';
 import { DEVICE_TYPES } from '../../config/deviceTypes.js';
 import { formatInterface } from '../../utils/ipv4.js';
 import { deviceLinks, networkLinks, networkSubnet, nodeName } from '../../utils/topologyQueries.js';
-import { ipFieldError, subnetFieldError, vlanFieldError } from '../../utils/validators.js';
+import { ipFieldError, subnetFieldError } from '../../utils/validators.js';
 
 /**
  * Formulaire d'un équipement : sections affichées selon son type.
@@ -147,7 +147,7 @@ function GatewayField({ value, auto, links, nodes, edges, onChange }) {
 
 const byPort = (a, b) => (a.data.port ?? '').localeCompare(b.data.port ?? '', undefined, { numeric: true });
 
-/** Switch : réseau des équipements branchés (adressage automatique), VLAN, ports occupés. */
+/** Switch : réseau des équipements branchés (adressage automatique), ports occupés. */
 function SwitchSection({ node, nodes, edges, onChange }) {
   const links = networkLinks(edges, node.id);
   const { subnet } = node.data.properties;
@@ -162,13 +162,6 @@ function SwitchSection({ node, nodes, edges, onChange }) {
         error={subnetFieldError(subnet)}
         hint="Le switch n'a pas d'adresse IP : c'est le réseau (LAN) des équipements qui y sont branchés. Ils en reçoivent automatiquement une adresse (routeurs : .1, .2… ; autres : à partir de .10)."
         onChange={(value) => onChange({ subnet: value.trim() })}
-      />
-      <TextField
-        label="VLAN (optionnel)"
-        value={node.data.properties.vlan}
-        placeholder="ex. 10"
-        error={vlanFieldError(node.data.properties.vlan)}
-        onChange={(vlan) => onChange({ vlan: vlan.replace(/\D/g, '') })}
       />
       <Section title="Ports" count={links.length}>
         <ul className="attached">

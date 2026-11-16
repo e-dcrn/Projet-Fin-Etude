@@ -4,7 +4,7 @@ Schéma de la topologie envoyée par l'interface (format version 2).
 {
   "version": 2,
   "nodes":    [{ "id", "type", "name", "position", "config": {...} }],
-  "networks": [{ "id", "name", "position", "vlan", "subnet" }],  # les switches
+  "networks": [{ "id", "name", "position", "subnet" }],  # les switches
   "links":    [{ "id", "node", "network", "interface", "port", "ip", "mask" }]
 }
 
@@ -59,7 +59,6 @@ class Network(BaseModel):
     id: str = Field(pattern=ID_PATTERN)
     name: str
     position: Optional[Position] = None
-    vlan: Optional[int] = Field(default=None, ge=1, le=4094)
     # Réseau du switch (« 10.0.1.0/24 »), attribué par l'IPAM de l'interface.
     # Vide : déduit des adresses des interfaces reliées.
     subnet: str = ""

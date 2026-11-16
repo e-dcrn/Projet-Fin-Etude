@@ -5,7 +5,6 @@
     "description": "Deux LAN reliés par un réseau de transit et deux routeurs en chaîne. Chaque routeur a une route statique vers le LAN distant. Une sonde IDS surveille le réseau de transit 10.0.2.0/24, par où passe tout le trafic entre les deux LAN."
   },
   "version": 2,
-  "generatedAt": "2026-10-10T00:00:00.000Z",
   "nodes": [
     {
       "id": "router-1",
@@ -112,7 +111,6 @@
         "x": -560,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.1.0/24"
     },
     {
@@ -122,7 +120,6 @@
         "x": 0,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.2.0/24"
     },
     {
@@ -132,7 +129,6 @@
         "x": 560,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.3.0/24"
     }
   ],
