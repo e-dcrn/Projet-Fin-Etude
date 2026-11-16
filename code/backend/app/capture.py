@@ -34,6 +34,7 @@ from .cicflowmeter import PCAP_MAGIC
 from .deployer import LabManager
 from .planner import INTERFACE_PATTERN
 from .errors import UserError
+from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class CaptureSession:
         device = lab.find_device(node_id)
         if device is None or device.status != "running":
             raise UserError("Cet équipement est éteint : validez la topologie pour démarrer le réseau.")
-        self.name = device.labels.get(f"{lab.settings.prefix}.name", node_id)
+        self.name = device.labels.get(f"{PREFIX}.name", node_id)
         self.interface = interface
         self.device = device
         self._client = lab.client
@@ -113,8 +114,7 @@ class CaptureSession:
 
         with _live_lock:
             _remove_orphans(lab)
-            runtime = lab.settings.capture
-            self.helper = lab.start_netns_helper(device, runtime, runtime.command, role="capture")
+            self.helper = lab.start_netns_helper(device, ["sleep", "infinity"], role="capture")
             _live_helpers.add(self.helper.id)
         try:
             command = [part.format(interface=interface) for part in TCPDUMP]

@@ -1,6 +1,7 @@
 import pytest
 
-from app.settings import MACHINE_TYPES, load_settings, origin_allowed
+from app.planner import TYPE_LABELS
+from app.settings import DOCKER_DIR, origin_allowed
 
 
 @pytest.mark.parametrize("origin", ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5180"])
@@ -13,6 +14,6 @@ def test_other_origins_refused(origin):
     assert not origin_allowed(origin)
 
 
-def test_config_defines_every_machine_type():
-    settings = load_settings()
-    assert set(settings.devices) == set(MACHINE_TYPES)
+@pytest.mark.parametrize("role", [*TYPE_LABELS, "toolbox"])
+def test_every_role_has_a_dockerfile(role):
+    assert (DOCKER_DIR / role / "Dockerfile").is_file()

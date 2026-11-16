@@ -72,7 +72,7 @@ et captures. Pas de base de données : tout est fichier dans `backend/data/`, ig
 | `backend/app/datasets.py`, `training.py`, `detection.py` | les trois étapes ML |
 | `backend/app/capture.py`, `terminal.py` | sessions WebSocket |
 | `backend/app/jobs.py`, `errors.py` | tâches de fond ; erreurs affichées à l'utilisateur |
-| `backend/config/devices.toml` | images et paquets de chaque équipement |
+| `docker/<rôle>/Dockerfile` | image de chaque rôle : `pc`, `server`, `router`, `ids`, `toolbox` |
 
 Pour **ajouter un modèle** : une entrée dans `MODELS` et sa construction dans `Trainer.run`
 (`training.py`) ; la détection le prend en charge sans changement, car `model.joblib` porte la liste
@@ -96,6 +96,11 @@ automatiquement : réseaux `10.0.N.0/24`, routeurs à partir de `.1`, hôtes à 
 le passe en manuel. La dernière adresse de chaque réseau est réservée au bridge. Les tables de routage restent
 à saisir, hors réseaux directement connectés. Les erreurs de cohérence bloquent la création et sont
 revérifiées par le moteur.
+
+**Images** : chaque rôle a son Dockerfile dans `code/docker/` (`pc`, `server`, `router`, `ids`, et `toolbox`, la
+boîte à outils lancée « dans » un équipement pour le trafic bénin, les attaques et les captures). Le moteur les
+construit à chaque déploiement sous le nom `idslab/<rôle>` ; le cache de Docker rend cette étape instantanée tant
+qu'aucun Dockerfile n'a changé. Pour ajouter un outil à un équipement, on modifie son Dockerfile.
 
 **Déploiement** : `planner.py` valide et produit un plan, `deployer.py` l'exécute et envoie sa progression.
 Chaque déploiement supprime le précédent, un échec nettoie tout. Toutes les ressources portent le label
@@ -370,7 +375,7 @@ cd code && npm run build    # l'interface compile
 | `test_training.py` | features, découpages, entraînement, métriques |
 | `test_detection.py` | fenêtres, verdicts, vérité terrain |
 | `test_benign.py` | services et sessions de l'agent |
-| `test_settings.py` | origines autorisées |
+| `test_settings.py` | origines autorisées ; chaque rôle a son Dockerfile |
 
 ---
 

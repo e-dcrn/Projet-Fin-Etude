@@ -35,7 +35,7 @@ from docker.errors import DockerException
 
 from .cicflowmeter import FLOW_WINDOW_SEC, parse_timestamp, relabel_csv, windowed_flows_csv
 from .jobs import Job
-from .settings import DATA_DIR
+from .settings import DATA_DIR, PREFIX
 from .store import RecordStore
 from .errors import UserError
 from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficManager
@@ -209,7 +209,7 @@ class DatasetBuilder:
         if not spec.get("probe"):
             raise UserError("Aucune Sonde IDS : ajoutez-en une à la topologie, c'est le point de capture du dataset.")
         probe = self.traffic.require_device(spec["probe"], "Sonde IDS")
-        if probe.labels.get(f"{self.lab.settings.prefix}.type") != "ids":
+        if probe.labels.get(f"{PREFIX}.type") != "ids":
             raise UserError("Le point de capture d'un dataset est toujours une Sonde IDS.")
         kinds = [k for k in spec.get("kinds") or [] if k in BENIGN_KINDS]
         profile = spec.get("profile") or "moderate"
@@ -303,7 +303,7 @@ class DatasetBuilder:
                 # Mode promiscuité (pas de -p) : la Sonde IDS reçoit la copie du trafic de
                 # tout le segment (switch en mode hub).
                 capture = self.lab.start_netns_helper(
-                    probe, self.lab.settings.capture,
+                    probe,
                     ["tcpdump", "-i", interface, "-U", "-w", PCAP_PATH],
                     role="dcapture", attached=plan.probe,
                 )
@@ -389,7 +389,7 @@ class DatasetBuilder:
         try:
             try:
                 helper = self.lab.start_netns_helper(
-                    device, self.lab.settings.traffic, command,
+                    device, command,
                     role="dataset", attached=run.source, attack=run.attack, target=run.target,
                 )
             except DockerException as exc:
