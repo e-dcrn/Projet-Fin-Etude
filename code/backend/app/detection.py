@@ -42,8 +42,9 @@ from docker.errors import DockerException, NotFound
 
 from .cicflowmeter import FLOW_WINDOW_SEC, FlowMeterWorker, parse_timestamp
 from .datasets import AttackRun
-from .traffic import ATTACKS, TrafficError, TrafficManager, docker_time
-from .training import BENIGN, ModelStore, TrainingError, feature_matrix
+from .errors import UserError
+from .traffic import ATTACKS, TrafficManager, docker_time
+from .training import BENIGN, ModelStore, feature_matrix
 
 log = logging.getLogger(__name__)
 
@@ -52,10 +53,6 @@ MAX_EVENTS = 300       # événements (alertes, attaques manquées) conservés
 WINDOW_DIR = "/tmp/ids"
 WINDOW_RE = re.compile(r"^w-(\d+)\.pcap$")
 INTERFACE_RE = re.compile(r"^[\w.@-]+$")
-
-
-class DetectionError(Exception):
-    """Opération impossible ; le message est affichable tel quel."""
 
 
 def outcome_of(predicted_attack: bool, truly_attack: bool) -> str:
@@ -101,21 +98,15 @@ class DetectionManager:
 
     def start(self, ids_node: str, model_id: str) -> dict:
         self.stop()
-        try:
-            device = self.traffic.require_device(ids_node, "Sonde IDS")
-        except TrafficError as exc:
-            raise DetectionError(str(exc)) from exc
+        device = self.traffic.require_device(ids_node, "Sonde IDS")
         if device.labels.get(f"{self.lab.settings.prefix}.type") != "ids":
-            raise DetectionError("Choisissez une Sonde IDS : elle seule reçoit une copie du trafic du segment.")
-        try:
-            meta = self.models.get(model_id)
-            bundle = joblib.load(self.models.file_path(model_id, "model.joblib"))
-        except TrainingError as exc:
-            raise DetectionError(str(exc)) from exc
+            raise UserError("Choisissez une Sonde IDS : elle seule reçoit une copie du trafic du segment.")
+        meta = self.models.get(model_id)
+        bundle = joblib.load(self.models.file_path(model_id, "model.joblib"))
 
         interface = self.traffic.primary_interface(device)
         if not INTERFACE_RE.match(interface):
-            raise DetectionError("Interface de la sonde inattendue.")
+            raise UserError("Interface de la sonde inattendue.")
         session = Session(ids=ids_node, ids_name=self.traffic.name_of(device), interface=interface,
                           model_meta=meta, bundle=bundle)
         try:
@@ -130,7 +121,7 @@ class DetectionManager:
         except DockerException as exc:
             self._cleanup(session)
             log.error("Démarrage de la détection : %s", exc)
-            raise DetectionError("Impossible de démarrer la détection sur la sonde.") from exc
+            raise UserError("Impossible de démarrer la détection sur la sonde.") from exc
 
         session.thread = threading.Thread(target=self._loop, args=(session,), daemon=True, name="detection")
         with self._lock:
@@ -202,8 +193,8 @@ class DetectionManager:
             while not session.stop.wait(1.0):
                 try:
                     self._tick(session)
-                except (NotFound, DetectionError) as exc:
-                    session.error = str(exc) if isinstance(exc, DetectionError) else "La sonde a disparu (réseau arrêté ?)."
+                except (NotFound, UserError) as exc:
+                    session.error = str(exc) if isinstance(exc, UserError) else "La sonde a disparu (réseau arrêté ?)."
                     break
                 except Exception as exc:  # noqa: BLE001 - une fenêtre ratée ne doit pas arrêter la détection
                     log.warning("Détection : fenêtre ignorée (%s)", exc)
@@ -217,7 +208,7 @@ class DetectionManager:
         capture = session.capture
         capture.reload()
         if capture.status != "running":
-            raise DetectionError("La capture de la sonde s'est arrêtée.")
+            raise UserError("La capture de la sonde s'est arrêtée.")
         listing = capture.exec_run(["sh", "-c", f"ls {WINDOW_DIR}"]).output.decode(errors="replace").split()
         now = time.time()
         # Une fenêtre est terminée quand sa période est écoulée : tcpdump écrit alors dans la suivante.

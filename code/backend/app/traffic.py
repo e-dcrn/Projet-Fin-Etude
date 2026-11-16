@@ -32,15 +32,15 @@ from typing import Dict, List, Optional
 from docker.errors import DockerException, NotFound
 
 from .deployer import LabManager
+from .errors import NotFoundError, UserError
+from .models import dns_name
+# Compte de démonstration créé sur les serveurs : cible des forces brutes, utilisé par l'agent bénin.
+from .service_listener import DOMAIN, LAB_PASSWORD, LAB_USER
 
 log = logging.getLogger(__name__)
 
 AGENT_SOURCE = (Path(__file__).parent / "traffic_agent.py").read_text(encoding="utf-8")
 
-# Compte de démonstration des serveurs (doit correspondre à service_listener.py) :
-# cible des scénarios de force brute sur un réseau isolé.
-LAB_USER = "labuser"
-LAB_PASSWORD = "password123"
 
 # Liste de mots de passe (faux, puis le vrai en dernier) : la force brute essaie d'abord
 # des échecs réalistes, puis « réussit », ce qui illustre l'attaque. Assez longue pour
@@ -157,9 +157,6 @@ ATTACKS = {
     },
 }
 
-class TrafficError(Exception):
-    """Opération impossible ; le message est affichable tel quel."""
-
 
 def command_preview(attack_id: str, speed: str, target: str = "<cible>") -> str:
     """Commande lancée par une attaque, lisible (la liste de mots de passe est résumée)."""
@@ -213,7 +210,7 @@ class TrafficManager:
     def require_device(self, node_id: str, what: str):
         device = self.lab.find_device(node_id)
         if device is None or device.status != "running":
-            raise TrafficError(f"{what} : l'équipement est éteint (validez la topologie pour démarrer le réseau).")
+            raise UserError(f"{what} : l'équipement est éteint (validez la topologie pour démarrer le réseau).")
         return device
 
     def name_of(self, container) -> str:
@@ -226,12 +223,18 @@ class TrafficManager:
         `dest` est un libellé conservé pour l'affichage (vers qui animer le trafic) ;
         `kinds` liste les types de trafic à générer (voir traffic_agent.build_actions)."""
         if profile not in BENIGN_PROFILES:
-            raise TrafficError(f"Profil de trafic inconnu « {profile} ».")
+            raise UserError(f"Profil de trafic inconnu « {profile} ».")
         device = self.require_device(node_id, "Trafic de fond")
         self.stop_benign(node_id)  # un seul agent par équipement
         self._paused.pop(node_id, None)
 
-        config = {"profile": profile, "targets": targets, "kinds": kinds or ["icmp"]}
+        config = {
+            "profile": profile,
+            "kinds": kinds or ["icmp"],
+            "targets": [{**t, "host": dns_name(t["name"])} for t in targets],
+            "account": {"user": LAB_USER, "password": LAB_PASSWORD},
+            "domain": DOMAIN,
+        }
         command = ["python3", "-u", "-c", AGENT_SOURCE, json.dumps(config)]
         try:
             self.lab.start_netns_helper(
@@ -240,7 +243,7 @@ class TrafficManager:
             )
         except DockerException as exc:
             log.error("Agent de trafic sur %s : %s", node_id, exc)
-            raise TrafficError("Impossible de démarrer le trafic de fond sur cet équipement.") from exc
+            raise UserError("Impossible de démarrer le trafic de fond sur cet équipement.") from exc
         log.info("Trafic bénin « %s » démarré sur %s → %s", profile, self.name_of(device), dest)
         return {"node": node_id, "profile": profile, "dest": dest or "all", "running": True}
 
@@ -265,14 +268,14 @@ class TrafficManager:
         """Lance un scénario d'audit depuis `source_id` vers `target` (IP ou sous-réseau), une fois."""
         attack = ATTACKS.get(attack_id)
         if attack is None:
-            raise TrafficError(f"Scénario inconnu « {attack_id} ».")
+            raise UserError(f"Scénario inconnu « {attack_id} ».")
         if speed not in SPEEDS:
-            raise TrafficError(f"Vitesse inconnue « {speed} ».")
+            raise UserError(f"Vitesse inconnue « {speed} ».")
         target = (target or "").strip()
         if not target:
-            raise TrafficError("Indiquez une cible pour le scénario.")
+            raise UserError("Indiquez une cible pour le scénario.")
         if not TARGET_RE.match(target):
-            raise TrafficError("Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
+            raise UserError("Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
         device = self.require_device(source_id, "Scénario")
 
         command = attack["command"](target, speed)
@@ -288,7 +291,7 @@ class TrafficManager:
         except DockerException as exc:
             log.error("Scénario %s depuis %s : %s", attack_id, source_id, exc)
             self._resume_benign(source_id)
-            raise TrafficError("Impossible de lancer le scénario d'audit.") from exc
+            raise UserError("Impossible de lancer le scénario d'audit.") from exc
 
         threading.Thread(
             target=self._resume_after, args=(helper, source_id), daemon=True, name=f"scenario-{helper.id[:12]}",
@@ -422,7 +425,7 @@ class TrafficManager:
                     return helper.logs().decode(errors="replace")
                 except DockerException:
                     return ""
-        raise TrafficError("Scénario introuvable (le réseau a peut-être été arrêté).")
+        raise NotFoundError("Scénario introuvable (le réseau a peut-être été arrêté).")
 
     def list_scenarios(self) -> List[dict]:
         scenarios = [self._scenario_info(h) for h in self.lab.helpers("scenario")]

@@ -1,5 +1,5 @@
 """
-Trafic bénin et services des serveurs : correspondance nom/port → service réel,
+Trafic bénin et services des serveurs : type d'un service, nom DNS,
 construction des sessions possibles de l'agent, requête DNS.
 
 Les sessions elles-mêmes (vrais clients contre vrais démons) ont besoin de
@@ -14,41 +14,37 @@ import pytest
 
 from app import service_listener as listener
 from app import traffic_agent as agent
+from app.models import SERVICE_KINDS, Service, dns_name
 
 
-@pytest.mark.parametrize("name,port,expected", [
-    ("http", 80, "http"), ("https", 443, "https"), ("HTTP", 8000, "http"), ("http-alt", 8080, "http"),
-    ("ssh", 2222, "ssh"), ("ftp", 21, "ftp"), ("telnet", 23, "telnet"), ("smtp", 25, "smtp"),
-    ("dns", 53, "dns"), ("mysql", 3306, "mysql"),
-    ("", 22, "ssh"), ("", 443, "https"),   # sans nom : port usuel
-    ("pop3", 110, None),                    # nom inconnu : simulateur
+@pytest.mark.parametrize("name,expected", [
+    ("http", "http"), ("HTTP", "http"), (" ssh ", "ssh"), ("mysql", "mysql"), ("dns", "dns"),
+    ("pop3", None), ("", None),  # nom inconnu ou absent : port simulé
 ])
-def test_service_kind_is_shared_by_server_and_client(name, port, expected):
-    assert listener.service_kind(name, port, "tcp") == expected
-    assert agent.service_kind({"name": name, "port": port}) == expected
+def test_service_kind_is_its_name(name, expected):
+    assert Service(port=1234, name=name).kind == expected
 
 
-def test_every_known_service_has_a_real_implementation():
-    assert set(listener.REAL_SERVICES) == {"http", "https", "ssh", "ftp", "telnet", "smtp", "dns", "mysql"}
+def test_every_service_kind_has_a_real_implementation():
+    assert set(listener.REAL_SERVICES) == set(SERVICE_KINDS)
 
 
-def test_host_slug_matches_between_dns_server_and_client():
-    for name in ("Serveur-Web", "PC 1", "Serveur_Fichiers", "IDS-1"):
-        assert listener.host_slug(name) == agent.host_slug(name)
-    assert agent.host_slug("Serveur Web (DMZ)") == "serveur-web-dmz"
+def test_dns_name():
+    assert dns_name("Serveur Web (DMZ)") == "serveur-web-dmz"
+    assert dns_name("PC_1") == "pc-1"
 
 
 TARGETS = [
-    {"ip": "10.0.20.10", "name": "Serveur-Web", "services": [
-        {"port": 80, "protocol": "tcp", "name": "http"},
-        {"port": 443, "protocol": "tcp", "name": "https"},
-        {"port": 3306, "protocol": "tcp", "name": "mysql"},
+    {"ip": "10.0.20.10", "host": "serveur-web", "services": [
+        {"port": 80, "protocol": "tcp", "kind": "http"},
+        {"port": 443, "protocol": "tcp", "kind": "https"},
+        {"port": 3306, "protocol": "tcp", "kind": "mysql"},
     ]},
-    {"ip": "10.0.20.11", "name": "Serveur-Fichiers", "services": [
-        {"port": 22, "protocol": "tcp", "name": "ssh"},
-        {"port": 53, "protocol": "udp", "name": "dns"},
+    {"ip": "10.0.20.11", "host": "serveur-fichiers", "services": [
+        {"port": 22, "protocol": "tcp", "kind": "ssh"},
+        {"port": 53, "protocol": "udp", "kind": "dns"},
     ]},
-    {"ip": "10.0.10.11", "name": "PC-2", "services": []},
+    {"ip": "10.0.10.11", "host": "pc-2", "services": []},
 ]
 
 
@@ -57,9 +53,9 @@ def labels(actions):
 
 
 def test_actions_follow_the_checked_kinds():
-    assert labels(agent.build_actions(TARGETS, {"web"}, "pc-1")) == [
+    assert labels(agent.build_actions(TARGETS, {"http", "https"}, "pc-1")) == [
         "http 10.0.20.10:80", "https 10.0.20.10:443"]
-    assert labels(agent.build_actions(TARGETS, {"service"}, "pc-1")) == [
+    assert labels(agent.build_actions(TARGETS, {"ssh", "mysql", "dns"}, "pc-1")) == [
         "mysql 10.0.20.10:3306", "ssh 10.0.20.11:22"]  # le DNS n'est pas une session à part
     assert labels(agent.build_actions(TARGETS, {"icmp"}, "pc-1")) == [
         "ping 10.0.10.11", "ping 10.0.20.10", "ping 10.0.20.11"]
@@ -74,13 +70,13 @@ def test_one_kind_per_service_only_reaches_that_service():
 
 
 def test_unknown_tcp_ports_are_the_tcp_kind():
-    targets = [{"ip": "10.0.0.5", "name": "S", "services": [{"port": 110, "protocol": "tcp", "name": "pop3"}]}]
+    targets = [{"ip": "10.0.0.5", "host": "s", "services": [{"port": 110, "protocol": "tcp", "kind": None}]}]
     assert labels(agent.build_actions(targets, {"tcp"}, "pc")) == ["tcp 10.0.0.5:110"]
     assert agent.build_actions(targets, {"http"}, "pc") == []
 
 
 def test_web_weighs_more_than_other_sessions():
-    weights = {label.split()[0]: w for w, label, _, _, _ in agent.build_actions(TARGETS, {"web", "service"}, "pc")}
+    weights = {label.split()[0]: w for w, label, _, _, _ in agent.build_actions(TARGETS, {"http", "https", "ssh", "mysql"}, "pc")}
     assert weights["http"] > weights["ssh"] and weights["https"] > weights["mysql"]
 
 

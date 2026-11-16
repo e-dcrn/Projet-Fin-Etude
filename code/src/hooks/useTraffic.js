@@ -22,7 +22,7 @@ export function useTraffic(active) {
       setData(overview);
       setError(null);
     } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
+      setError(err.message);
     }
   }, []);
 

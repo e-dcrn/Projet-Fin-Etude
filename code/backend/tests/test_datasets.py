@@ -6,7 +6,8 @@ import io
 import pytest
 
 from app.cicflowmeter import parse_timestamp
-from app.datasets import AttackRun, DatasetError, DatasetStore, failure_warning, label_dataset_csv
+from app.datasets import AttackRun, DatasetStore, failure_warning, label_dataset_csv
+from app.errors import UserError
 
 # 2026-10-30 10:00:00 UTC
 T0 = 1793354400.0
@@ -85,11 +86,11 @@ def test_store_roundtrip(tmp_path):
 
 def test_store_rejects_unsafe_ids_and_files(tmp_path):
     store = DatasetStore(tmp_path)
-    with pytest.raises(DatasetError):
+    with pytest.raises(UserError):
         store.get("../etc")
     dataset_id = store.new_id()
     store.save(dataset_id, {"id": dataset_id}, {})
-    with pytest.raises(DatasetError):
+    with pytest.raises(UserError):
         store.file_path(dataset_id, "../../secret")
 
 

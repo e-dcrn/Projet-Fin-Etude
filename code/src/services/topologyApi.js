@@ -53,7 +53,7 @@ async function request(path, options = {}) {
   return body;
 }
 
-/** État du réseau instancié : { running, deploying, devices: [{ id, name, running }], networks: [id] } */
+/** État du réseau instancié : { running, devices: [{ id, name, running }], networks: [id] } */
 export const fetchLabStatus = () => request('/lab');
 
 /** Arrête et supprime le réseau instancié. */
@@ -116,16 +116,14 @@ export const startDeployment = (topology) =>
   request('/deployments', { method: 'POST', body: JSON.stringify(topology) });
 
 /**
- * Suit la progression d'un déploiement. `onEvent` reçoit chaque événement :
+ * Suit une tâche de fond du serveur (déploiement, dataset, entraînement : voir
+ * backend/app/jobs.py) en Server-Sent Events. `onEvent` reçoit chaque événement :
  *   { type: 'progress', step, total, label } | { type: 'warning', message }
- *   { type: 'done', total } | { type: 'error', message }
+ *   { type: 'done', total, ... } | { type: 'error', message }
  * Retourne une fonction qui interrompt le suivi.
  */
-export const followDeployment = (id, onEvent) => followJob(`/deployments/${id}/events`, onEvent);
-
-/** Suit les événements d'une tâche de fond du serveur (Server-Sent Events, voir backend/app/jobs.py). */
-function followJob(path, onEvent) {
-  const source = new EventSource(`${API_BASE_URL}${path}`);
+export function followJob(id, onEvent) {
+  const source = new EventSource(`${API_BASE_URL}/jobs/${encodeURIComponent(id)}/events`);
   source.onmessage = (message) => {
     const event = JSON.parse(message.data);
     onEvent(event);
@@ -139,6 +137,9 @@ function followJob(path, onEvent) {
   return () => source.close();
 }
 
+/** Annule une tâche de fond (rien n'est sauvegardé). */
+export const cancelJob = (id) => request(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+
 // --- Datasets étiquetés (voir backend/app/datasets.py) ---------------------
 
 /** Datasets sauvegardés : { datasets: [meta…], job: id de la génération en cours ou null } */
@@ -146,12 +147,6 @@ export const fetchDatasets = () => request('/datasets');
 
 /** Lance la génération d'un dataset (programme : sonde, trafic bénin, attaques, durées) → { id } */
 export const startDataset = (spec) => request('/datasets', { method: 'POST', body: JSON.stringify(spec) });
-
-/** Suit la génération d'un dataset : mêmes événements qu'un déploiement ; `done` porte { dataset }. */
-export const followDatasetJob = (id, onEvent) => followJob(`/datasets/jobs/${id}/events`, onEvent);
-
-/** Annule la génération en cours (rien n'est sauvegardé). */
-export const cancelDatasetJob = (id) => request(`/datasets/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
 
 /** Supprime un dataset sauvegardé. */
 export const deleteDataset = (id) => request(`/datasets/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -166,12 +161,6 @@ export const fetchModels = () => request('/models');
 
 /** Lance l'entraînement d'un modèle (datasets, découpage, hyperparamètres) → { id } */
 export const startTraining = (spec) => request('/models', { method: 'POST', body: JSON.stringify(spec) });
-
-/** Suit un entraînement : mêmes événements qu'un déploiement ; `done` porte { model }. */
-export const followTrainingJob = (id, onEvent) => followJob(`/models/jobs/${id}/events`, onEvent);
-
-/** Annule l'entraînement en cours (rien n'est sauvegardé). */
-export const cancelTrainingJob = (id) => request(`/models/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
 
 /** Supprime un modèle entraîné. */
 export const deleteModel = (id) => request(`/models/${encodeURIComponent(id)}`, { method: 'DELETE' });

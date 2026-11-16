@@ -24,6 +24,8 @@ import docker
 from docker.errors import APIError, BuildError, DockerException, ImageNotFound
 from docker.types import IPAMConfig, IPAMPool
 
+from .errors import EngineUnavailable, UserError
+from .models import dns_name
 from .planner import DevicePlan, NetworkPlan, Plan
 from .settings import DeviceRuntime, Settings
 
@@ -32,22 +34,6 @@ log = logging.getLogger(__name__)
 # Nom de l'interface dans le container (eth0, eth1…) : option reconnue par Docker ≥ 28
 IFNAME_OPT = "com.docker.network.endpoint.ifname"
 LISTENER_SOURCE = (Path(__file__).parent / "service_listener.py").read_text(encoding="utf-8")
-
-
-class EngineUnavailable(Exception):
-    """Le moteur de virtualisation ne répond pas."""
-
-
-class DeploymentError(Exception):
-    """Échec d'une étape ; le message est affichable tel quel."""
-
-
-class Reporter:
-    """Interface de suivi utilisée par LabManager.deploy (implémentée par jobs.Job)."""
-
-    def begin(self, total: int) -> None: ...
-    def step(self, label: str) -> None: ...
-    def warn(self, message: str) -> None: ...
 
 
 class LabManager:
@@ -85,34 +71,15 @@ class LabManager:
         output = result.output.decode(errors="replace").strip()
         if result.exit_code != 0:
             log.error("%s : échec de « %s » : %s", container.name, script, output)
-            raise DeploymentError(f"{what} : la configuration a échoué ({output.splitlines()[-1] if output else 'erreur inconnue'}).")
+            raise UserError(f"{what} : la configuration a échoué ({output.splitlines()[-1] if output else 'erreur inconnue'}).")
         return output
-
-    def start_capture_helper(self, device):
-        """
-        Conteneur d'analyse partageant la pile réseau d'un équipement (mêmes
-        interfaces) : on y lance tcpdump sans rien installer dans l'équipement.
-        Il porte le label du lab : l'arrêt du réseau le supprime aussi.
-        """
-        client = self.client
-        runtime = self.settings.capture
-        image = self._image_name(runtime)
-        self._ensure_image(client, image, runtime)
-        return client.containers.run(
-            image,
-            runtime.command,
-            network_mode=f"container:{device.id}",
-            cap_add=runtime.cap_add,
-            labels=self._labels(role="capture"),
-            init=True,
-            detach=True,
-        )
 
     def start_netns_helper(self, device, runtime, command, role: str, **extra_labels):
         """
         Conteneur éphémère partageant la pile réseau d'un équipement (même IP,
-        mêmes interfaces) : tout ce qu'il émet semble provenir de l'équipement.
-        Sert à la génération de trafic (agent bénin, scénarios d'audit) sans rien
+        mêmes interfaces) : tout ce qu'il émet semble provenir de l'équipement,
+        et il voit tout le trafic de ses interfaces. Sert à la génération de
+        trafic (agent bénin, attaques) et à la capture (tcpdump), sans rien
         installer dans l'équipement. Il porte le label du lab : l'arrêt du réseau
         le supprime aussi. `role` et `extra_labels` permettent de le retrouver.
         """
@@ -133,17 +100,6 @@ class LabManager:
         """Conteneurs auxiliaires d'un rôle donné (capture, traffic, scenario…)."""
         selector = f"{self.settings.prefix}.role={role}"
         return self.client.containers.list(all=True, filters={"label": [self.label, selector]})
-
-    def remove_capture_helpers(self, keep) -> None:
-        """Supprime les conteneurs de capture orphelins (ceux dont l'id n'est pas dans `keep`)."""
-        role = f"{self.settings.prefix}.role=capture"
-        for c in self.client.containers.list(all=True, filters={"label": [self.label, role]}):
-            if c.id not in keep:
-                log.warning("Outil de capture orphelin supprimé : %s", c.short_id)
-                try:
-                    c.remove(force=True)
-                except DockerException:
-                    pass
 
     def _image_name(self, runtime: DeviceRuntime) -> str:
         """Image à instancier : celle de devices.toml, ou sa variante enrichie de `packages`."""
@@ -190,7 +146,8 @@ class LabManager:
 
     # ------------------------------------------------------------------ déploiement
 
-    def deploy(self, plan: Plan, reporter: Reporter) -> None:
+    def deploy(self, plan: Plan, reporter) -> None:
+        """`reporter` (une tâche de fond, voir jobs.Job) affiche la progression : begin, step, warn."""
         client = self.client
         runtimes = self.settings.devices
         images: Dict[str, List[str]] = {}
@@ -270,7 +227,7 @@ class LabManager:
                 client.images.pull(image)
         except (APIError, BuildError) as exc:
             log.error("Préparation de l'image %s impossible : %s", image, exc)
-            raise DeploymentError(
+            raise UserError(
                 "Impossible de préparer les équipements : vérifiez la connexion Internet de la machine hôte."
             ) from exc
 
@@ -288,10 +245,10 @@ class LabManager:
         except APIError as exc:
             log.error("Création du réseau %s : %s", net.name, exc)
             if "overlap" in str(exc).lower():
-                raise DeploymentError(
+                raise UserError(
                     f"Le sous-réseau {net.subnet} de {net.name} est déjà utilisé sur la machine hôte : choisissez une autre plage."
                 ) from exc
-            raise DeploymentError(f"Impossible de créer le réseau {net.name}.") from exc
+            raise UserError(f"Impossible de créer le réseau {net.name}.") from exc
 
     def _bridge_name(self, net: NetworkPlan) -> str:
         # Nom d'interface Linux : 15 caractères maximum
@@ -309,9 +266,9 @@ class LabManager:
         command = runtime.command
         if device.type == "server":
             services = [s.model_dump() for s in device.services]
-            # Annuaire de la topologie (nom → IP) : sert au serveur DNS s'il y en a un.
+            # Annuaire de la topologie (nom DNS → IP) : sert au serveur DNS s'il y en a un.
             hosts = {
-                d.name: str(ep.address.ip)
+                dns_name(d.name): str(ep.address.ip)
                 for d in plan.devices
                 for ep in d.endpoints[:1]
                 if ep.address is not None
@@ -345,7 +302,7 @@ class LabManager:
             container.start()
         except APIError as exc:
             log.error("Création de %s : %s", device.name, exc)
-            raise DeploymentError(f"Impossible de mettre {device.name} sous tension.") from exc
+            raise UserError(f"Impossible de mettre {device.name} sous tension.") from exc
         container.reload()
         return container
 

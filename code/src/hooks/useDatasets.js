@@ -4,11 +4,8 @@ import { useRecords } from './useRecords.js';
 const DATASETS_API = {
   list: api.fetchDatasets,
   start: api.startDataset,
-  follow: api.followDatasetJob,
-  cancel: api.cancelDatasetJob,
   remove: api.deleteDataset,
   listKey: 'datasets',
-  resultKey: 'dataset',
 };
 
 /**

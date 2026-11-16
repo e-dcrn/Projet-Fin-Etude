@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import JobProgress from './JobProgress.jsx';
+import { toggled, useAction } from '../hooks/useAction.js';
 import { formatDate, formatDuration } from '../utils/format.js';
 import { availableBenignKinds, benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
 
@@ -104,7 +105,7 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
     try {
       await datasets.remove(ds.id);
     } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
+      setError(err.message);
     }
   };
 
@@ -185,28 +186,15 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
   });
   const [durations, setDurations] = useState({ warmup: 30, gap: 10, cooldown: 20, maxAttack: 60 });
   const [variants, setVariants] = useState(2);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, act } = useAction();
 
   const attackOf = (id) => traffic.attacks.find((a) => a.id === id);
   const updateRow = (key, fields) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...fields } : r)));
-  const toggleEmitter = (id) =>
-    setEmittersOff((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleEmitter = (id) => setEmittersOff((prev) => toggled(prev, id));
 
   const emitters = sources.filter((s) => !emittersOff.has(s.id));
   const kindsArr = kindList.map((k) => k.id).filter((id) => !kindsOff.has(id));
-  const toggleKind = (id) =>
-    setKindsOff((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleKind = (id) => setKindsOff((prev) => toggled(prev, id));
   const runCount = rows.reduce((n, r) => n + Number(r.repeat || 0), 0);
   // Pire cas : chaque attaque va jusqu'à sa durée maximale (+ ~30 s d'extraction des flux).
   const maxSeconds = (durations.warmup + runCount * durations.maxAttack + Math.max(runCount - 1, 0) * durations.gap
@@ -214,12 +202,9 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
   const rowsValid = rows.length > 0 && rows.every((r) => r.attack && r.source && r.target && r.repeat >= 1);
   const canStart = probe && rowsValid && (emitters.length === 0 || kindsArr.length > 0) && !busy;
 
-  const submit = async () => {
-    setBusy(true);
-    setError(null);
+  const submit = () => {
     const allDestIds = dests.map((d) => d.id);
-    try {
-      await datasets.generate({
+    return act(() => datasets.generate({
         name,
         probe,
         kinds: kindsArr,
@@ -228,11 +213,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
         attacks: rows.map(({ attack, source, target, speed, repeat }) => ({ attack, source, target, speed, repeat: Number(repeat) })),
         ...durations,
         variants,
-      });
-    } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
-      setBusy(false);
-    }
+      }));
   };
 
   return (
@@ -426,7 +407,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
 }
 
 function RunContent({ run, datasets, onClose, onDone }) {
-  const dataset = run.result;
+  const dataset = run.done?.dataset;
   const produced = run.done?.datasets ?? (dataset ? [dataset] : []);
   return (
     <JobProgress

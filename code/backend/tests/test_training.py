@@ -9,9 +9,10 @@ import pandas as pd
 import pytest
 
 from app.datasets import DatasetStore
+from app.errors import UserError
 from app.jobs import Job
 from app.training import (
-    ModelStore, Trainer, TrainingError, by_attack, evaluate, feature_matrix, targets, temporal_split,
+    ModelStore, Trainer, by_attack, evaluate, feature_matrix, targets, temporal_split,
 )
 
 COLUMNS = ["Flow ID", "Src IP", "Src Port", "Dst IP", "Dst Port", "Protocol", "Timestamp",
@@ -90,7 +91,7 @@ def test_evaluate_detection_and_false_positives():
 def test_train_on_one_dataset_and_test_on_another(stores):
     datasets, models = stores
     trainer = Trainer(datasets, models)
-    job = Job((TrainingError,), "erreur")
+    job = Job()
     result = trainer.run(trainer.prepare(_spec()), job)
     meta = result["model"]
     assert meta["metrics"]["accuracy"] > 0.95  # les deux classes sont bien séparables
@@ -105,11 +106,11 @@ def test_train_on_one_dataset_and_test_on_another(stores):
 
 def test_prepare_rejects_leaky_or_incomplete_requests(stores):
     trainer = Trainer(*stores)
-    with pytest.raises(TrainingError):  # même dataset des deux côtés
+    with pytest.raises(UserError):  # même dataset des deux côtés
         trainer.prepare(_spec(test=["20261030-100001"]))
-    with pytest.raises(TrainingError):  # pas de jeu de test
+    with pytest.raises(UserError):  # pas de jeu de test
         trainer.prepare(_spec(test=[]))
-    with pytest.raises(TrainingError):  # dataset inconnu
+    with pytest.raises(UserError):  # dataset inconnu
         trainer.prepare(_spec(train=["20991231-000000"]))
     # Découpage temporel : un seul dataset suffit.
     assert trainer.prepare(_spec(split="temporal", test=[])).test == []

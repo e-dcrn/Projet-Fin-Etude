@@ -1,6 +1,6 @@
 """
 Services exécutés DANS chaque serveur de la topologie
-(python3 -c <ce fichier> '<services JSON>' '<annuaire JSON>').
+(python3 -c <ce fichier> '<services JSON>' '<annuaire JSON : nom DNS → IP>').
 
 Chaque service déclaré sur un serveur est un VRAI service : un démon standard,
 ou un serveur de la bibliothèque standard Python qui parle le vrai protocole.
@@ -20,7 +20,7 @@ est donc authentique, comme sur un vrai réseau :
   |         | topologie (annuaire fourni par le moteur)                   |
   | mysql   | MariaDB, avec une base de démonstration « boutique »        |
 
-Un service au nom inconnu (ou dont le démon manque) retombe sur un simulateur :
+Un service au nom inconnu (ou dont le démarrage échoue) retombe sur un simulateur :
 le port est réellement ouvert et renvoie une bannière, ce qui suffit à un scan.
 
 Compte de démonstration (réseau ISOLÉ, identifiants volontairement faibles,
@@ -340,24 +340,13 @@ def start_smtpd(port, _hosts):
     return True
 
 
-def host_slug(name):
-    out = "".join(c if c.isalnum() else "-" for c in name.lower())
-    while "--" in out:
-        out = out.replace("--", "-")
-    return out.strip("-")
-
-
 def start_dnsmasq(port, hosts):
     """Vrai serveur DNS (dnsmasq), autorité sur le domaine « lab » : chaque
     équipement de la topologie y a un nom (ex. serveur-web.lab)."""
     dnsmasq = shutil.which("dnsmasq")
     if not dnsmasq:
         return False
-    lines = []
-    for name, ip in (hosts or {}).items():
-        slug = host_slug(name)
-        if slug and ip:
-            lines.append(f"{ip} {slug}.{DOMAIN} {slug}")
+    lines = [f"{ip} {name}.{DOMAIN} {name}" for name, ip in hosts.items() if name and ip]
     write("/etc/lab-hosts", "\n".join(lines) + "\n")
     subprocess.Popen(
         [dnsmasq, "-k", "--no-resolv", "--no-hosts", "--addn-hosts=/etc/lab-hosts",
@@ -460,27 +449,14 @@ def serve_udp(port, name):
         srv.sendto(data, addr)  # écho : suffit pour qu'un scan UDP voie le port ouvert
 
 
-def service_kind(name, port, protocol):
-    """Type de service réel à lancer, d'après le nom déclaré (ou le port usuel)."""
-    name = (name or "").strip().lower()
-    if name in REAL_SERVICES:
-        return name
-    if name.startswith("https") or port in (443, 8443):
-        return "https"
-    if name.startswith("http") or port in (80, 8080):
-        return "http"
-    by_port = {22: "ssh", 21: "ftp", 23: "telnet", 25: "smtp", 53: "dns", 3306: "mysql"}
-    return by_port.get(port) if not name else None
-
-
 def main():
     services = json.loads(sys.argv[1]) if len(sys.argv) > 1 else []
     hosts = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
     for svc in services:
         port = int(svc["port"])
-        name = (svc.get("name") or "").strip().lower()
+        name = svc.get("name") or ""
         protocol = svc.get("protocol", "tcp")
-        kind = service_kind(name, port, protocol)
+        kind = svc.get("kind")  # type du service, déterminé par le moteur (models.Service.kind)
         try:
             if kind and REAL_SERVICES[kind](port, hosts):
                 continue

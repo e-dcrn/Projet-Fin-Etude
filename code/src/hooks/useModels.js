@@ -4,11 +4,8 @@ import { useRecords } from './useRecords.js';
 const MODELS_API = {
   list: api.fetchModels,
   start: api.startTraining,
-  follow: api.followTrainingJob,
-  cancel: api.cancelTrainingJob,
   remove: api.deleteModel,
   listKey: 'models',
-  resultKey: 'model',
 };
 
 const NO_OPTIONS = { models: [], splits: [] };

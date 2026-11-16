@@ -1,13 +1,14 @@
 """
 API HTTP du moteur de simulation.
 
-  GET    /api/health                      le moteur est-il joignable ?
   GET    /api/lab                         état du réseau instancié
   DELETE /api/lab                         arrêt et suppression du réseau
-  POST   /api/deployments                 lance l'instanciation d'une topologie → { id }
-  GET    /api/deployments/{id}/events     progression en Server-Sent Events
+  POST   /api/deployments                 lance l'instanciation d'une topologie → { id } (tâche de fond)
   WS     /api/devices/{id}/terminal       terminal interactif sur un PC ou un serveur (voir terminal.py)
   WS     /api/devices/{id}/interfaces/{if}/capture   capture du trafic d'un lien (voir capture.py)
+
+  GET    /api/jobs/{id}/events            progression d'une tâche de fond en Server-Sent Events (voir jobs.py)
+  POST   /api/jobs/{id}/cancel            annule une tâche de fond
 
   GET    /api/lab/traffic                 activité de trafic (agents bénins, scénarios) + catalogues
   POST   /api/lab/traffic/benign          démarre le trafic de fond sur un équipement
@@ -19,22 +20,21 @@ API HTTP du moteur de simulation.
 
   GET    /api/datasets                    datasets sauvegardés (voir datasets.py) + génération en cours
   POST   /api/datasets                    lance la génération d'un dataset → { id } (tâche de fond)
-  GET    /api/datasets/jobs/{id}/events   progression de la génération en Server-Sent Events
-  POST   /api/datasets/jobs/{id}/cancel   annule la génération en cours
   GET    /api/datasets/{id}/files/{name}  télécharge flows.csv, capture.pcap ou meta.json
   DELETE /api/datasets/{id}               supprime un dataset
+
+  GET    /api/models                      modèles entraînés (voir training.py) + entraînement en cours + options
+  POST   /api/models                      lance l'entraînement d'un modèle → { id } (tâche de fond)
+  GET    /api/models/{id}/files/{name}    télécharge model.joblib ou meta.json
+  DELETE /api/models/{id}                 supprime un modèle
 
   GET    /api/lab/detection               état de la détection en direct (verdicts, vérité terrain)
   POST   /api/lab/detection               démarre la détection : une Sonde IDS + un modèle entraîné
   DELETE /api/lab/detection               arrête la détection
   POST   /api/lab/detection/reset         efface le bilan et les événements (nouvel essai)
 
-  GET    /api/models                      modèles entraînés (voir training.py) + entraînement en cours + options
-  POST   /api/models                      lance l'entraînement d'un modèle → { id } (tâche de fond)
-  GET    /api/models/jobs/{id}/events     progression de l'entraînement en Server-Sent Events
-  POST   /api/models/jobs/{id}/cancel     annule l'entraînement en cours
-  GET    /api/models/{id}/files/{name}    télécharge model.joblib ou meta.json
-  DELETE /api/models/{id}                 supprime un modèle
+Toute erreur destinée à l'utilisateur est une UserError (voir errors.py) : elle
+devient une réponse { errors: [message…] } avec son code HTTP.
 
 Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 """
@@ -47,43 +47,38 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Callable, List, Optional
 
+from docker.errors import DockerException
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from docker.errors import DockerException
 from pydantic import BaseModel, Field
 
-from .deployer import DeploymentError, EngineUnavailable, LabManager
-from .detection import DetectionError, DetectionManager
-from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetError, DatasetStore
-from .jobs import Job, JobRegistry
+from .capture import CaptureSession
+from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetStore
+from .deployer import LabManager
+from .detection import DetectionManager
+from .errors import NotFoundError, UserError
+from .jobs import JobRegistry
 from .models import Service, Topology
 from .planner import TopologyError, build_plan
+from .sessions import Session, SessionRegistry
 from .settings import LOCAL_ORIGIN_REGEX, load_settings, origin_allowed
-from .capture import CaptureSession
-from .sessions import Session, SessionError, SessionRegistry
 from .terminal import TerminalSession
-from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer, TrainingError
-from .traffic import BENIGN_PROFILES, TrafficError, TrafficManager, attack_catalog, speed_catalog
+from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer
+from .traffic import BENIGN_PROFILES, TrafficManager, attack_catalog, speed_catalog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
+log = logging.getLogger(__name__)
 
-settings = load_settings()
-lab = LabManager(settings)
+lab = LabManager(load_settings())
 traffic = TrafficManager(lab)
-jobs = JobRegistry()
 datasets = DatasetStore()
 dataset_builder = DatasetBuilder(traffic, datasets)
-dataset_jobs = JobRegistry(
-    "dataset", (DatasetError,), "Erreur inattendue pendant la génération du dataset (voir les journaux du serveur).",
-)
 models = ModelStore()
 trainer = Trainer(datasets, models)
 detection = DetectionManager(traffic, models)
-training_jobs = JobRegistry(
-    "training", (TrainingError,), "Erreur inattendue pendant l'entraînement (voir les journaux du serveur).",
-)
-sessions = SessionRegistry()  # terminaux et captures ouverts
+jobs = JobRegistry()           # tâches de fond : « deploy », « dataset », « training »
+sessions = SessionRegistry()   # terminaux et captures ouverts
 
 
 @asynccontextmanager
@@ -100,36 +95,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ENGINE_DOWN = "Le moteur de simulation n'est pas démarré sur la machine hôte."
+
+@app.exception_handler(UserError)
+async def user_error(_request: Request, exc: UserError):
+    messages = exc.errors if isinstance(exc, TopologyError) else [str(exc)]
+    return JSONResponse(status_code=exc.status, content={"errors": messages})
 
 
-def error_response(status: int, *errors: str) -> JSONResponse:
-    return JSONResponse(status_code=status, content={"errors": list(errors)})
+def ensure_not_deploying() -> None:
+    if jobs.busy("deploy"):
+        raise UserError("Un déploiement est en cours.")
 
 
-@app.exception_handler(EngineUnavailable)
-async def engine_unavailable(_request: Request, _exc: EngineUnavailable):
-    return error_response(503, ENGINE_DOWN)
-
-
-@app.get("/api/health")
-def health():
-    lab.client  # lève EngineUnavailable si besoin
-    return {"ok": True}
-
+# --------------------------------------------------------------------------- réseau
 
 @app.get("/api/lab")
 def lab_status():
-    return {**lab.status(), "deploying": jobs.busy}
+    return lab.status()
 
 
 @app.delete("/api/lab")
 def lab_stop():
-    if jobs.busy:
-        return error_response(409, "Un déploiement est en cours.")
+    ensure_not_deploying()
     detection.stop()
     lab.teardown()
     return {"ok": True}
+
+
+@app.post("/api/deployments", status_code=202)
+def create_deployment(topology: Topology):
+    plan = build_plan(topology)
+    lab.client  # vérifie que Docker répond avant de lancer la tâche
+    job = jobs.start("deploy", lambda job: lab.deploy(plan, job))
+    return {"id": job.id}
+
+
+# --------------------------------------------------------------------------- tâches de fond
+
+def find_job(job_id: str):
+    job = jobs.get(job_id)
+    if job is None:
+        raise NotFoundError("Tâche inconnue.")
+    return job
+
+
+@app.get("/api/jobs/{job_id}/events")
+async def job_events(job_id: str, request: Request):
+    """Diffuse les événements d'une tâche de fond en Server-Sent Events."""
+    job = find_job(job_id)
+    # Reprise après reconnexion : EventSource renvoie le dernier id reçu
+    last_id = request.headers.get("last-event-id")
+    start = int(last_id) + 1 if last_id and last_id.isdigit() else 0
+
+    async def stream():
+        index, idle = start, 0.0
+        while True:
+            events = job.events_since(index)
+            for event in events:
+                yield f"id: {index}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                index += 1
+            if job.finished and not job.events_since(index):
+                return
+            if await request.is_disconnected():
+                return
+            idle = 0.0 if events else idle + 0.2
+            if idle >= 15:  # commentaire SSE : garde la connexion ouverte
+                yield ": keep-alive\n\n"
+                idle = 0.0
+            await asyncio.sleep(0.2)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str):
+    find_job(job_id).cancel()
+    return {"ok": True}
+
+
+def current_job_id(kind: str) -> Optional[str]:
+    job = jobs.current(kind)
+    return job.id if job else None
 
 
 # --------------------------------------------------------------------------- trafic
@@ -155,19 +205,10 @@ class ScenarioRequest(BaseModel):
     speed: str = "fast"  # vitesse (voir traffic.SPEEDS)
 
 
-def traffic_guard(fn):
-    """Exécute une opération de trafic en traduisant TrafficError en réponse 409."""
-    try:
-        return fn()
-    except TrafficError as exc:
-        return error_response(409, str(exc))
-
-
 @app.get("/api/lab/traffic")
 def traffic_overview():
-    overview = traffic.overview()
     return {
-        **overview,
+        **traffic.overview(),
         "profiles": [{"id": k, "label": v} for k, v in BENIGN_PROFILES.items()],
         "attacks": attack_catalog(),
         "speeds": speed_catalog(),
@@ -177,7 +218,7 @@ def traffic_overview():
 @app.post("/api/lab/traffic/benign")
 def start_benign(req: BenignRequest):
     targets = [t.model_dump() for t in req.targets]
-    return traffic_guard(lambda: traffic.start_benign(req.node, req.profile, targets, req.dest, req.kinds))
+    return traffic.start_benign(req.node, req.profile, targets, req.dest, req.kinds)
 
 
 @app.delete("/api/lab/traffic/benign")
@@ -187,7 +228,7 @@ def stop_benign(node: Optional[str] = None):
 
 @app.post("/api/lab/scenarios", status_code=201)
 def run_scenario(req: ScenarioRequest):
-    return traffic_guard(lambda: traffic.run_scenario(req.source, req.attack, req.target, req.speed))
+    return traffic.run_scenario(req.source, req.attack, req.target, req.speed)
 
 
 @app.post("/api/lab/scenarios/stop")
@@ -197,7 +238,7 @@ def stop_scenarios(id: Optional[str] = None):
 
 @app.get("/api/lab/scenarios/{scenario_id}/logs")
 def scenario_logs(scenario_id: str):
-    return traffic_guard(lambda: {"logs": traffic.scenario_logs(scenario_id)})
+    return {"logs": traffic.scenario_logs(scenario_id)}
 
 
 @app.delete("/api/lab/scenarios")
@@ -236,58 +277,26 @@ class DatasetRequest(BaseModel):
 
 @app.get("/api/datasets")
 def list_datasets():
-    current = dataset_jobs.current
-    return {"datasets": datasets.list(), "job": current.id if current else None}
+    return {"datasets": datasets.list(), "job": current_job_id("dataset")}
 
 
 @app.post("/api/datasets", status_code=202)
 def create_dataset(req: DatasetRequest):
-    if jobs.busy:
-        return error_response(409, "Un déploiement est en cours.")
-    if dataset_jobs.busy:
-        return error_response(409, "Une génération de dataset est déjà en cours.")
-    try:
-        plan = dataset_builder.prepare(req.model_dump())
-    except DatasetError as exc:
-        return error_response(409, str(exc))
-    job = dataset_jobs.start(lambda reporter: dataset_builder.run(plan, reporter))
-    if job is None:
-        return error_response(409, "Une génération de dataset est déjà en cours.")
+    ensure_not_deploying()
+    plan = dataset_builder.prepare(req.model_dump())
+    job = jobs.start("dataset", lambda job: dataset_builder.run(plan, job))
     return {"id": job.id}
-
-
-@app.get("/api/datasets/jobs/{job_id}/events")
-async def dataset_events(job_id: str, request: Request):
-    job = dataset_jobs.get(job_id)
-    if job is None:
-        return error_response(404, "Génération inconnue.")
-    return job_events(job, request)
-
-
-@app.post("/api/datasets/jobs/{job_id}/cancel")
-def cancel_dataset(job_id: str):
-    job = dataset_jobs.get(job_id)
-    if job is None:
-        return error_response(404, "Génération inconnue.")
-    job.cancel()
-    return {"ok": True}
 
 
 @app.get("/api/datasets/{dataset_id}/files/{name}")
 def dataset_file(dataset_id: str, name: str):
-    try:
-        path = datasets.file_path(dataset_id, name)
-    except DatasetError as exc:
-        return error_response(404, str(exc))
+    path = datasets.file_path(dataset_id, name)
     return FileResponse(path, media_type=DATASET_FILES[name], filename=f"dataset-{dataset_id}-{name}")
 
 
 @app.delete("/api/datasets/{dataset_id}")
 def delete_dataset(dataset_id: str):
-    try:
-        datasets.delete(dataset_id)
-    except DatasetError as exc:
-        return error_response(404, str(exc))
+    datasets.delete(dataset_id)
     return {"ok": True}
 
 
@@ -311,52 +320,30 @@ def options(catalog: dict) -> list:
 
 @app.get("/api/models")
 def list_models():
-    current = training_jobs.current
     return {
         "models": models.list(),
-        "job": current.id if current else None,
+        "job": current_job_id("training"),
         "options": {"models": options(MODELS), "splits": options(SPLITS)},
     }
 
 
 @app.post("/api/models", status_code=202)
 def create_model(req: TrainingRequest):
-    if training_jobs.busy:
-        return error_response(409, "Un entraînement est déjà en cours.")
-    try:
-        plan = trainer.prepare(req.model_dump())
-    except TrainingError as exc:
-        return error_response(409, str(exc))
-    job = training_jobs.start(lambda reporter: trainer.run(plan, reporter))
-    if job is None:
-        return error_response(409, "Un entraînement est déjà en cours.")
+    plan = trainer.prepare(req.model_dump())
+    job = jobs.start("training", lambda job: trainer.run(plan, job))
     return {"id": job.id}
-
-
-@app.get("/api/models/jobs/{job_id}/events")
-async def model_events(job_id: str, request: Request):
-    job = training_jobs.get(job_id)
-    if job is None:
-        return error_response(404, "Entraînement inconnu.")
-    return job_events(job, request)
-
-
-@app.post("/api/models/jobs/{job_id}/cancel")
-def cancel_model(job_id: str):
-    job = training_jobs.get(job_id)
-    if job is None:
-        return error_response(404, "Entraînement inconnu.")
-    job.cancel()
-    return {"ok": True}
 
 
 @app.get("/api/models/{model_id}/files/{name}")
 def model_file(model_id: str, name: str):
-    try:
-        path = models.file_path(model_id, name)
-    except TrainingError as exc:
-        return error_response(404, str(exc))
+    path = models.file_path(model_id, name)
     return FileResponse(path, media_type=MODEL_FILES[name], filename=f"modele-{model_id}-{name}")
+
+
+@app.delete("/api/models/{model_id}")
+def delete_model(model_id: str):
+    models.delete(model_id)
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- détection en direct
@@ -373,10 +360,7 @@ def detection_status():
 
 @app.post("/api/lab/detection", status_code=201)
 def start_detection(req: DetectionRequest):
-    try:
-        return detection.start(req.ids, req.model)
-    except DetectionError as exc:
-        return error_response(409, str(exc))
+    return detection.start(req.ids, req.model)
 
 
 @app.delete("/api/lab/detection")
@@ -389,66 +373,7 @@ def reset_detection():
     return detection.reset()
 
 
-@app.delete("/api/models/{model_id}")
-def delete_model(model_id: str):
-    try:
-        models.delete(model_id)
-    except TrainingError as exc:
-        return error_response(404, str(exc))
-    return {"ok": True}
-
-
-@app.post("/api/deployments", status_code=202)
-def create_deployment(topology: Topology):
-    try:
-        plan = build_plan(topology)
-    except TopologyError as exc:
-        return error_response(400, *exc.errors)
-
-    lab.client  # vérifie la disponibilité avant de lancer la tâche
-    job = jobs.start(lambda reporter: lab.deploy(plan, reporter))
-    if job is None:
-        return error_response(409, "Un déploiement est déjà en cours.")
-    return {"id": job.id}
-
-
-@app.get("/api/deployments/{job_id}/events")
-async def deployment_events(job_id: str, request: Request):
-    job = jobs.get(job_id)
-    if job is None:
-        return error_response(404, "Déploiement inconnu.")
-    return job_events(job, request)
-
-
-def job_events(job: Job, request: Request) -> StreamingResponse:
-    """Diffuse les événements d'une tâche de fond en Server-Sent Events."""
-    # Reprise après reconnexion : EventSource renvoie le dernier id reçu
-    last_id = request.headers.get("last-event-id")
-    start = int(last_id) + 1 if last_id and last_id.isdigit() else 0
-
-    async def stream():
-        index, idle = start, 0.0
-        while True:
-            events = job.events_since(index)
-            for event in events:
-                yield f"id: {index}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                index += 1
-            if job.finished and not job.events_since(index):
-                return
-            if await request.is_disconnected():
-                return
-            idle = 0.0 if events else idle + 0.2
-            if idle >= 15:  # commentaire SSE : garde la connexion ouverte
-                yield ": keep-alive\n\n"
-                idle = 0.0
-            await asyncio.sleep(0.2)
-
-    return StreamingResponse(
-        stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
+# --------------------------------------------------------------------------- terminal et capture (WebSockets)
 
 async def open_session(websocket: WebSocket, factory: Callable[[], Session]) -> Optional[Session]:
     """
@@ -465,13 +390,11 @@ async def open_session(websocket: WebSocket, factory: Callable[[], Session]) -> 
     await websocket.accept()
     try:
         return await asyncio.to_thread(factory)
-    except SessionError as exc:
+    except UserError as exc:
         message = str(exc)
-    except EngineUnavailable:
-        message = ENGINE_DOWN
-    except (DockerException, DeploymentError) as exc:
-        logging.getLogger(__name__).error("Ouverture d'une session : %s", exc)
-        message = str(exc) if isinstance(exc, DeploymentError) else "Opération impossible sur cet équipement."
+    except DockerException as exc:
+        log.error("Ouverture d'une session : %s", exc)
+        message = "Opération impossible sur cet équipement."
     await websocket.send_json({"type": "error", "message": message})
     await websocket.close()
     return None

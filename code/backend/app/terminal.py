@@ -33,7 +33,7 @@ from docker.errors import DockerException, NotFound
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .deployer import LabManager
-from .sessions import SessionError
+from .errors import UserError
 
 log = logging.getLogger(__name__)
 
@@ -55,10 +55,6 @@ KILL_SCRIPT = (
 READ_SIZE = 64 * 1024
 
 
-class TerminalError(SessionError):
-    pass
-
-
 def _clamp(value, low: int, high: int, default: int) -> int:
     try:
         return max(low, min(high, int(value)))
@@ -76,9 +72,9 @@ class TerminalSession:
 
         container = lab.find_device(node_id)
         if container is None or container.status != "running":
-            raise TerminalError("Cet équipement est éteint : validez la topologie pour le démarrer.")
+            raise UserError("Cet équipement est éteint : validez la topologie pour le démarrer.")
         if container.labels.get(f"{lab.settings.prefix}.type") not in TERMINAL_TYPES:
-            raise TerminalError("Le terminal n'est disponible que sur les PC et les serveurs.")
+            raise UserError("Le terminal n'est disponible que sur les PC et les serveurs.")
         self.container = container
         self.name = container.labels.get(f"{lab.settings.prefix}.name", node_id)
 

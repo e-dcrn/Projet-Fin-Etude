@@ -13,10 +13,6 @@ from typing import Protocol, Set
 from starlette.websockets import WebSocket
 
 
-class SessionError(Exception):
-    """Ouverture impossible ; le message est affichable tel quel."""
-
-
 class Session(Protocol):
     async def run(self, websocket: WebSocket) -> None: ...  # relaie jusqu'à la fin, puis libère
     def close(self) -> None: ...  # libération idempotente
