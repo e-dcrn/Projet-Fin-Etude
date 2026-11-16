@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fetchLabStatus, followDeployment, startDeployment, stopLab } from '../services/topologyApi.js';
+import { fetchLabStatus, followJob, startDeployment, stopLab } from '../services/topologyApi.js';
+import { applyJobEvent, isFinal, newRun } from '../utils/jobRun.js';
 import { hasErrors } from '../utils/validators.js';
 
 /**
  * Cycle de vie de l'instanciation du réseau.
  *
  * `run` décrit le déploiement affiché dans la boîte de dialogue :
- *   phase    'review'  : problèmes détectés, en attente de confirmation
- *            'running' : création en cours (step / total / label)
- *            'done'    : réseau opérationnel
- *            'failed'  : échec (errors : liste de messages)
- *   steps    étapes déjà commencées (la dernière est l'étape en cours)
- *   warnings avertissements non bloquants remontés par le serveur
+ *   phase 'review' : problèmes détectés, en attente de confirmation (topology, issues, blocked) ;
+ *   sinon, suivi de la tâche de fond (voir utils/jobRun.js), plus deviceCount.
  *
  * `lab` décrit l'état du réseau instancié :
  *   status   'unknown' | 'offline' (moteur injoignable) | 'stopped' | 'running'
@@ -39,42 +36,22 @@ export function useDeployment() {
     return () => unfollow.current?.();
   }, [refreshLab]);
 
-  const handleEvent = useCallback(
-    (event) => {
-      setRun((current) => {
-        if (!current) return current;
-        switch (event.type) {
-          case 'progress':
-            return { ...current, step: event.step, total: event.total, steps: [...current.steps, event.label] };
-          case 'warning':
-            return { ...current, warnings: [...current.warnings, event.message] };
-          case 'done':
-            return { ...current, phase: 'done', step: current.total };
-          case 'error':
-            return { ...current, phase: 'failed', errors: [event.message] };
-          default:
-            return current;
-        }
-      });
-      if (event.type === 'done' || event.type === 'error') refreshLab();
-    },
-    [refreshLab],
-  );
-
   /** Lance la création du réseau à partir d'une topologie sérialisée. */
   const deploy = useCallback(
     async (topology) => {
-      setRun({ phase: 'running', step: 0, total: 0, steps: [], warnings: [], errors: [], deviceCount: topology.nodes.length });
+      setRun(newRun({ deviceCount: topology.nodes.length }));
       try {
         const { id } = await startDeployment(topology);
-        unfollow.current = followDeployment(id, handleEvent);
+        unfollow.current = followJob(id, (event) => {
+          setRun((current) => applyJobEvent(current, event));
+          if (isFinal(event)) refreshLab();
+        });
       } catch (err) {
-        const errors = err instanceof ApiError ? err.messages : [String(err)];
-        setRun((current) => ({ ...current, phase: 'failed', errors }));
+        setRun((current) => ({ ...current, phase: 'failed', errors: err.messages ?? [String(err)] }));
         refreshLab();
       }
     },
-    [handleEvent, refreshLab],
+    [refreshLab],
   );
 
   /**

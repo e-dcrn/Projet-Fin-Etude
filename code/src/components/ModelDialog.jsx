@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import JobProgress from './JobProgress.jsx';
+import { toggled, useAction } from '../hooks/useAction.js';
 import { FlowCounts, GroupInfo } from './DatasetDialog.jsx';
 import { formatDate, formatDuration, formatPercent } from '../utils/format.js';
 
@@ -230,13 +231,13 @@ export default function ModelDialog({ open, models, datasets, onClose }) {
             run={run}
             titleId="model-title"
             titles={{ running: 'Entraînement…', done: 'Modèle entraîné', failed: 'Échec de l\'entraînement', cancelled: 'Entraînement annulé' }}
-            doneCaption={run.result ? `${run.result.name} · ${formatDuration(run.result.durationSec)}` : ''}
+            doneCaption={run.done?.model ? `${run.done.model.name} · ${formatDuration(run.done.model.durationSec)}` : ''}
             onCancel={models.cancel}
             onHide={onClose}
             onDone={() => { models.dismissRun(); setView('list'); }}
             doneLabel="Voir les modèles"
           >
-            {run.result && <ModelReport model={run.result} />}
+            {run.done?.model && <ModelReport model={run.done.model} />}
           </JobProgress>
         ) : view === 'form' ? (
           <FormContent models={models} datasets={datasets} onBack={() => setView('list')} />
@@ -256,7 +257,7 @@ function ListContent({ models, hasDatasets, onNew, onClose }) {
     try {
       await models.remove(m.id);
     } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
+      setError(err.message);
     }
   };
 
@@ -350,25 +351,15 @@ function FormContent({ models, datasets, onBack }) {
   const [nEstimators, setNEstimators] = useState(100);
   const [maxDepth, setMaxDepth] = useState('');
   const [excludePort, setExcludePort] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, act } = useAction();
 
-  const toggle = (setter) => (id) =>
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggle = (setter) => (id) => setter((prev) => toggled(prev, id));
 
   const canStart = train.size > 0 && (split === 'temporal' || test.size > 0) && !busy;
 
 
-  const submit = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await models.train({
+  const submit = () =>
+    act(() => models.train({
         name,
         train: [...train],
         test: split === 'dataset' ? [...test] : [],
@@ -378,12 +369,7 @@ function FormContent({ models, datasets, onBack }) {
         nEstimators: Number(nEstimators),
         maxDepth: maxDepth ? Number(maxDepth) : null,
         excludePort,
-      });
-    } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
-      setBusy(false);
-    }
-  };
+      }));
 
   return (
     <>

@@ -37,7 +37,8 @@ from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 
 from .cicflowmeter import FLOW_WINDOW_SEC
-from .datasets import DatasetError, DatasetStore
+from .datasets import DatasetStore
+from .errors import UserError
 from .jobs import Job
 from .settings import DATA_DIR
 from .store import RecordStore
@@ -65,15 +66,11 @@ SPLITS = {"dataset": "Dataset(s) de test séparé(s)", "temporal": "Découpage t
 TOP_FEATURES = 15
 
 
-class TrainingError(Exception):
-    """Entraînement impossible ; le message est affichable tel quel."""
-
-
 class ModelStore(RecordStore):
     """Modèles entraînés sauvegardés sur disque : un dossier par modèle (voir store.py)."""
 
     def __init__(self, root: Path = DATA_DIR / "models"):
-        super().__init__(root, FILES, TrainingError, "Modèle")
+        super().__init__(root, FILES, "Modèle")
 
 
 @dataclass
@@ -189,25 +186,25 @@ class Trainer:
     def _dataset(self, dataset_id: str) -> dict:
         try:
             return self.datasets.get(dataset_id)
-        except DatasetError as exc:
-            raise TrainingError(f"Dataset {dataset_id} : {exc}") from exc
+        except UserError as exc:
+            raise UserError(f"Dataset {dataset_id} : {exc}") from exc
 
     def prepare(self, spec: dict) -> TrainingPlan:
         """Vérifie la demande de l'interface (avant de lancer la tâche)."""
         if spec["model"] not in MODELS:
-            raise TrainingError(f"Modèle inconnu « {spec['model']} ».")
+            raise UserError(f"Modèle inconnu « {spec['model']} ».")
         if spec["split"] not in SPLITS:
-            raise TrainingError(f"Découpage inconnu « {spec['split']} ».")
+            raise UserError(f"Découpage inconnu « {spec['split']} ».")
         train = [self._dataset(i) for i in dict.fromkeys(spec.get("train") or [])]
         test = [self._dataset(i) for i in dict.fromkeys(spec.get("test") or [])] if spec["split"] == "dataset" else []
         if not train:
-            raise TrainingError("Choisissez au moins un dataset d'entraînement.")
+            raise UserError("Choisissez au moins un dataset d'entraînement.")
         if spec["split"] == "dataset":
             if not test:
-                raise TrainingError("Choisissez au moins un dataset de test (différent de ceux d'entraînement).")
+                raise UserError("Choisissez au moins un dataset de test (différent de ceux d'entraînement).")
             shared = {m["id"] for m in train} & {m["id"] for m in test}
             if shared:
-                raise TrainingError("Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
+                raise UserError("Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
 
         default_name = MODELS[spec["model"]]
         return TrainingPlan(
@@ -229,14 +226,14 @@ class Trainer:
         else:
             train_frame, test_frame = temporal_split(load_frames(self.datasets, plan.train), plan.test_fraction)
         if train_frame.empty or test_frame.empty:
-            raise TrainingError("Pas assez de flux pour entraîner puis tester le modèle.")
+            raise UserError("Pas assez de flux pour entraîner puis tester le modèle.")
         job.check_cancelled()
 
         job.step("Préparation des features")
         y_train = targets(train_frame["Label"])
         y_test = targets(test_frame["Label"])
         if y_train.nunique() < 2:
-            raise TrainingError(
+            raise UserError(
                 f"Le jeu d'entraînement ne contient qu'une classe ({y_train.iloc[0]}) : il faut des flux bénins ET des attaques."
             )
         x_train = drop_constant(feature_matrix(train_frame, plan.exclude_port))

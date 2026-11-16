@@ -4,7 +4,7 @@ Capture du trafic d'un lien (vue « Wireshark » de l'interface).
 Un lien relie l'interface d'un équipement (eth0…) au port d'un switch : on
 capture sur cette interface, côté équipement. Un conteneur d'analyse partage
 la pile réseau de l'équipement et y lance tcpdump (voir
-LabManager.start_capture_helper) ; son flux pcap est découpé en paquets et
+LabManager.start_netns_helper) ; son flux pcap est découpé en paquets et
 relayé au navigateur, qui les décode.
 
 Protocole (route /api/devices/{id}/interfaces/{interface}/capture) :
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import struct
 import threading
 import time
@@ -31,37 +30,36 @@ from typing import Optional
 from docker.errors import DockerException, NotFound
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from .cicflowmeter import PCAP_MAGIC
 from .deployer import LabManager
-from .sessions import SessionError
+from .planner import INTERFACE_PATTERN
+from .errors import UserError
 
 log = logging.getLogger(__name__)
-
-INTERFACE_PATTERN = re.compile(r"^[a-z][a-z0-9]{0,14}$")
 
 # -p : ne pas passer l'interface en mode promiscuous (l'équipement n'en voit
 # rien) ; -U : écrire chaque paquet dès sa capture ; -s 0 : paquets entiers.
 TCPDUMP = ["tcpdump", "-i", "{interface}", "-p", "-U", "-s", "0", "-w", "-"]
 
-# Nombre magique pcap → (boutisme, horodatage en nanosecondes)
-PCAP_MAGIC = {
-    b"\xd4\xc3\xb2\xa1": ("<", False),
-    b"\xa1\xb2\xc3\xd4": (">", False),
-    b"\x4d\x3c\xb2\xa1": ("<", True),
-    b"\xa1\xb2\x3c\x4d": (">", True),
-}
 PCAP_HEADER_SIZE = 24
 RECORD_HEADER_SIZE = 16
 BATCH_SIZE = 256 * 1024  # regroupe les paquets en rafale dans un même message
-
-
-class CaptureError(SessionError):
-    pass
 
 
 # Conteneurs de capture des sessions ouvertes : tout autre conteneur de capture
 # est orphelin (session interrompue brutalement) et supprimé à la capture suivante.
 _live_helpers = set()
 _live_lock = threading.Lock()
+
+
+def _remove_orphans(lab: LabManager) -> None:
+    for helper in lab.helpers("capture"):
+        if helper.id not in _live_helpers:
+            log.warning("Outil de capture orphelin supprimé : %s", helper.short_id)
+            try:
+                helper.remove(force=True)
+            except DockerException:
+                pass
 
 
 class PcapStream:
@@ -101,10 +99,10 @@ class PcapStream:
 class CaptureSession:
     def __init__(self, lab: LabManager, node_id: str, interface: str):
         if not INTERFACE_PATTERN.match(interface):
-            raise CaptureError("Nom d'interface invalide.")
+            raise UserError("Nom d'interface invalide.")
         device = lab.find_device(node_id)
         if device is None or device.status != "running":
-            raise CaptureError("Cet équipement est éteint : validez la topologie pour démarrer le réseau.")
+            raise UserError("Cet équipement est éteint : validez la topologie pour démarrer le réseau.")
         self.name = device.labels.get(f"{lab.settings.prefix}.name", node_id)
         self.interface = interface
         self.device = device
@@ -114,8 +112,9 @@ class CaptureSession:
         self._stderr = bytearray()
 
         with _live_lock:
-            lab.remove_capture_helpers(keep=set(_live_helpers))
-            self.helper = lab.start_capture_helper(device)
+            _remove_orphans(lab)
+            runtime = lab.settings.capture
+            self.helper = lab.start_netns_helper(device, runtime, runtime.command, role="capture")
             _live_helpers.add(self.helper.id)
         try:
             command = [part.format(interface=interface) for part in TCPDUMP]

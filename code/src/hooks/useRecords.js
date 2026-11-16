@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-const newRun = (jobId) => ({ phase: 'running', jobId, step: 0, total: 0, steps: [], warnings: [], errors: [], result: null });
+import { cancelJob, followJob } from '../services/topologyApi.js';
+import { applyJobEvent, isFinal, newRun } from '../utils/jobRun.js';
 
 /**
  * Enregistrements produits par une tâche de fond du serveur (datasets, modèles
@@ -10,17 +10,11 @@ const newRun = (jobId) => ({ phase: 'running', jobId, step: 0, total: 0, steps: 
  * `api` décrit le type d'enregistrement :
  *   list()          → { [listKey]: [meta…], job: id de la tâche en cours ou null, ... }
  *   start(spec)     → { id } (tâche lancée)
- *   follow(id, cb)  → fonction d'arrêt du suivi (événements SSE)
- *   cancel(id), remove(id)
+ *   remove(id)
  *   listKey         clé de la liste dans la réponse de list()
- *   resultKey       clé du résultat dans l'événement `done`
  *
- * `run` décrit la tâche affichée :
- *   phase      'running' | 'done' (result : description de l'enregistrement, done : l'événement
- *              de fin complet) | 'failed' (errors)
- *   cancelled  vrai si l'échec vient d'une annulation demandée par l'utilisateur
- *   steps      étapes déjà commencées (la dernière est l'étape en cours)
- *   warnings   avertissements non bloquants remontés par le serveur
+ * `run` décrit la tâche affichée (voir utils/jobRun.js), plus `jobId` et
+ * `cancelled` (vrai si l'échec vient d'une annulation demandée par l'utilisateur).
  *
  * Tant que `active` est vrai, la liste est chargée ; une tâche lancée avant un
  * rechargement de la page est reprise automatiquement.
@@ -42,40 +36,21 @@ export function useRecords(active, api) {
       setError(null);
       return rest;
     } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
+      setError(err.message);
       return null;
     }
   }, []);
 
-  const handleEvent = useCallback(
-    (event) => {
-      setRun((current) => {
-        if (!current) return current;
-        switch (event.type) {
-          case 'progress':
-            return { ...current, step: event.step, total: event.total, steps: [...current.steps, event.label] };
-          case 'warning':
-            return { ...current, warnings: [...current.warnings, event.message] };
-          case 'done':
-            return { ...current, phase: 'done', step: current.total, result: event[apiRef.current.resultKey], done: event };
-          case 'error':
-            return { ...current, phase: 'failed', errors: [event.message] };
-          default:
-            return current;
-        }
-      });
-      if (event.type === 'done' || event.type === 'error') refresh();
-    },
-    [refresh],
-  );
-
   const follow = useCallback(
     (jobId) => {
       unfollow.current?.();
-      setRun(newRun(jobId));
-      unfollow.current = apiRef.current.follow(jobId, handleEvent);
+      setRun(newRun({ jobId }));
+      unfollow.current = followJob(jobId, (event) => {
+        setRun((current) => applyJobEvent(current, event));
+        if (isFinal(event)) refresh();
+      });
     },
-    [handleEvent],
+    [refresh],
   );
 
   useEffect(() => {
@@ -99,7 +74,7 @@ export function useRecords(active, api) {
 
   const cancel = useCallback(async () => {
     if (!run?.jobId) return;
-    await apiRef.current.cancel(run.jobId);
+    await cancelJob(run.jobId);
     setRun((current) => (current ? { ...current, cancelled: true } : current));
   }, [run]);
 

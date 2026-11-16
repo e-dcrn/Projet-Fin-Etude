@@ -15,9 +15,10 @@ passerelles, routes…) est vérifiée par planner.py.
 
 from __future__ import annotations
 
-from typing import List
+import re
+from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing_extensions import Literal
 
 # Identifiants techniques générés par l'interface (pc-1, switch-2…)
@@ -30,10 +31,27 @@ class Route(BaseModel):
     interface: str = ""
 
 
+# Services réellement exécutés par les serveurs (voir service_listener.py). Le type
+# d'un service est son nom ; un autre nom donne un port simplement ouvert (simulé).
+SERVICE_KINDS = ("http", "https", "ssh", "ftp", "telnet", "smtp", "dns", "mysql")
+
+
+def dns_name(name: str) -> str:
+    """Nom DNS d'un équipement dans le domaine « lab » : « Serveur Web » → « serveur-web »."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
 class Service(BaseModel):
     port: int = Field(ge=1, le=65535)
     protocol: Literal["tcp", "udp"] = "tcp"
     name: str = ""
+
+    @computed_field
+    @property
+    def kind(self) -> Optional[str]:
+        """Service réel correspondant (« http »…), ou None pour un port simulé."""
+        name = self.name.strip().lower()
+        return name if name in SERVICE_KINDS else None
 
 
 class NodeConfig(BaseModel):

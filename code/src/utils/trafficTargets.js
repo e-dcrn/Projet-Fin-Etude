@@ -85,15 +85,11 @@ export function scenarioTargets(nodes, edges, needs) {
     .map((t) => ({ label: `${t.label} (${t.ip})`, value: t.ip }));
 }
 
-/** Type d'un service (même correspondance nom/port que traffic_agent.service_kind). */
-export function serviceKind(service) {
+/** Type d'un service : son nom s'il désigne un service réel, sinon null (même règle que backend/app/models.py). */
+const SERVICE_KINDS = ['http', 'https', 'ssh', 'ftp', 'telnet', 'smtp', 'dns', 'mysql'];
+function serviceKind(service) {
   const name = (service.name || '').trim().toLowerCase();
-  const port = Number(service.port) || 0;
-  if (['http', 'https', 'ssh', 'ftp', 'telnet', 'smtp', 'dns', 'mysql'].includes(name)) return name;
-  if (name.startsWith('https') || [443, 8443].includes(port)) return 'https';
-  if (name.startsWith('http') || [80, 8080].includes(port)) return 'http';
-  const byPort = { 22: 'ssh', 21: 'ftp', 23: 'telnet', 25: 'smtp', 53: 'dns', 3306: 'mysql' };
-  return name ? null : (byPort[port] ?? null);
+  return SERVICE_KINDS.includes(name) ? name : null;
 }
 
 // Types de trafic bénin, dans l'ordre d'affichage (identifiants de traffic_agent.py).

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { captureUrl, websocketFailure } from '../services/topologyApi.js';
+import { toggled } from '../hooks/useAction.js';
 import { colorRule, createDissector } from '../utils/packetDissector.js';
 import { compileFilter } from '../utils/displayFilter.js';
 import { buildPcap, splitPackets } from '../utils/pcap.js';
@@ -216,12 +217,7 @@ export default function CaptureView({ nodeId, interfaceName, title, active, open
   }, [packet]);
 
   const toggleLayer = (key) =>
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExpanded((current) => toggled(current, key));
 
   const running = status === 'running';
   const filterClass = filterState === 'empty' ? '' : filterState === 'valid' ? ' capture__filter--valid' : ' capture__filter--invalid';

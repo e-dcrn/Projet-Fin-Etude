@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 from typing import Dict, List, Optional
 
+from .errors import UserError
 from .models import Service, Topology
 
 TYPE_LABELS = {"pc": "PC", "server": "Serveur", "router": "Routeur", "ids": "Sonde IDS"}
@@ -23,7 +24,11 @@ INTERFACE_PATTERN = re.compile(r"^[a-z][a-z0-9]{0,14}$")
 MAX_PREFIX = 30  # au-delà, plus d'adresse libre pour le segment lui-même
 
 
-class TopologyError(Exception):
+class TopologyError(UserError):
+    """Topologie invalide : `errors` liste tous les problèmes trouvés."""
+
+    status = 400
+
     def __init__(self, errors: List[str]):
         super().__init__("\n".join(errors))
         self.errors = errors

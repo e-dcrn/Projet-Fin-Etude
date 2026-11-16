@@ -36,8 +36,8 @@ CFM_IMAGE = "ghcr.io/idlab-discover/concap/cicflowmeter:tools-1.0.0"
 # windowed_flows_csv). Un flux plus long qu'une fenêtre est vu en morceaux.
 FLOW_WINDOW_SEC = 5
 
-# Boutisme + horodatage selon le nombre magique pcap (voir capture.py).
-_PCAP_MAGIC = {
+# Nombre magique d'un fichier pcap → (boutisme, horodatage en nanosecondes).
+PCAP_MAGIC = {
     b"\xd4\xc3\xb2\xa1": ("<", False),
     b"\xa1\xb2\xc3\xd4": (">", False),
     b"\x4d\x3c\xb2\xa1": ("<", True),
@@ -103,9 +103,9 @@ def split_pcap(data: bytes, window: float) -> List[bytes]:
     datasets, il garantit que le modèle apprend sur des flux préparés exactement
     comme ceux qu'il classera.
     """
-    if len(data) < 24 or data[:4] not in _PCAP_MAGIC:
+    if len(data) < 24 or data[:4] not in PCAP_MAGIC:
         raise ValueError("flux pcap invalide ou vide")
-    endian, nanoseconds = _PCAP_MAGIC[data[:4]]
+    endian, nanoseconds = PCAP_MAGIC[data[:4]]
     header = data[:24]
     windows: Dict[int, List[bytes]] = {}
     first = None

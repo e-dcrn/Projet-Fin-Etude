@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useAction } from '../hooks/useAction.js';
 import { formatPercent } from '../utils/format.js';
 
 // Issue d'un verdict comparé à la vérité terrain (voir backend/app/detection.py).
@@ -33,25 +34,12 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
   const ipNames = useIpNames(nodes, edges);
   const [ids, setIds] = useState('');
   const [model, setModel] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, act: guard } = useAction();
 
   const chosenIds = ids || probes[0]?.id || '';
   const chosenModel = model || models[0]?.id || '';
   const modelMeta = models.find((m) => m.id === (detection.running ? detection.model?.id : chosenModel));
   const name = (ip) => ipNames.get(ip) ?? ip;
-
-  const guard = async (fn) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const { running, stats } = detection;
   const ago = detection.lastWindowAt ? Math.max(0, Math.round(Date.now() / 1000 - detection.lastWindowAt)) : null;

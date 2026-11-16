@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useAction } from '../hooks/useAction.js';
 import { scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
 
 /** Horodatage court « il y a 12 s / 3 min ». */
@@ -27,8 +28,7 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
   const [attackId, setAttackId] = useState('');
   const [target, setTarget] = useState('');
   const [speed, setSpeed] = useState('fast');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, act: guard } = useAction();
   const [log, setLog] = useState(null);
 
   const attack = traffic.attacks.find((a) => a.id === attackId) ?? null;
@@ -36,18 +36,6 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
     () => (attack ? scenarioTargets(nodes, edges, attack.needs) : []),
     [attack, nodes, edges],
   );
-
-  const guard = async (fn) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const anyRunning = traffic.scenarios.some((s) => s.status === 'running');
   const launch = () => guard(() => traffic.runScenario(source, attackId, target, speed));

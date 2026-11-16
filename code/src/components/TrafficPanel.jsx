@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { toggled, useAction } from '../hooks/useAction.js';
 import { availableBenignKinds, benignTargetsForDests, reachableDevices, trafficSources } from '../utils/trafficTargets.js';
 
 // Types de trafic bénin : une case par service ouvert chez les destinataires
@@ -59,28 +60,9 @@ export default function TrafficPanel({ traffic, nodes, edges, onlineIds, onClose
   const [profile, setProfile] = useState('moderate');
   const [emittersOff, setEmittersOff] = useState(() => new Set());
   const [destsOff, setDestsOff] = useState(() => new Set());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, act: guard } = useAction();
 
-  const guard = async (fn) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (err) {
-      setError(err.messages ? err.messages.join('\n') : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const toggleOff = (setter) => (id) =>
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleOff = (setter) => (id) => setter((prev) => toggled(prev, id));
 
   const selectedEmitters = emitterList.filter((e) => !emittersOff.has(e.id));
   const selectedDestIds = destList.filter((d) => !destsOff.has(d.id)).map((d) => d.id);

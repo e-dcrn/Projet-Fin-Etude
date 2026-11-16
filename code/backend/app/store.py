@@ -12,7 +12,9 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Union
+
+from .errors import NotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -23,22 +25,21 @@ ID_RE = re.compile(r"^\d{8}-\d{6}(?:-\d+)?$")
 class RecordStore:
     """
     Enregistrements d'un même type sous `root`. `files` liste les fichiers
-    téléchargeables (nom → type MIME) ; `error` est l'exception levée pour un
-    identifiant ou un fichier inconnu (message affichable tel quel).
+    téléchargeables (nom → type MIME) ; un identifiant ou un fichier inconnu
+    lève NotFoundError.
     """
 
-    def __init__(self, root: Path, files: Dict[str, str], error: Type[Exception], what: str):
+    def __init__(self, root: Path, files: Dict[str, str], what: str):
         self.root = Path(root)
         self.files = files
-        self._error = error
         self._what = what  # « Dataset », « Modèle »… pour les messages
 
     def _dir(self, record_id: str) -> Path:
         if not ID_RE.match(record_id or ""):
-            raise self._error(f"{self._what} introuvable.")
+            raise NotFoundError(f"{self._what} introuvable.")
         path = self.root / record_id
         if not (path / "meta.json").is_file():
-            raise self._error(f"{self._what} introuvable.")
+            raise NotFoundError(f"{self._what} introuvable.")
         return path
 
     def new_id(self) -> str:
@@ -79,7 +80,7 @@ class RecordStore:
 
     def file_path(self, record_id: str, name: str) -> Path:
         if name not in self.files:
-            raise self._error("Fichier inconnu.")
+            raise NotFoundError("Fichier inconnu.")
         return self._dir(record_id) / name
 
     def delete(self, record_id: str) -> None:

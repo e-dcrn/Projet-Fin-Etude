@@ -37,8 +37,9 @@ from .cicflowmeter import FLOW_WINDOW_SEC, parse_timestamp, relabel_csv, windowe
 from .jobs import Job
 from .settings import DATA_DIR
 from .store import RecordStore
-from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficError, TrafficManager
-from .traffic_agent import SESSION_KINDS
+from .errors import UserError
+from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficManager
+from .models import SERVICE_KINDS
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ FILES = {
     "meta.json": "application/json",
 }
 
-BENIGN_KINDS = ("icmp", *SESSION_KINDS)  # un type par service (voir traffic_agent.py)
+BENIGN_KINDS = ("icmp", "tcp", *SERVICE_KINDS)  # ping, ports TCP sans service connu, un type par service
 
 # Marges autour de la fenêtre d'une attaque (secondes) : l'horloge de l'hôte et
 # celle de la machine Docker, qui horodate les paquets, peuvent légèrement différer.
@@ -65,10 +66,6 @@ MAX_VARIANTS = 5
 SPEED_ORDER = ["slow", "normal", "fast", "insane"]
 PROFILE_ORDER = ["slow", "moderate", "steady", "intense"]
 PCAP_PATH = "/tmp/dataset.pcap"
-
-
-class DatasetError(TrafficError):
-    """Génération impossible ; le message est affichable tel quel."""
 
 
 @dataclass
@@ -195,7 +192,7 @@ class DatasetStore(RecordStore):
     """Datasets sauvegardés sur disque : un dossier par dataset (voir store.py)."""
 
     def __init__(self, root: Path = DATA_DIR / "datasets"):
-        super().__init__(root, FILES, DatasetError, "Dataset")
+        super().__init__(root, FILES, "Dataset")
 
 
 # --------------------------------------------------------------------------- génération
@@ -207,47 +204,41 @@ class DatasetBuilder:
         self.lab = traffic.lab
         self.store = store
 
-    def _device(self, node_id: str, what: str):
-        try:
-            return self.traffic.require_device(node_id, what)
-        except TrafficError as exc:
-            raise DatasetError(str(exc)) from exc
-
     def prepare(self, spec: dict) -> DatasetPlan:
         """Vérifie le programme demandé par l'interface (avant de lancer la tâche)."""
         if not spec.get("probe"):
-            raise DatasetError("Aucune Sonde IDS : ajoutez-en une à la topologie, c'est le point de capture du dataset.")
-        probe = self._device(spec["probe"], "Sonde IDS")
+            raise UserError("Aucune Sonde IDS : ajoutez-en une à la topologie, c'est le point de capture du dataset.")
+        probe = self.traffic.require_device(spec["probe"], "Sonde IDS")
         if probe.labels.get(f"{self.lab.settings.prefix}.type") != "ids":
-            raise DatasetError("Le point de capture d'un dataset est toujours une Sonde IDS.")
+            raise UserError("Le point de capture d'un dataset est toujours une Sonde IDS.")
         kinds = [k for k in spec.get("kinds") or [] if k in BENIGN_KINDS]
         profile = spec.get("profile") or "moderate"
         if profile not in BENIGN_PROFILES:
-            raise DatasetError(f"Fréquence de trafic inconnue « {profile} ».")
+            raise UserError(f"Fréquence de trafic inconnue « {profile} ».")
 
         benign = []
         attackers: Dict[str, dict] = {}  # machines pouvant attaquer dans une variante
         for entry in spec.get("benign") or []:
-            device = self._device(entry["node"], "Trafic bénin")
+            device = self.traffic.require_device(entry["node"], "Trafic bénin")
             if entry.get("targets"):
                 benign.append(BenignSource(entry["node"], self.traffic.name_of(device), entry["targets"]))
                 attackers[entry["node"]] = {"node": entry["node"], "name": self.traffic.name_of(device),
                                             "ip": self.traffic.device_ip(device)}
         if benign and not kinds:
-            raise DatasetError("Choisissez au moins un type de trafic bénin.")
+            raise UserError("Choisissez au moins un type de trafic bénin.")
 
         runs: List[AttackRun] = []
         for entry in spec.get("attacks") or []:
             attack = ATTACKS.get(entry["attack"])
             if attack is None:
-                raise DatasetError(f"Attaque inconnue « {entry['attack']} ».")
+                raise UserError(f"Attaque inconnue « {entry['attack']} ».")
             target = (entry.get("target") or "").strip()
             if not TARGET_RE.match(target):
-                raise DatasetError(f"{attack['name']} : cible invalide (adresse IP ou sous-réseau attendu).")
+                raise UserError(f"{attack['name']} : cible invalide (adresse IP ou sous-réseau attendu).")
             speed = entry.get("speed") or "fast"
             if speed not in SPEEDS:
-                raise DatasetError(f"Vitesse inconnue « {speed} ».")
-            device = self._device(entry["source"], attack["name"])
+                raise UserError(f"Vitesse inconnue « {speed} ».")
+            device = self.traffic.require_device(entry["source"], attack["name"])
             attackers.setdefault(entry["source"], {"node": entry["source"], "name": self.traffic.name_of(device),
                                                    "ip": self.traffic.device_ip(device)})
             category, subcategory = attack["label"]
@@ -258,9 +249,9 @@ class DatasetBuilder:
                     source_ip=self.traffic.device_ip(device), target=target, speed=speed,
                 ))
         if not runs:
-            raise DatasetError("Ajoutez au moins une attaque au programme.")
+            raise UserError("Ajoutez au moins une attaque au programme.")
         if len(runs) > MAX_RUNS:
-            raise DatasetError(f"Programme trop long : {len(runs)} attaques (maximum {MAX_RUNS}).")
+            raise UserError(f"Programme trop long : {len(runs)} attaques (maximum {MAX_RUNS}).")
 
         return DatasetPlan(
             name=(spec.get("name") or "").strip()[:80] or "Dataset sans nom",
@@ -302,7 +293,7 @@ class DatasetBuilder:
         running_agents: set = set()
         try:
             step(f"Démarrage de la sonde sur {plan.probe_name} et du trafic bénin")
-            probe = self._device(plan.probe, "Sonde IDS")
+            probe = self.traffic.require_device(plan.probe, "Sonde IDS")
             interface = self.traffic.primary_interface(probe)
             # Le programme prend la main sur le trafic bénin : un agent lancé à la main
             # (configuration inconnue) fausserait l'étiquetage de la source d'une attaque.
@@ -317,7 +308,7 @@ class DatasetBuilder:
                     role="dcapture", attached=plan.probe,
                 )
             except DockerException as exc:
-                raise DatasetError("Impossible de démarrer la sonde de capture.") from exc
+                raise UserError("Impossible de démarrer la sonde de capture.") from exc
             for source in plan.benign:
                 self._start_benign(plan, source)
                 running_agents.add(source.node)
@@ -357,7 +348,7 @@ class DatasetBuilder:
             try:
                 pcap = self.traffic.extract_file(capture, PCAP_PATH)
             except (DockerException, ValueError) as exc:
-                raise DatasetError("Le pcap de la sonde est introuvable.") from exc
+                raise UserError("Le pcap de la sonde est introuvable.") from exc
         finally:
             self._remove(capture)
 
@@ -368,7 +359,7 @@ class DatasetBuilder:
             raw_csv = windowed_flows_csv(self.lab, pcap)
         except (DockerException, RuntimeError, ValueError) as exc:
             log.warning("Extraction des flux impossible : %s", exc)
-            raise DatasetError("CICFlowMeter n'a pas pu extraire les flux de la capture (voir les journaux du serveur).") from exc
+            raise UserError("CICFlowMeter n'a pas pu extraire les flux de la capture (voir les journaux du serveur).") from exc
 
         step("Étiquetage et sauvegarde")
         csv_text, counts, total = label_dataset_csv(raw_csv, runs)
@@ -384,12 +375,12 @@ class DatasetBuilder:
     def _start_benign(self, plan: DatasetPlan, source: BenignSource) -> None:
         try:
             self.traffic.start_benign(source.node, plan.profile, source.targets, "dataset", plan.kinds)
-        except TrafficError as exc:
-            raise DatasetError(f"Trafic bénin sur {source.name} : {exc}") from exc
+        except UserError as exc:
+            raise UserError(f"Trafic bénin sur {source.name} : {exc}") from exc
 
     def _play(self, plan: DatasetPlan, run: AttackRun, job: Job, paused: bool) -> None:
         """Joue une attaque et enregistre sa fenêtre de temps (bornée par plan.max_attack)."""
-        device = self._device(run.source, run.name)
+        device = self.traffic.require_device(run.source, run.name)
         if paused:
             self.traffic.stop_benign(run.source)  # la source ne fait que l'attaque pendant sa fenêtre
         command = ATTACKS[run.attack]["command"](run.target, run.speed)
@@ -402,7 +393,7 @@ class DatasetBuilder:
                     role="dataset", attached=run.source, attack=run.attack, target=run.target,
                 )
             except DockerException as exc:
-                raise DatasetError(f"Impossible de lancer « {run.name} ».") from exc
+                raise UserError(f"Impossible de lancer « {run.name} ».") from exc
             deadline = run.start + plan.max_attack
             while True:
                 helper.reload()
