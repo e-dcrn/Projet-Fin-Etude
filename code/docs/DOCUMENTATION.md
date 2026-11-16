@@ -63,6 +63,7 @@ et captures. Pas de base de données : tout est fichier dans `backend/data/`, ig
 | `src/components/{TrafficPanel,ScenarioPanel,DetectionPanel}.jsx` | panneaux de droite |
 | `src/components/{DatasetDialog,ModelDialog}.jsx` | datasets ; modèles et rapport |
 | `src/components/{TerminalView,CaptureView}.jsx`, `Dock.jsx` | onglets du bas |
+| `src/hooks/useRecords.js`, `src/utils/jobRun.js` | suivi des tâches de fond (datasets, modèles, déploiement) |
 | `src/utils/{ipam,validators,packetDissector,displayFilter}.js` | adressage, contrôles, décodage des paquets |
 | `backend/app/planner.py`, `deployer.py` | topologie → plan → conteneurs, mode hub |
 | `backend/app/service_listener.py` | vrais services des serveurs |
@@ -70,6 +71,7 @@ et captures. Pas de base de données : tout est fichier dans `backend/data/`, ig
 | `backend/app/cicflowmeter.py` | découpage du pcap, flux CICFlowMeter |
 | `backend/app/datasets.py`, `training.py`, `detection.py` | les trois étapes ML |
 | `backend/app/capture.py`, `terminal.py` | sessions WebSocket |
+| `backend/app/jobs.py`, `errors.py` | tâches de fond ; erreurs affichées à l'utilisateur |
 | `backend/config/devices.toml` | images et paquets de chaque équipement |
 
 Pour **ajouter un modèle** : une entrée dans `MODELS` et sa construction dans `Trainer.run`
@@ -130,7 +132,8 @@ Une simple bannière ne produit pas les échanges d'une vraie session : le modè
 | MySQL | 3306 | MariaDB 11 (démarrage de quelques secondes) | base `boutique` : `produits` (200), `commandes` |
 | autre nom | – | simulé : bannière en TCP, écho en UDP | pas de vrai protocole |
 
-Le type est reconnu par le **nom** du service, le port usuel ne sert qu'en l'absence de nom. Si un démon
+Le type d'un service est son **nom** (`http`, `ssh`…, sans tenir compte des majuscules) : la règle est dans
+`models.Service.kind`, et le moteur transmet ce type aux serveurs et aux agents. Si un démon
 échoue au démarrage, le service retombe sur le simulateur et le journal du serveur l'indique. Compte unique,
 volontairement faible pour la force brute : **`labuser` / `password123`**.
 
@@ -152,11 +155,12 @@ Test rapide depuis le terminal d'un PC, avec `S=<IP du serveur>` :
 ## 5. Le trafic bénin
 
 Un **agent** (`traffic_agent.py`) tourne dans un conteneur qui partage la pile réseau de l'émetteur : pour
-la sonde, c'est bien le PC qui parle. Chaque action est une session complète avec un vrai client.
+la sonde, c'est bien le PC qui parle. Chaque action est une session complète avec un vrai client. Le moteur
+lui fournit tout ce qu'il doit savoir (cibles et type de leurs services, noms DNS, compte de démonstration).
 
 | Type | Session |
 | ---- | ------- |
-| Web | navigation (1 à 4 pages et leurs ressources sur la même connexion, 10 % de téléchargements) ; API (12 %) ; formulaire de connexion (8 %) |
+| Web | navigation (l'accueil puis 1 à 3 pages en suivant leurs liens, avec leurs ressources sur la même connexion, 10 % de téléchargements) ; API (12 %) ; formulaire de connexion (8 %) |
 | SSH | commandes (70 %) ou `scp` (30 %) |
 | FTP | listing, 1 à 3 transferts |
 | SMTP | courriel de 3 à 400 lignes, pièce jointe dans 30 % des cas |
@@ -417,7 +421,10 @@ docker image rm $(docker image ls -q 'idslab/*')
 
 ## 15. API et formats
 
-Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py).
+Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les trois tâches
+longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}/events`
+(Server-Sent Events), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
+une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (400, 404, 409 ou 503).
 
 **Topologie (JSON, version 2)** : l'interface envoie `{ version, nodes, networks, links }`. Exemples complets
 dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `test_examples.py` le vérifie.
