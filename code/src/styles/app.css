@@ -552,12 +552,10 @@ body { background: var(--bg); }
   background: #0f172a; color: #e2e8f0; border-radius: 6px; font: 11px/1.5 var(--mono); white-space: pre;
 }
 
-/* Flux étiquetés d'un scénario */
-.scenario__flows { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+/* Décompte des flux par étiquette (datasets) */
 .flow-counts { display: flex; flex-wrap: wrap; gap: 5px; }
 .flow-chip { padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 600; }
 .flow-chip--attack { background: #fee2e2; color: #991b1b; }
-.scenario__flows a { text-decoration: none; }
 
 /* ==========================================================================
    Datasets étiquetés (DatasetDialog)

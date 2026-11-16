@@ -23,7 +23,6 @@ import os
 import struct
 import tarfile
 from datetime import datetime, timezone
-from ipaddress import ip_address, ip_network
 from typing import Callable, Dict, List, Optional, Tuple
 
 from docker.errors import DockerException
@@ -148,18 +147,6 @@ def windowed_flows_csv(lab, pcap_bytes: bytes, window: float = FLOW_WINDOW_SEC) 
     return "\n".join([header, *rows]) + "\n"
 
 
-def _is_attack(src: str, dst: str, attack_src: str, target: str, needs: str, net, target_ip) -> bool:
-    """Le flux va-t-il de la source de l'attaque vers sa cible ?"""
-    if src != attack_src:
-        return False
-    try:
-        if needs == "subnet":
-            return net is None or ip_address(dst) in net
-        return target_ip is not None and ip_address(dst) == target_ip
-    except ValueError:
-        return False
-
-
 def relabel_csv(csv_text: str, label_of: Callable[[str, str, str], str]) -> Tuple[str, Dict[str, int], int]:
     """
     Remplit la colonne Label de chaque flux et renvoie (CSV, décompte, total).
@@ -201,22 +188,3 @@ def parse_timestamp(value: str) -> Optional[float]:
         except ValueError:
             continue
     return None
-
-
-def label_cic_csv(csv_text: str, attack_src: str, target: str, needs: str, subcategory: str) -> Tuple[str, Dict[str, int], int]:
-    """Étiquette un CSV de scénario : attaque = de la source vers la cible, le reste BENIGN."""
-    try:
-        net = ip_network(target, strict=False) if needs == "subnet" else None
-        target_ip = None if needs == "subnet" else ip_address(target)
-    except ValueError:
-        net = target_ip = None
-
-    def label_of(src: str, dst: str, _ts: str) -> str:
-        return subcategory if _is_attack(src, dst, attack_src, target, needs, net, target_ip) else "BENIGN"
-
-    return relabel_csv(csv_text, label_of)
-
-
-def pcap_to_labeled_csv(lab, pcap_bytes: bytes, attack_src: str, target: str, needs: str, subcategory: str) -> Tuple[str, Dict[str, int], int]:
-    """pcap → CSV CICFlowMeter étiqueté. Lève si l'outil n'est pas disponible."""
-    return label_cic_csv(windowed_flows_csv(lab, pcap_bytes), attack_src, target, needs, subcategory)

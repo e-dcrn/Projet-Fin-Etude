@@ -192,8 +192,7 @@ erreur isolée n'est pas une force brute, et le modèle doit le savoir.
 | Force brute SSH, FTP | `hydra -l labuser -P <liste> -f` | ssh-patator, ftp-patator |
 
 Quatre vitesses : nmap `-T2` à `-T5`, hydra 1 à 16 connexions parallèles. Les attaques tournent dans un
-conteneur qui partage la pile réseau de la source. Chaque scénario lancé depuis **⚡ Scénarios** produit un CSV
-de flux étiquetés téléchargeable (capturé sur la source).
+conteneur qui partage la pile réseau de la source. Pour obtenir des flux étiquetés, on passe par les datasets.
 
 `nmap` et `hydra` sont aussi installés sur les PC, pour rejouer à la main. Ces attaques-là ne sont pas connues
 du moteur : elles ne figurent pas dans la vérité terrain. Pendant la génération d'un dataset, elles seraient

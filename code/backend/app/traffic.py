@@ -31,7 +31,6 @@ from typing import Dict, List, Optional
 
 from docker.errors import DockerException, NotFound
 
-from .cicflowmeter import pcap_to_labeled_csv
 from .deployer import LabManager
 
 log = logging.getLogger(__name__)
@@ -218,9 +217,6 @@ def docker_time(value: str) -> Optional[float]:
 class TrafficManager:
     def __init__(self, lab: LabManager):
         self.lab = lab
-        # Flux étiquetés produits par chaque scénario : id → { status, counts, csv, total }
-        self._flows: Dict[str, dict] = {}
-        self._flows_lock = threading.Lock()
         # Scénarios interrompus depuis l'interface (id court), pour les distinguer des terminés
         self._stopped: set = set()
         # Agents bénins mis en pause le temps d'une attaque : équipement → commande de l'agent et libellés
@@ -296,20 +292,11 @@ class TrafficManager:
         if not TARGET_RE.match(target):
             raise TrafficError("Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
         device = self.require_device(source_id, "Scénario")
-        source_ip = self.device_ip(device)
 
         command = attack["command"](target, speed)
         category, subcategory = attack["label"]
         self._pause_benign(source_id)
         try:
-            # Capture lancée AVANT l'attaque : elle enregistre tout le trafic du
-            # scénario dans un pcap, converti ensuite en flux étiquetés.
-            interface = self.primary_interface(device)
-            capture = self.lab.start_netns_helper(
-                device, self.lab.settings.capture,
-                ["tcpdump", "-i", interface, "-p", "-U", "-w", "/tmp/scan.pcap"],
-                role="scapture", attached=source_id,
-            )
             helper = self.lab.start_netns_helper(
                 device, self.lab.settings.traffic, command,
                 role="scenario", attached=source_id, attack=attack_id,
@@ -321,13 +308,8 @@ class TrafficManager:
             self._resume_benign(source_id)
             raise TrafficError("Impossible de lancer le scénario d'audit.") from exc
 
-        scenario_id = helper.id[:12]
-        with self._flows_lock:
-            self._flows[scenario_id] = {"status": "pending", "counts": {}, "csv": None, "total": 0}
         threading.Thread(
-            target=self._finalize,
-            args=(scenario_id, helper, capture, source_id, source_ip, target, attack["needs"], subcategory),
-            daemon=True, name=f"flows-{scenario_id}",
+            target=self._resume_after, args=(helper, source_id), daemon=True, name=f"scenario-{helper.id[:12]}",
         ).start()
 
         log.info("Scénario « %s » lancé depuis %s vers %s", attack_id, self.name_of(device), target)
@@ -412,52 +394,11 @@ class TrafficManager:
         except DockerException as exc:
             log.warning("Reprise du trafic bénin sur %s impossible : %s", node_id, exc)
 
-    def _finalize(self, scenario_id, attack_helper, capture, source_id, source_ip, target, needs, subcategory):
-        """Attend la fin de l'attaque, arrête la capture, en tire des flux étiquetés."""
-        result = {"status": "error", "counts": {}, "csv": None, "total": 0}
-        try:
-            for _ in range(360):  # fin de l'attaque (90 s maximum)
-                attack_helper.reload()
-                if attack_helper.status != "running":
-                    break
-                time.sleep(0.25)
-            time.sleep(1.5)  # laisse les derniers paquets arriver
-            try:
-                capture.stop(timeout=3)  # tcpdump vide son tampon et écrit le pcap
-            except DockerException:
-                pass
-            self._wait_until_finished(attack_helper)  # la capture est bornée à 90 s, pas l'attaque
-            time.sleep(1.0)  # l'agent reprend après la marge de fin d'attaque de la vérité terrain
-            self._resume_benign(source_id)
-            data = self.extract_file(capture, "/tmp/scan.pcap")
-            # Fenêtres et colonnes identiques à celles des datasets (voir cicflowmeter.py).
-            csv_text, counts, total = pcap_to_labeled_csv(self.lab, data, source_ip, target, needs, subcategory)
-            result = {"status": "ready", "counts": counts, "csv": csv_text, "total": total}
-            log.info("Scénario %s : %d flux étiquetés %s", scenario_id, total, counts)
-        except Exception as exc:  # noqa: BLE001 - l'échec de l'export ne doit pas remonter
-            log.warning("Export de flux du scénario %s : %s", scenario_id, exc)
-            result = {"status": "error", "counts": {}, "csv": None, "total": 0, "error": str(exc)}
-        finally:
-            try:
-                capture.remove(force=True)
-            except DockerException:
-                pass
-            with self._flows_lock:
-                # Le scénario a pu être supprimé entre-temps : on n'écrit que s'il existe encore.
-                if scenario_id in self._flows:
-                    self._flows[scenario_id] = result
-
-    def scenario_flows_csv(self, scenario_id: str) -> str:
-        """CSV des flux étiquetés d'un scénario (lève TrafficError si indisponible)."""
-        with self._flows_lock:
-            entry = next((v for k, v in self._flows.items() if k.startswith(scenario_id)), None)
-        if entry is None:
-            raise TrafficError("Scénario introuvable (le réseau a peut-être été arrêté).")
-        if entry["status"] == "pending":
-            raise TrafficError("Les flux sont encore en préparation : réessayez dans un instant.")
-        if entry["status"] != "ready" or not entry["csv"]:
-            raise TrafficError("L'export des flux a échoué pour ce scénario.")
-        return entry["csv"]
+    def _resume_after(self, attack_helper, source_id: str) -> None:
+        """Attend la fin de l'attaque, puis relance le trafic bénin suspendu de la source."""
+        self._wait_until_finished(attack_helper)
+        time.sleep(1.0)  # l'agent reprend après la marge de fin d'attaque de la vérité terrain
+        self._resume_benign(source_id)
 
     def _scenario_info(self, helper) -> dict:
         labels = helper.labels
@@ -474,8 +415,6 @@ class TrafficManager:
         speed = labels.get(f"{self._prefix}.speed", DEFAULT_SPEED)
         target = labels.get(f"{self._prefix}.target", "")
         scenario_id = helper.id[:12]
-        with self._flows_lock:
-            flow = self._flows.get(scenario_id, {"status": "none", "counts": {}, "total": 0})
         return {
             "id": scenario_id,
             "attack": attack_id,
@@ -491,7 +430,6 @@ class TrafficManager:
             # running | exited | stopped (interrompu depuis l'interface)
             "status": "stopped" if helper.status != "running" and scenario_id in self._stopped else helper.status,
             "exitCode": exit_code,
-            "flows": {"status": flow["status"], "counts": flow.get("counts", {}), "total": flow.get("total", 0)},
         }
 
     def scenario_logs(self, scenario_id: str) -> str:
@@ -512,8 +450,7 @@ class TrafficManager:
     def stop_scenarios(self, scenario_id: Optional[str] = None) -> int:
         """Interrompt un scénario en cours, ou tous si scenario_id est None.
 
-        Le conteneur est arrêté, pas supprimé : la capture se termine normalement
-        (flux étiquetés de la partie jouée) et la détection garde la vraie fenêtre
+        Le conteneur est arrêté, pas supprimé : la détection garde la vraie fenêtre
         de temps de l'attaque (de son début jusqu'à l'arrêt).
         """
         stopped = 0
@@ -541,11 +478,8 @@ class TrafficManager:
                 helper.reload()
                 if helper.status == "running":
                     continue
-                scenario_id = helper.id[:12]
                 helper.remove(force=True)
-                with self._flows_lock:
-                    self._flows.pop(scenario_id, None)
-                self._stopped.discard(scenario_id)
+                self._stopped.discard(helper.id[:12])
                 removed += 1
             except NotFound:
                 pass

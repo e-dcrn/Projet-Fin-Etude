@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
-import { scenarioFlowsUrl } from '../services/topologyApi.js';
 
 /** Horodatage court « il y a 12 s / 3 min ». */
 function sinceLabel(startedSec) {
@@ -16,35 +15,10 @@ const STATUS = {
   stopped: { label: 'arrêté', className: 'scenario--done' },
 };
 
-/** Flux étiquetés produits par un scénario (CICFlowMeter → CSV téléchargeable). */
-function ScenarioFlows({ scenario }) {
-  const flows = scenario.flows ?? { status: 'none' };
-  if (flows.status === 'pending') return <p className="scenario__flows">Flux étiquetés : préparation…</p>;
-  if (flows.status === 'error') return <p className="scenario__flows">Flux étiquetés : export indisponible.</p>;
-  if (flows.status !== 'ready') return null;
-
-  const entries = Object.entries(flows.counts ?? {});
-  return (
-    <div className="scenario__flows">
-      <div className="flow-counts">
-        {entries.map(([label, n]) => (
-          <span key={label} className={`flow-chip${label === 'BENIGN' ? '' : ' flow-chip--attack'}`}>
-            {label} : {n}
-          </span>
-        ))}
-      </div>
-      <a className="btn btn--light btn--xs" href={scenarioFlowsUrl(scenario.id)} download>
-        ⤓ Flux étiquetés ({flows.total} flux, CSV)
-      </a>
-    </div>
-  );
-}
-
 /**
  * Panneau des scénarios d'audit : une activité malveillante typique
  * (reconnaissance nmap, force brute hydra) lancée au nom d'un équipement vers
- * une cible, puis le journal des scénarios avec leurs flux étiquetés (le trafic
- * « attaque » à détecter). Distinct de la génération de trafic bénin.
+ * une cible, puis le journal des scénarios. Distinct de la génération de trafic bénin.
  */
 export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClose }) {
   const sources = useMemo(() => trafficSources(nodes, onlineIds), [nodes, onlineIds]);
@@ -97,8 +71,7 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
 
       <section className="traffic-section traffic-section--first">
         <p className="panel-hint panel-hint--tight">
-          Reconnaissance ou attaque lancée au nom d'un équipement : le trafic « attaque » à détecter,
-          exporté en flux étiquetés (format CICFlowMeter).
+          Reconnaissance ou attaque lancée au nom d'un équipement : le trafic « attaque » à détecter.
         </p>
 
         <label className="field field--compact">
@@ -201,7 +174,6 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
                     </button>
                   </div>
                   {log?.id === s.id && <pre className="scenario__log">{log.text}</pre>}
-                  <ScenarioFlows scenario={s} />
                 </li>
               );
             })}
