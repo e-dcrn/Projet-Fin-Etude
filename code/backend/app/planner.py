@@ -33,7 +33,6 @@ class TopologyError(Exception):
 class NetworkPlan:
     id: str
     name: str
-    vlan: Optional[int]
     subnet: Optional[IPv4Network] = None
     # Adresse réservée au segment lui-même (pont côté hôte), choisie libre
     reserved_address: Optional[str] = None
@@ -144,7 +143,7 @@ def build_plan(topology: Topology) -> Plan:
             errors.append(f"Nom « {name} » utilisé par plusieurs équipements.")
         seen_names[name] = item.id
 
-    network_plans = {n.id: NetworkPlan(id=n.id, name=n.name.strip(), vlan=n.vlan) for n in topology.networks}
+    network_plans = {n.id: NetworkPlan(id=n.id, name=n.name.strip()) for n in topology.networks}
     declared: Dict[str, IPv4Network] = {}  # réseaux déclarés sur les switches
     for n in topology.networks:
         if not n.subnet.strip():

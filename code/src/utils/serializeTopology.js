@@ -7,9 +7,8 @@ import { isNetworkType } from '../config/deviceTypes.js';
  *
  * {
  *   version: 2,
- *   generatedAt: "2026-10-10T09:00:00.000Z",
  *   nodes:    [{ id, type, name, position: {x, y}, config: {...} }],
- *   networks: [{ id, name, position: {x, y}, vlan, subnet }],    // les switches
+ *   networks: [{ id, name, position: {x, y}, subnet }],          // les switches
  *   links:    [{ id, node, network, interface, port, ip, mask }] // nœud ↔ réseau (port : côté switch)
  * }
  *
@@ -40,7 +39,6 @@ export function serializeTopology(nodes, edges) {
 
   return {
     version: TOPOLOGY_FORMAT_VERSION,
-    generatedAt: new Date().toISOString(),
     nodes: devices.map((node) => {
       const { deviceType, properties } = node.data;
       const config = {};
@@ -58,16 +56,12 @@ export function serializeTopology(nodes, edges) {
       }
       return { id: node.id, type: deviceType, name: trim(properties.name), position: roundPosition(node.position), config };
     }),
-    networks: networks.map((node) => {
-      const vlan = String(node.data.properties.vlan ?? '').trim();
-      return {
-        id: node.id,
-        name: trim(node.data.properties.name),
-        position: roundPosition(node.position),
-        vlan: vlan === '' ? null : Number(vlan),
-        subnet: trim(node.data.properties.subnet ?? ''),
-      };
-    }),
+    networks: networks.map((node) => ({
+      id: node.id,
+      name: trim(node.data.properties.name),
+      position: roundPosition(node.position),
+      subnet: trim(node.data.properties.subnet ?? ''),
+    })),
     links: edges.map((edge) => ({
       id: edge.id,
       node: edge.source,

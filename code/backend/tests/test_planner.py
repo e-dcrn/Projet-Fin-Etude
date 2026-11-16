@@ -12,8 +12,8 @@ def node(id, type, name=None, **config):
     return {"id": id, "type": type, "name": name or id.upper(), "config": config}
 
 
-def net(id, name=None, vlan=None):
-    return {"id": id, "name": name or id.upper(), "vlan": vlan}
+def net(id, name=None):
+    return {"id": id, "name": name or id.upper()}
 
 
 def link(node_id, net_id, iface, ip="", mask="255.255.255.0"):

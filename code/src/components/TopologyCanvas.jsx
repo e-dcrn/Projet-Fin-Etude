@@ -22,7 +22,7 @@ function summarize(node, edges) {
   const { deviceType, properties } = node.data;
   if (deviceType === 'switch') {
     // Le réseau des équipements branchés sur le switch (un switch n'a pas d'adresse IP)
-    return [properties.subnet && `réseau ${properties.subnet}`, properties.vlan && `VLAN ${properties.vlan}`].filter(Boolean);
+    return properties.subnet ? [`réseau ${properties.subnet}`] : [];
   }
   const links = deviceLinks(edges, node.id);
   if (deviceType === 'router') {

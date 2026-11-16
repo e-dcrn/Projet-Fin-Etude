@@ -5,7 +5,6 @@
     "description": "LAN utilisateurs (10.0.10.0/24) et DMZ (10.0.20.0/24) reliés par un routeur. La DMZ héberge un serveur web (HTTP, HTTPS, base MySQL) et un serveur de fichiers et de messagerie (FTP, SSH, SMTP, DNS). Une sonde IDS surveille la DMZ."
   },
   "version": 2,
-  "generatedAt": "2026-10-10T00:00:00.000Z",
   "nodes": [
     {
       "id": "router-1",
@@ -139,7 +138,6 @@
         "x": -300,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.10.0/24"
     },
     {
@@ -149,7 +147,6 @@
         "x": 300,
         "y": 0
       },
-      "vlan": null,
       "subnet": "10.0.20.0/24"
     }
   ],

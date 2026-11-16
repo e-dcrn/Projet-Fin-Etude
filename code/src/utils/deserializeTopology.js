@@ -29,7 +29,6 @@ export function deserializeTopology(topology) {
     toFlowNode(network, 'switch', {
       ...DEVICE_TYPES.switch.defaultProperties(),
       name: network.name,
-      vlan: network.vlan == null ? '' : String(network.vlan),
       subnet: network.subnet ?? '',
     }),
   );

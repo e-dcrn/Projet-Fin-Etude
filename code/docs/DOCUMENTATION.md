@@ -429,7 +429,7 @@ dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `
 ```json
 { "version": 2,
   "nodes": [{ "id": "pc-1", "type": "pc", "name": "PC-1", "position": { "x": 120, "y": 80 }, "config": { "gateway": "10.0.1.1" } }],
-  "networks": [{ "id": "switch-1", "name": "Switch-1", "position": { "x": 120, "y": 240 }, "vlan": null, "subnet": "10.0.1.0/24" }],
+  "networks": [{ "id": "switch-1", "name": "Switch-1", "position": { "x": 120, "y": 240 }, "subnet": "10.0.1.0/24" }],
   "links": [{ "id": "link-1", "node": "pc-1", "network": "switch-1", "interface": "eth0", "port": "Fa0/1", "ip": "10.0.1.10", "mask": "255.255.255.0" }] }
 ```
 

@@ -278,7 +278,7 @@ class LabManager:
         kwargs = dict(
             name=self._resource_name(net.id),
             driver="bridge",
-            labels=self._labels(node=net.id, name=net.name, vlan=str(net.vlan or "")),
+            labels=self._labels(node=net.id, name=net.name),
             options={"com.docker.network.bridge.name": self._bridge_name(net)},
         )
         if net.subnet is not None:
