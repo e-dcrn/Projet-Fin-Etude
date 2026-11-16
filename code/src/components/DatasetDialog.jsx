@@ -335,7 +335,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
               return (
                 <tr key={r.key}>
                   <td>
-                    <select className="field__input" value={r.attack} aria-label="Attaque" title={attack?.volume}
+                    <select className="field__input" value={r.attack} aria-label="Attaque"
                       onChange={(e) => {
                         const next = attackOf(e.target.value);
                         updateRow(r.key, { attack: e.target.value, target: next?.needs === 'subnet' ? (subnetTargets[0]?.value ?? '') : defaultTarget() });
@@ -364,7 +364,7 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
                   </td>
                   <td>
                     <select className="field__input" value={r.speed} aria-label="Vitesse"
-                      title={traffic.speeds.find((s) => s.id === r.speed)?.cadence?.[attack?.tool]} onChange={(e) => updateRow(r.key, { speed: e.target.value })}>
+                      onChange={(e) => updateRow(r.key, { speed: e.target.value })}>
                       {traffic.speeds.map((s) => (
                         <option key={s.id} value={s.id}>{s.label}</option>
                       ))}

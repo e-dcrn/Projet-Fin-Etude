@@ -653,12 +653,8 @@ body { background: var(--bg); }
 .det-event__flow { font-weight: 600; }
 .det-event__meta { font-size: 11px; color: var(--text-muted); }
 
-/* Scénarios : ce que fait l'attaque choisie (volume, cadence, commande) */
-.scenario-spec { margin: 2px 0 8px; padding: 8px 10px; border-radius: 6px; background: #f8fafc; font-size: 12px; }
-.scenario-spec dt { font-size: 11px; font-weight: 600; color: var(--text-muted); }
-.scenario-spec dd { margin: 0 0 6px; color: var(--text); }
-.scenario-spec dd:last-child { margin-bottom: 0; }
-.scenario-spec code, .scenario__cmd { font: 11px/1.4 var(--mono); word-break: break-all; }
+/* Scénarios : commande lancée */
+.scenario__cmd { font: 11px/1.4 var(--mono); word-break: break-all; }
 .scenario__cmd { display: block; margin: 0 0 6px; color: var(--text-muted); }
 
 /* Datasets : programme de base et variantes de test */

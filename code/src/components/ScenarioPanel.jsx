@@ -51,7 +51,6 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
 
   const anyRunning = traffic.scenarios.some((s) => s.status === 'running');
   const launch = () => guard(() => traffic.runScenario(source, attackId, target, speed));
-  const cadence = traffic.speeds.find((s) => s.id === speed)?.cadence?.[attack?.tool];
   const showLog = (id) =>
     guard(async () => {
       const { logs } = await traffic.fetchLogs(id);
@@ -117,19 +116,6 @@ export default function ScenarioPanel({ traffic, nodes, edges, onlineIds, onClos
             ))}
           </select>
         </label>
-
-        {attack && (
-          <dl className="scenario-spec">
-            <dt>Ce qui est envoyé</dt>
-            <dd>{attack.volume}</dd>
-            <dt>Cadence</dt>
-            <dd>{cadence}</dd>
-            <dt>Exécution</dt>
-            <dd>une seule fois (pour répéter une attaque, relancez-la ou utilisez 🗂 Datasets)</dd>
-            <dt>Commande</dt>
-            <dd><code>{attack.commands?.[speed]?.replace('<cible>', target || '<cible>')}</code></dd>
-          </dl>
-        )}
 
         <div className="traffic-actions">
           <button type="button" className="btn btn--danger" onClick={launch} disabled={!canLaunch}>
