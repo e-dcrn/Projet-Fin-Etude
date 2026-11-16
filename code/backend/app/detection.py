@@ -45,6 +45,7 @@ from .datasets import AttackRun
 from .errors import UserError
 from .traffic import ATTACKS, TrafficManager, docker_time
 from .training import BENIGN, ModelStore, feature_matrix
+from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class DetectionManager:
     def start(self, ids_node: str, model_id: str) -> dict:
         self.stop()
         device = self.traffic.require_device(ids_node, "Sonde IDS")
-        if device.labels.get(f"{self.lab.settings.prefix}.type") != "ids":
+        if device.labels.get(f"{PREFIX}.type") != "ids":
             raise UserError("Choisissez une Sonde IDS : elle seule reçoit une copie du trafic du segment.")
         meta = self.models.get(model_id)
         bundle = joblib.load(self.models.file_path(model_id, "model.joblib"))
@@ -112,7 +113,7 @@ class DetectionManager:
         try:
             # Une fenêtre = un fichier ; -U : chaque paquet est écrit aussitôt.
             session.capture = self.lab.start_netns_helper(
-                device, self.lab.settings.capture,
+                device,
                 ["sh", "-c", f"mkdir -p {WINDOW_DIR} && exec tcpdump -i {interface} -U -G {WINDOW_SEC} "
                              f"-w {WINDOW_DIR}/w-%s.pcap"],
                 role="idscapture", attached=ids_node,
@@ -263,7 +264,7 @@ class DetectionManager:
 
     def _known_attacks(self, session: Session) -> List[AttackRun]:
         """Attaques lancées depuis l'interface (vérité terrain), avec leur fenêtre de temps."""
-        prefix = self.lab.settings.prefix
+        prefix = PREFIX
         for role in ("scenario", "dataset"):
             for helper in self.lab.helpers(role):
                 labels = helper.labels

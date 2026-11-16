@@ -36,6 +36,7 @@ from .errors import NotFoundError, UserError
 from .models import dns_name
 # Compte de démonstration créé sur les serveurs : cible des forces brutes, utilisé par l'agent bénin.
 from .service_listener import DOMAIN, LAB_PASSWORD, LAB_USER
+from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -203,10 +204,6 @@ class TrafficManager:
 
     # ------------------------------------------------------------------ outils
 
-    @property
-    def _prefix(self) -> str:
-        return self.lab.settings.prefix
-
     def require_device(self, node_id: str, what: str):
         device = self.lab.find_device(node_id)
         if device is None or device.status != "running":
@@ -214,7 +211,7 @@ class TrafficManager:
         return device
 
     def name_of(self, container) -> str:
-        return container.labels.get(f"{self._prefix}.name", "?")
+        return container.labels.get(f"{PREFIX}.name", "?")
 
     # ------------------------------------------------------------------ trafic bénin
 
@@ -238,7 +235,7 @@ class TrafficManager:
         command = ["python3", "-u", "-c", AGENT_SOURCE, json.dumps(config)]
         try:
             self.lab.start_netns_helper(
-                device, self.lab.settings.traffic, command,
+                device, command,
                 role="traffic", attached=node_id, profile=profile, dest=dest or "all",
             )
         except DockerException as exc:
@@ -251,7 +248,7 @@ class TrafficManager:
         """Arrête l'agent d'un équipement, ou tous les agents si node_id est None."""
         removed = 0
         for helper in self.lab.helpers("traffic"):
-            if node_id and helper.labels.get(f"{self._prefix}.attached") != node_id:
+            if node_id and helper.labels.get(f"{PREFIX}.attached") != node_id:
                 continue
             try:
                 helper.remove(force=True)
@@ -283,7 +280,7 @@ class TrafficManager:
         self._pause_benign(source_id)
         try:
             helper = self.lab.start_netns_helper(
-                device, self.lab.settings.traffic, command,
+                device, command,
                 role="scenario", attached=source_id, attack=attack_id,
                 target=target, category=category, subcategory=subcategory, speed=speed,
                 started=str(int(time.time())),
@@ -341,11 +338,11 @@ class TrafficManager:
         terrain de la détection ne compte pas le trafic de l'agent comme des attaques manquées.
         """
         for helper in self.lab.helpers("traffic"):
-            if helper.labels.get(f"{self._prefix}.attached") == node_id and helper.status == "running":
+            if helper.labels.get(f"{PREFIX}.attached") == node_id and helper.status == "running":
                 self._paused[node_id] = {
                     "command": helper.attrs["Config"]["Cmd"],
-                    "profile": helper.labels.get(f"{self._prefix}.profile", ""),
-                    "dest": helper.labels.get(f"{self._prefix}.dest", "all"),
+                    "profile": helper.labels.get(f"{PREFIX}.profile", ""),
+                    "dest": helper.labels.get(f"{PREFIX}.dest", "all"),
                 }
                 self.stop_benign(node_id)
 
@@ -363,7 +360,7 @@ class TrafficManager:
     def _resume_benign(self, node_id: str) -> None:
         """Relance l'agent suspendu, une fois la dernière attaque de cet équipement terminée."""
         if node_id not in self._paused or any(
-            h.status == "running" and h.labels.get(f"{self._prefix}.attached") == node_id
+            h.status == "running" and h.labels.get(f"{PREFIX}.attached") == node_id
             for h in self.lab.helpers("scenario")
         ):
             return
@@ -373,7 +370,7 @@ class TrafficManager:
             return  # réseau arrêté pendant l'attaque
         try:
             self.lab.start_netns_helper(
-                device, self.lab.settings.traffic, saved["command"], role="traffic",
+                device, saved["command"], role="traffic",
                 attached=node_id, profile=saved["profile"], dest=saved["dest"],
             )
         except DockerException as exc:
@@ -387,7 +384,7 @@ class TrafficManager:
 
     def _scenario_info(self, helper) -> dict:
         labels = helper.labels
-        attack_id = labels.get(f"{self._prefix}.attack", "")
+        attack_id = labels.get(f"{PREFIX}.attack", "")
         attack = ATTACKS.get(attack_id, {})
         try:
             helper.reload()
@@ -397,21 +394,21 @@ class TrafficManager:
             ended = docker_time(state.get("FinishedAt", "")) if helper.status != "running" else time.time()
         except DockerException:
             exit_code = began = ended = None
-        speed = labels.get(f"{self._prefix}.speed", DEFAULT_SPEED)
-        target = labels.get(f"{self._prefix}.target", "")
+        speed = labels.get(f"{PREFIX}.speed", DEFAULT_SPEED)
+        target = labels.get(f"{PREFIX}.target", "")
         scenario_id = helper.id[:12]
         return {
             "id": scenario_id,
             "attack": attack_id,
             "name": attack.get("name", attack_id),
-            "source": labels.get(f"{self._prefix}.attached", ""),
+            "source": labels.get(f"{PREFIX}.attached", ""),
             "target": target,
             "speed": SPEEDS.get(speed, {}).get("label", speed),
             "command": command_preview(attack_id, speed, target) if attack else "",
             "durationSec": round(ended - began, 1) if began and ended else None,
-            "category": labels.get(f"{self._prefix}.category", ""),
-            "subcategory": labels.get(f"{self._prefix}.subcategory", ""),
-            "started": int(labels.get(f"{self._prefix}.started", "0") or 0),
+            "category": labels.get(f"{PREFIX}.category", ""),
+            "subcategory": labels.get(f"{PREFIX}.subcategory", ""),
+            "started": int(labels.get(f"{PREFIX}.started", "0") or 0),
             # running | exited | stopped (interrompu depuis l'interface)
             "status": "stopped" if helper.status != "running" and scenario_id in self._stopped else helper.status,
             "exitCode": exit_code,
@@ -477,9 +474,9 @@ class TrafficManager:
     def overview(self) -> dict:
         """Résumé de l'activité : agents bénins en cours et scénarios."""
         benign = [
-            {"node": h.labels.get(f"{self._prefix}.attached"),
-             "profile": h.labels.get(f"{self._prefix}.profile"),
-             "dest": h.labels.get(f"{self._prefix}.dest", "all")}
+            {"node": h.labels.get(f"{PREFIX}.attached"),
+             "profile": h.labels.get(f"{PREFIX}.profile"),
+             "dest": h.labels.get(f"{PREFIX}.dest", "all")}
             for h in self.lab.helpers("traffic") if h.status == "running"
         ]
         return {"benign": benign, "scenarios": self.list_scenarios()}

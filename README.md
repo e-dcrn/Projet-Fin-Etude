@@ -19,6 +19,7 @@ Réseau et vrais services → Trafic bénin et attaques → Datasets étiquetés
 | Emplacement | Contenu |
 | ----------- | ------- |
 | `code/` | Application : interface (`src/`, React + React Flow) et moteur (`backend/`, Python + Docker) |
+| `code/docker/` | Un Dockerfile par rôle d'équipement (PC, serveur, routeur, sonde) et pour la boîte à outils |
 | [`code/docs/DOCUMENTATION.md`](code/docs/DOCUMENTATION.md) | **Documentation technique complète** |
 | `code/docs/rapports/` | Rapport sur la panne de l'IDS, journal des décisions du projet |
 | `docs/` | Articles de l'état de l'art |

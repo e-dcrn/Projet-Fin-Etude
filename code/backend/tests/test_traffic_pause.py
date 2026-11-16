@@ -30,7 +30,7 @@ def test_source_agent_is_paused_then_resumed_with_same_command():
     agent.remove.assert_called_once()
     manager._resume_benign("pc-1")
     args, kwargs = lab.start_netns_helper.call_args
-    assert args[2] == ["python3", "agent"] and kwargs["role"] == "traffic" and kwargs["profile"] == "intense"
+    assert args[1] == ["python3", "agent"] and kwargs["role"] == "traffic" and kwargs["profile"] == "intense"
     assert "pc-1" not in manager._paused
 
 

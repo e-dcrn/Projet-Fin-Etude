@@ -62,7 +62,7 @@ from .jobs import JobRegistry
 from .models import Service, Topology
 from .planner import TopologyError, build_plan
 from .sessions import Session, SessionRegistry
-from .settings import LOCAL_ORIGIN_REGEX, load_settings, origin_allowed
+from .settings import LOCAL_ORIGIN_REGEX, origin_allowed
 from .terminal import TerminalSession
 from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer
 from .traffic import BENIGN_PROFILES, TrafficManager, attack_catalog, speed_catalog
@@ -70,7 +70,7 @@ from .traffic import BENIGN_PROFILES, TrafficManager, attack_catalog, speed_cata
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
 log = logging.getLogger(__name__)
 
-lab = LabManager(load_settings())
+lab = LabManager()
 traffic = TrafficManager(lab)
 datasets = DatasetStore()
 dataset_builder = DatasetBuilder(traffic, datasets)

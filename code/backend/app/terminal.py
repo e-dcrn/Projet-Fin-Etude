@@ -34,6 +34,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .deployer import LabManager
 from .errors import UserError
+from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -73,10 +74,10 @@ class TerminalSession:
         container = lab.find_device(node_id)
         if container is None or container.status != "running":
             raise UserError("Cet équipement est éteint : validez la topologie pour le démarrer.")
-        if container.labels.get(f"{lab.settings.prefix}.type") not in TERMINAL_TYPES:
+        if container.labels.get(f"{PREFIX}.type") not in TERMINAL_TYPES:
             raise UserError("Le terminal n'est disponible que sur les PC et les serveurs.")
         self.container = container
-        self.name = container.labels.get(f"{lab.settings.prefix}.name", node_id)
+        self.name = container.labels.get(f"{PREFIX}.name", node_id)
 
         api = self._client.api
         self._exec_id = api.exec_create(

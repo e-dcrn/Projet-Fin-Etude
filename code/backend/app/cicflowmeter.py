@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Tuple
 
 from docker.errors import DockerException
+from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -73,10 +74,9 @@ class FlowMeterWorker:
         except DockerException:
             log.info("Téléchargement de l'image CICFlowMeter %s…", CFM_IMAGE)
             client.images.pull(CFM_IMAGE)
-        prefix = lab.settings.prefix
         self.container = client.containers.run(
             CFM_IMAGE, entrypoint=["sh", "-c"], command=["sleep infinity"], detach=True,
-            labels={lab.label: "true", f"{prefix}.role": role},
+            labels={lab.label: "true", f"{PREFIX}.role": role},
         )
 
     def convert(self, pcap_bytes: bytes) -> str:
