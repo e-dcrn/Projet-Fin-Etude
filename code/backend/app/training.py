@@ -176,16 +176,6 @@ def by_attack(labels: pd.Series, predicted: np.ndarray) -> List[dict]:
     ]
 
 
-def topologies(datasets: List[dict]) -> List[dict]:
-    """Topologies (distinctes, par empreinte) sur lesquelles des datasets ont été générés."""
-    seen: Dict[str, dict] = {}
-    for meta in datasets:
-        topology = meta.get("topology") or {}
-        if topology.get("signature"):
-            seen.setdefault(topology["signature"], {"name": topology.get("name", ""), "signature": topology["signature"]})
-    return list(seen.values())
-
-
 def _counts(series: pd.Series) -> Dict[str, int]:
     return {str(k): int(v) for k, v in series.value_counts().items()}
 
@@ -243,8 +233,6 @@ class Trainer:
         began = time.time()
 
         job.step("Chargement des datasets")
-        if len(topologies(plan.train + plan.test)) > 1:
-            job.warn("Ces datasets viennent de topologies différentes : le trafic n'y a pas les mêmes caractéristiques.")
         if plan.split == "dataset":
             train_frame = load_frames(self.datasets, plan.train)
             test_frame = load_frames(self.datasets, plan.test)
@@ -322,7 +310,6 @@ class Trainer:
             "featureCount": len(x_train.columns),
             # Conditions d'utilisation : la détection en direct les compare aux siennes.
             "flowWindowSec": plan.flow_window,
-            "topologies": topologies(plan.train),
             "topFeatures": [{"name": n, "importance": float(v)} for n, v in importances[:TOP_FEATURES]],
             "metrics": metrics,
         }

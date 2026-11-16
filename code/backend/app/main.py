@@ -228,15 +228,8 @@ class DatasetAttack(BaseModel):
     repeat: int = Field(1, ge=1, le=10)
 
 
-class DatasetTopology(BaseModel):
-    name: str = ""       # exemple chargé, ou « Topologie personnalisée »
-    signature: str = ""  # empreinte des équipements, adresses et réseaux
-    summary: str = ""
-
-
 class DatasetRequest(BaseModel):
     name: str = ""
-    topology: DatasetTopology = DatasetTopology()  # réseau sur lequel le dataset est généré
     probe: str = ""                             # Sonde IDS : seul point de capture d'un dataset
     benign: List[DatasetBenign] = []
     kinds: List[str] = []                       # types de trafic bénin : « icmp » et un par service (« http », « ssh »…)

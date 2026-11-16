@@ -25,7 +25,7 @@ function useIpNames(nodes, edges) {
  * est affiché comme une attaque détectée ; les attaques lancées depuis l'interface
  * permettent en plus de signaler celles que le modèle a manquées.
  */
-export default function DetectionPanel({ detection, models, topology, nodes, edges, onlineIds, onClose }) {
+export default function DetectionPanel({ detection, models, nodes, edges, onlineIds, onClose }) {
   const probes = useMemo(
     () => nodes.filter((n) => n.data?.deviceType === 'ids' && onlineIds.has(n.id)).map((n) => ({ id: n.id, name: n.data.properties.name })),
     [nodes, onlineIds],
@@ -46,12 +46,6 @@ export default function DetectionPanel({ detection, models, topology, nodes, edg
       'Ce modèle a été entraîné sur des flux non découpés en fenêtres : les flux de la détection (pings, connexions '
       + 'longues coupées toutes les 5 s) lui sont inconnus et risquent de lever de fausses alertes. Réentraînez-le sur un '
       + 'dataset récent.',
-    );
-  }
-  if (modelMeta?.topologies?.length && !modelMeta.topologies.some((t) => t.signature === topology.signature)) {
-    warnings.push(
-      `Ce modèle a été entraîné sur « ${modelMeta.topologies.map((t) => t.name).join(', ')} », pas sur la topologie `
-      + `affichée (« ${topology.name} ») : ses résultats ne sont pas garantis.`,
     );
   }
   const name = (ip) => ipNames.get(ip) ?? ip;

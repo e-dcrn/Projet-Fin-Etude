@@ -128,7 +128,6 @@ class DatasetPlan:
     gap: int
     cooldown: int
     max_attack: int
-    topology: dict = field(default_factory=dict)              # topologie du réseau : nom, empreinte, résumé
     variants: int = 0                                         # variantes de test à générer ensuite
     attackers: List[dict] = field(default_factory=list)       # machines pouvant jouer une attaque
     group: dict = field(default_factory=dict)                 # base / variante (voir make_variant)
@@ -154,17 +153,6 @@ def failure_warning(run: AttackRun) -> Optional[str]:
     detail = run.output.strip().splitlines()[-1] if run.output.strip() else "aucune sortie"
     return (f"{run.name} ({run.source_name} → {run.target}) a échoué (code {run.exit_code}) : {detail[:160]}. "
             "Ses flux ne représentent pas cette attaque : vérifiez que la cible ouvre le service visé.")
-
-
-def topology_info(raw: Optional[dict]) -> dict:
-    """
-    Topologie sur laquelle un dataset est généré, telle que décrite par l'interface :
-    `name` (exemple chargé ou « Topologie personnalisée »), `signature` (empreinte
-    des équipements, adresses et réseaux : deux datasets de même empreinte viennent
-    du même réseau) et `summary` (résumé lisible).
-    """
-    raw = raw or {}
-    return {key: str(raw.get(key) or "")[:limit] for key, limit in (("name", 120), ("signature", 4000), ("summary", 200))}
 
 
 # --------------------------------------------------------------------------- variantes
@@ -282,7 +270,6 @@ class DatasetBuilder:
             kinds=kinds, profile=profile, benign=benign, runs=runs,
             warmup=int(spec["warmup"]), gap=int(spec["gap"]), cooldown=int(spec["cooldown"]),
             max_attack=int(spec["maxAttack"]),
-            topology=topology_info(spec.get("topology")),
             variants=max(0, min(MAX_VARIANTS, int(spec.get("variants") or 0))),
             attackers=list(attackers.values()),
         )
@@ -476,6 +463,5 @@ class DatasetBuilder:
             ],
             "params": {"warmup": plan.warmup, "gap": plan.gap, "cooldown": plan.cooldown, "maxAttack": plan.max_attack},
             "group": plan.group or None,
-            "topology": plan.topology or None,
             "flowWindowSec": FLOW_WINDOW_SEC,
         }

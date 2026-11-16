@@ -173,7 +173,7 @@ function ModelReport({ model }) {
       </p>
       {metrics.byDataset?.length > 1 && <ByDataset rows={metrics.byDataset} />}
       <p className="field__hint">
-        Topologie : {model.topologies?.length ? model.topologies.map((t) => t.name).join(', ') : 'inconnue'} · flux
+        Flux
         {model.flowWindowSec ? ` découpés en fenêtres de ${model.flowWindowSec} s (comme en détection)` : ' non découpés (ancien format : à réentraîner pour la détection en direct)'}.
       </p>
       {metrics.unseenClasses?.length > 0 && (
@@ -279,7 +279,7 @@ function ListContent({ models, hasDatasets, onNew, onClose }) {
               <div className="dataset__line">
                 <strong className="dataset__name">{m.name}</strong>
                 <span className="dataset__meta">
-                  {formatDate(m.createdAt)} · {m.topologies?.map((t) => t.name).join(', ') || 'topologie inconnue'}
+                  {formatDate(m.createdAt)}
                   {!m.flowWindowSec && ' · ancien format'} · détection {formatPercent(m.metrics.detectionRate)} ·
                   fausses alertes {formatPercent(m.metrics.falsePositiveRate)}
                 </span>
@@ -364,10 +364,8 @@ function FormContent({ models, datasets, onBack }) {
 
   const canStart = train.size > 0 && (split === 'temporal' || test.size > 0) && !busy;
 
-  // Datasets choisis venant de réseaux différents, ou préparés différemment (flux découpés ou non).
+  // Datasets choisis préparés différemment (flux découpés ou non).
   const chosen = datasets.filter((d) => train.has(d.id) || (split === 'dataset' && test.has(d.id)));
-  const topologyNames = [...new Set(chosen.map((d) => d.topology?.name ?? 'topologie inconnue'))];
-  const mixedTopologies = new Set(chosen.map((d) => d.topology?.signature ?? '')).size > 1;
   const mixedWindows = new Set(chosen.map((d) => d.flowWindowSec ?? 0)).size > 1;
 
   const submit = async () => {
@@ -403,12 +401,6 @@ function FormContent({ models, datasets, onBack }) {
             onChange={(e) => setName(e.target.value)} />
         </label>
 
-        {mixedTopologies && (
-          <div className="issue-group issue-group--warning">
-            Ces datasets viennent de topologies différentes ({topologyNames.join(', ')}) : le trafic n'y a pas les mêmes
-            caractéristiques, le modèle ne vaudra pour aucune en particulier.
-          </div>
-        )}
         {mixedWindows && (
           <div className="issue-group issue-group--error">
             Ces datasets n'ont pas été préparés de la même façon (flux découpés en fenêtres ou non) : régénérez les plus
