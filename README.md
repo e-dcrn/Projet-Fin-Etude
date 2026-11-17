@@ -12,7 +12,10 @@ entraîne un modèle, et une sonde IDS analyse le trafic en direct.
 Réseau et vrais services → Trafic bénin et attaques → Datasets étiquetés → Entraînement → Détection en direct
 ```
 
-**État** : la chaîne ci-dessus fonctionne. Reste le cœur du sujet : les attaques contre le modèle.
+**État** : la chaîne ci-dessus fonctionne. Première attaque contre le modèle implémentée : **évasion**, en deux
+variantes — par temporisation (inefficace contre un détecteur par-flux) et par mimétisme du trafic bénin
+(efficace : la force brute FTP furtive tombe à 11,5 % de détection). Voir
+[`code/docs/rapports/rapport_evasion.md`](code/docs/rapports/rapport_evasion.md).
 
 ## Organisation du dépôt
 
@@ -21,7 +24,7 @@ Réseau et vrais services → Trafic bénin et attaques → Datasets étiquetés
 | `code/` | Application : interface (`src/`, React + React Flow) et moteur (`backend/`, Python + Docker) |
 | `code/docker/` | Un Dockerfile par rôle d'équipement (PC, serveur, routeur, sonde) et pour la boîte à outils |
 | [`code/docs/DOCUMENTATION.md`](code/docs/DOCUMENTATION.md) | **Documentation technique complète** |
-| `code/docs/rapports/` | Rapport sur la panne de l'IDS, journal des décisions du projet |
+| `code/docs/rapports/` | Rapport sur la panne de l'IDS, **rapport d'évasion** (temporisation vs mimétisme), journal des décisions du projet |
 | `docs/` | Articles de l'état de l'art |
 | `latex/` | État de l'art et présentations de réunion |
 | `Sujet.pdf` | Sujet du projet |

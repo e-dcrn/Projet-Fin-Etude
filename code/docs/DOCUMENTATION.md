@@ -292,9 +292,41 @@ erreur isolée n'est pas une force brute, et le modèle doit le savoir.
 | Identification des services | `nmap -sV --top-ports 100` | service-detection |
 | Scan approfondi | `nmap -A` | aggressive-scan |
 | Force brute SSH, FTP | `hydra -l labuser -P <liste> -f` | ssh-patator, ftp-patator |
+| **Force brute FTP (furtive, évasion)** | `ftplib` (client bénin), cadence humaine | ftp-patator-stealth |
 
-Quatre vitesses : nmap `-T2` à `-T5`, hydra 1 à 16 connexions parallèles. Les attaques tournent dans un
-conteneur qui partage la pile réseau de la source. Pour obtenir des flux étiquetés, on passe par les datasets.
+La dernière ligne est une **attaque d'évasion par mimétisme** (Okada) : au lieu de hydra, elle utilise le même
+client FTP que le trafic bénin pour que ses flux ressemblent à des logins ratés légitimes. Résultat mesuré et
+explication « pour étudiant » dans [`rapports/rapport_evasion.md`](rapports/rapport_evasion.md).
+
+Quatre vitesses « normales » : nmap `-T2` à `-T5`, hydra 1 à 16 connexions parallèles. Les attaques tournent
+dans un conteneur qui partage la pile réseau de la source. Pour obtenir des flux étiquetés, on passe par les
+datasets.
+
+Une cinquième vitesse, **« Évasion (furtif, temporisé) »**, n'est pas une simple vitesse lente : c'est une
+**attaque d'évasion par temporisation** de l'état de l'art (Han/TrafficManipulator, Sharon/TANTRA, voir
+[`état de l'art`](etat_de_l_art_attaques_ml_nids.pdf)). nmap y ajoute `--scan-delay 250ms --max-rate 8`, hydra
+passe en `-t 1 -W 1` : les paquets sont fortement étalés, de sorte que le rythme du trafic malveillant se
+rapproche du bénin. L'hypothèse est que le modèle n'a appris que des attaques **denses** (les quatre vitesses
+ci-dessus) ; en étalant les paquets, les features de temps (`Fwd IAT Min`, `Flow IAT Min`) et de volume
+sortent de la zone « attaque » apprise et des flux peuvent être classés BENIGN.
+
+**Usage** : ne pas l'inclure dans un dataset d'entraînement (sinon le modèle apprend aussi le rythme lent).
+On entraîne sur les vitesses normales, puis on lance l'attaque en vitesse **Évasion** depuis **⚡ Scénarios**
+et on compare, dans le bilan de détection, le **rappel** (part des flux d'attaque détectés) avant et après, le
+tout contre le **coût** payé (l'attaque dure bien plus longtemps). C'est l'expérience « avant/après »
+recommandée par l'état de l'art pour mesurer une évasion.
+
+**Résultat mesuré (scan de ports, modèle `20261110-100030`, topologie « Petit LAN »)** : vitesse Rapide
+→ 200 flux, **200 détectés (rappel 100 %)**, en 0,1 s ; vitesse Évasion → 200 flux, **200 détectés
+(rappel 100 %)**, en 50,7 s. **La temporisation seule n'évade pas ce modèle.** C'est cohérent avec l'état
+de l'art : TrafficManipulator et TANTRA visent KitNET, un détecteur **fenêtré au niveau de l'hôte**, alors
+qu'ici le random forest décide **par flux** (features CICFlowMeter bidirectionnelles). Chaque sonde de scan
+reste un mini-flux de 2–3 paquets, de même forme quel que soit l'espacement : le modèle le reconnaît avec
+une confiance de 1,0. Autrement dit, la robustesse est un **couple modèle–extracteur** (enseignement de la
+§ « Enseignements » de l'état de l'art), pas une propriété du modèle seul. Pour évader un détecteur par flux,
+il faut modifier la **forme des flux eux-mêmes** (compléter les connexions, répartir une force brute sur des
+sessions isolées à la Okada, ajouter du remplissage) — c'est la piste de l'évasion ciblée par l'importance
+des features, à implémenter ensuite.
 
 `nmap` et `hydra` sont aussi installés sur les PC, pour rejouer à la main. Ces attaques-là ne sont pas connues
 du moteur : elles ne figurent pas dans la vérité terrain. Pendant la génération d'un dataset, elles seraient

