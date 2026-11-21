@@ -42,7 +42,7 @@ def dns_name(name: str) -> str:
 
 
 class Service(BaseModel):
-    port: int = Field(ge=1, le=65535)
+    port: int  # 1–65535, vérifié par l'interface (validators.js)
     protocol: Literal["tcp", "udp"] = "tcp"
     name: str = ""
 

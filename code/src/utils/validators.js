@@ -67,7 +67,8 @@ export function interfaceNameError(value) {
  * - warning : le réseau peut être créé mais risque de ne pas fonctionner comme prévu.
  * - refs    : identifiants des équipements / câbles concernés (pour le panneau).
  *
- * Les mêmes erreurs sont vérifiées par le serveur, qui fait foi.
+ * C'est la seule vérification : le serveur (planner.py) fait confiance à
+ * l'interface et se contente de traduire la topologie.
  */
 export function validateTopology(topology) {
   const issues = [];
