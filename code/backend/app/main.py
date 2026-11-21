@@ -4,9 +4,6 @@ API HTTP du moteur de simulation.
   GET    /api/lab                         état du réseau instancié
   DELETE /api/lab                         arrêt et suppression du réseau
   POST   /api/deployments                 lance l'instanciation d'une topologie → { id } (tâche de fond)
-  WS     /api/devices/{id}/terminal       terminal interactif sur un PC ou un serveur (voir terminal.py)
-  WS     /api/devices/{id}/interfaces/{if}/capture   capture du trafic d'un lien (voir capture.py)
-
   GET    /api/jobs/{id}                   état d'une tâche de fond, redemandé toutes les secondes (voir jobs.py)
   POST   /api/jobs/{id}/cancel            annule une tâche de fond
 
@@ -39,20 +36,14 @@ devient une réponse { errors: [message…] } avec son code HTTP.
 Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 """
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from contextlib import asynccontextmanager
-from typing import Callable, List, Optional
+from typing import List, Optional
 
-from docker.errors import DockerException
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from .capture import CaptureSession
 from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetStore
 from .deployer import LabManager
 from .detection import DetectionManager
@@ -60,9 +51,7 @@ from .errors import NotFoundError, UserError
 from .jobs import JobRegistry
 from .models import Service, Topology
 from .planner import build_plan
-from .sessions import Session, SessionRegistry
-from .settings import LOCAL_ORIGIN_REGEX, origin_allowed
-from .terminal import TerminalSession
+from .settings import LOCAL_ORIGIN_REGEX
 from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer
 from .traffic import BENIGN_PROFILES, TrafficManager, attack_catalog, speed_catalog
 
@@ -77,16 +66,8 @@ models = ModelStore()
 trainer = Trainer(datasets, models)
 detection = DetectionManager(traffic, models)
 jobs = JobRegistry()           # tâches de fond : « deploy », « dataset », « training »
-sessions = SessionRegistry()   # terminaux et captures ouverts
 
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    yield
-    await asyncio.to_thread(sessions.close_all)
-
-
-app = FastAPI(title="IDS Lab – moteur de simulation", lifespan=lifespan)
+app = FastAPI(title="IDS Lab – moteur de simulation")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=LOCAL_ORIGIN_REGEX,
@@ -342,44 +323,3 @@ def stop_detection():
 @app.post("/api/lab/detection/reset")
 def reset_detection():
     return detection.reset()
-
-
-# --------------------------------------------------------------------------- terminal et capture (WebSockets)
-
-async def open_session(websocket: WebSocket, factory: Callable[[], Session]) -> Optional[Session]:
-    """
-    Accepte la WebSocket et ouvre la session côté équipement.
-    En cas d'échec, envoie { type: "error", message } puis ferme.
-    """
-    # Les WebSockets échappent à CORS : sans ce contrôle, n'importe quelle page
-    # ouverte dans le navigateur pourrait obtenir un shell sur les équipements.
-    origin = websocket.headers.get("origin")
-    if origin is not None and not origin_allowed(origin):
-        await websocket.close(code=1008)
-        return None
-
-    await websocket.accept()
-    try:
-        return await asyncio.to_thread(factory)
-    except UserError as exc:
-        message = str(exc)
-    except DockerException as exc:
-        log.error("Ouverture d'une session : %s", exc)
-        message = "Opération impossible sur cet équipement."
-    await websocket.send_json({"type": "error", "message": message})
-    await websocket.close()
-    return None
-
-
-@app.websocket("/api/devices/{node_id}/terminal")
-async def device_terminal(websocket: WebSocket, node_id: str, cols: int = 80, rows: int = 24):
-    session = await open_session(websocket, lambda: TerminalSession(lab, node_id, cols, rows))
-    if session:
-        await sessions.serve(session, websocket)
-
-
-@app.websocket("/api/devices/{node_id}/interfaces/{interface}/capture")
-async def link_capture(websocket: WebSocket, node_id: str, interface: str):
-    session = await open_session(websocket, lambda: CaptureSession(lab, node_id, interface))
-    if session:
-        await sessions.serve(session, websocket)

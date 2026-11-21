@@ -37,10 +37,9 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │ INTERFACE — React 19, React Flow, Vite                     code/src/ │
-│ éditeur · Trafic, Scénarios, Datasets, IDS, Détection · terminal,    │
-│ capture                                                              │
+│ éditeur · Trafic, Scénarios, Datasets, IDS, Détection                │
 └─────────────────────────────┬────────────────────────────────────────┘
-                              │ REST (+ polling), WebSocket
+                              │ REST (+ polling)
 ┌─────────────────────────────▼────────────────────────────────────────┐
 │ MOTEUR — Python, FastAPI                           code/backend/app/ │
 │ planner, deployer · traffic, traffic_agent · capture, cicflowmeter   │
@@ -55,8 +54,7 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 ```
 
 L'interface ne parle jamais de Docker : le moteur traduit chaque action. REST sert aux actions ; pour les
-tâches longues (déploiement, dataset, entraînement), l'interface redemande leur état toutes les secondes (polling) ; les WebSockets servent aux terminaux
-et captures. Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
+tâches longues (déploiement, dataset, entraînement), l'interface redemande leur état toutes les secondes (polling). Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
 
 ### Carte du code
 
@@ -75,20 +73,18 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 | `components/DeployDialog.jsx` | bilan des contrôles puis progression du déploiement |
 | `components/TrafficPanel.jsx`, `ScenarioPanel.jsx`, `DetectionPanel.jsx` | panneaux Trafic bénin, Scénarios, Détection |
 | `components/DatasetDialog.jsx`, `ModelDialog.jsx`, `JobProgress.jsx` | datasets ; modèles et rapport ; progression d'une tâche |
-| `components/Dock.jsx`, `TerminalView.jsx`, `CaptureView.jsx` | onglets du bas : terminal (xterm.js), capture façon Wireshark |
 | **`hooks/useTopology.js`** | état du schéma (nœuds, câbles) et toutes les actions d'édition ; lance l'IPAM |
-| `hooks/useCableTool.js`, `useDock.js` | outil câble ; onglets du bas |
+| `hooks/useCableTool.js` | outil câble (clic A → clic B) |
 | **`hooks/useDeployment.js`** | état du réseau (allumé, arrêté) et déploiement |
 | `hooks/useTraffic.js`, `useDetection.js` | état du trafic et de la détection, rafraîchi toutes les 2 s |
 | `hooks/useRecords.js`, `useDatasets.js`, `useModels.js` | listes de datasets et de modèles, et leur création (tâche de fond) |
 | `hooks/useAction.js` | `busy` / `error` d'un bouton qui appelle le moteur ; `toggled()` pour les cases à cocher |
-| **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, polling des tâches, URL des WebSockets) |
+| **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, polling des tâches) |
 | `config/deviceTypes.js`, `exampleTopologies.js` | catalogue des types d'équipements et des services ; exemples |
 | `utils/serializeTopology.js`, `deserializeTopology.js` | schéma React Flow ↔ JSON envoyé au moteur (voir §15) |
 | `utils/ipv4.js`, `ipam.js`, `validators.js` | calcul d'adresses, adressage automatique, contrôles de cohérence |
 | `utils/topologyQueries.js`, `trafficTargets.js` | lectures du schéma : câbles d'un équipement, cibles et types de trafic possibles |
-| `utils/jobRun.js` | état affiché d'une tâche de fond, mis à jour à chaque événement reçu |
-| `utils/pcap.js`, `packetDissector.js`, `displayFilter.js` | capture : paquets reçus, décodage couche par couche, filtres |
+| `utils/jobRun.js` | état affiché d'une tâche de fond, mis à jour à chaque interrogation (polling) |
 | `utils/format.js`, `styles/app.css` | mise en forme des dates et taux ; styles |
 
 **Moteur** (`backend/app/`, Python) :
@@ -106,7 +102,6 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 | **`datasets.py`** | `DatasetBuilder` : joue un programme, capture, étiquette, sauvegarde |
 | **`training.py`** | `Trainer` : features, entraînement, évaluation, sauvegarde du modèle |
 | **`detection.py`** | `DetectionManager` : capture continue sur la sonde, classement, vérité terrain |
-| `terminal.py`, `capture.py`, `sessions.py` | sessions WebSocket : terminal, capture, fermeture à l'arrêt |
 | `jobs.py` | tâches de fond (thread + suite d'événements) |
 | `store.py` | stockage sur disque des datasets et des modèles (un dossier + `meta.json`) |
 | `errors.py`, `settings.py` | `UserError` (message affiché à l'utilisateur) ; constantes (dossiers, préfixe `idslab`) |
@@ -167,12 +162,6 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
    d'attaque, `outcome_of` décide « alerte », « manquée » ou « bénin » ;
 4. `useDetection` interroge `GET /api/lab/detection` toutes les 2 s.
 
-**Terminal et capture** : `useDock.open` ajoute un onglet ; `TerminalView` (ou `CaptureView`) ouvre une
-WebSocket ; `TerminalSession` relaie un shell (`exec` Docker avec TTY), `CaptureSession` relaie la sortie de
-`tcpdump` paquet par paquet, que le navigateur décode (`packetDissector.js`).
-
----
-
 ## 3. Le réseau
 
 | Sur le schéma | Dans Docker |
@@ -205,13 +194,6 @@ de tout le segment. **Elle ne voit que ce switch** : une attaque qui ne le trave
 
 **Modifier le réseau** : ■ Arrêter, modifier, ✔ Valider ; rien ne s'applique à chaud.
 
-**Terminal** : clic sur un PC ou un serveur allumé (`exec` Docker avec TTY relayé par WebSocket).
-
-**Capture d'un câble (vue Wireshark)** : sélection du câble puis **Capturer le trafic**, ou double-clic.
-Un conteneur éphémère partage la pile réseau de l'équipement et lance `tcpdump`. Le navigateur décode les
-paquets (`packetDissector.js`), applique des filtres à la syntaxe Wireshark (`displayFilter.js`) et exporte
-un `.pcap`. Limite : 50 000 paquets par capture.
-
 ---
 
 ## 4. Les services
@@ -235,7 +217,7 @@ Le type d'un service est son **nom** (`http`, `ssh`…, sans tenir compte des ma
 échoue au démarrage, le service retombe sur le simulateur et le journal du serveur l'indique. Compte unique,
 volontairement faible pour la force brute : **`labuser` / `password123`**.
 
-Test rapide depuis le terminal d'un PC, avec `S=<IP du serveur>` :
+Test rapide avec `docker exec` sur un PC, avec `S=<IP du serveur>` :
 
 | Service | Commande |
 | ------- | -------- |
@@ -428,7 +410,7 @@ cela, ses sessions seraient comptées comme des attaques manquées.
 
 Le modèle ne reconnaît que ce qu'il a appris : le panneau signale une attaque absente de l'entraînement.
 
-Une attaque tapée dans un terminal apparaît donc normalement si elle est repérée, mais ne peut pas être comptée comme
+Une attaque lancée en dehors de l'interface (par exemple `docker exec`) apparaît donc normalement si elle est repérée, mais ne peut pas être comptée comme
 manquée. Le taux de fausses alertes se mesure dans le rapport d'entraînement, sur des données étiquetées.
 
 Le bilan compte des **flux**, pas des attaques : une attaque de 200 flux dont 190 sont reconnus donne 190/200.
@@ -494,7 +476,6 @@ cd code && npm run build    # l'interface compile
 | Fichier | Vérifie |
 | ------- | ------- |
 | `test_planner.py`, `test_examples.py` | topologie → plan ; pour chaque exemple, toute machine joint toute autre |
-| `test_capture.py` | découpage du flux de capture |
 | `test_cicflowmeter.py` | découpage d'un pcap en fenêtres, remplissage de la colonne Label |
 | `test_datasets.py` | programmes, variantes, étiquetage par fenêtres |
 | `test_training.py` | features, découpages, entraînement, métriques |

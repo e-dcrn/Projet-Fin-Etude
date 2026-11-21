@@ -36,8 +36,6 @@ function summarize(node, edges) {
  * Zone de travail React Flow.
  * Gère : le dépôt d'équipements depuis la palette, le déplacement,
  * la sélection, et transmet les clics sur les nœuds à l'outil câble.
- * Hors mode câble, un clic sur un PC ou un serveur allumé ouvre son terminal,
- * et un double-clic sur un câble dont l'équipement est allumé ouvre sa capture.
  */
 // Valeur par défaut stable (évite de recalculer les nœuds à chaque rendu)
 const NO_ALERTS = new Set();
@@ -50,9 +48,6 @@ export default function TopologyCanvas({
   onAddDevice,
   cableTool,
   onlineNodeIds,
-  onOpenTerminal,
-  onOpenCapture,
-  capturedEdgeIds,
   alertNodeIds = NO_ALERTS,
   watchingNodeIds = NO_ALERTS,
 }) {
@@ -80,9 +75,8 @@ export default function TopologyCanvas({
   const onNodeClick = useCallback(
     (_event, node) => {
       if (cableTool.isActive) cableTool.handleNodeClick(node.id);
-      else if (DEVICE_TYPES[node.data.deviceType].hasTerminal && onlineNodeIds.has(node.id)) onOpenTerminal(node.id);
     },
-    [cableTool, onlineNodeIds, onOpenTerminal],
+    [cableTool],
   );
 
   // Ajoute aux nœuds les informations dérivées (résumé, état) et met en surbrillance
@@ -103,24 +97,11 @@ export default function TopologyCanvas({
     [nodes, edges, cableTool.sourceId, onlineNodeIds, alertNodeIds, watchingNodeIds],
   );
 
-  const onEdgeDoubleClick = useCallback(
-    (_event, edge) => {
-      if (onlineNodeIds.has(edge.source)) onOpenCapture(edge.id);
-    },
-    [onlineNodeIds, onOpenCapture],
-  );
-
-  // Câbles dont le trafic est en cours de capture : animés (pastille).
-  const displayedEdges = useMemo(
-    () => edges.map((e) => (capturedEdgeIds.has(e.id) ? { ...e, className: 'cable cable--captured' } : e)),
-    [edges, capturedEdgeIds],
-  );
-
   return (
     <div className={`canvas${cableTool.isActive ? ' canvas--cable-mode' : ''}`}>
       <ReactFlow
         nodes={displayedNodes}
-        edges={displayedEdges}
+        edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodeOrigin={NODE_ORIGIN}
@@ -129,7 +110,6 @@ export default function TopologyCanvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
-        onEdgeDoubleClick={onEdgeDoubleClick}
         onPaneClick={cableTool.cancel}
         onDragOver={onDragOver}
         onDrop={onDrop}
