@@ -40,7 +40,7 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 │ éditeur · Trafic, Scénarios, Datasets, IDS, Détection · terminal,    │
 │ capture                                                              │
 └─────────────────────────────┬────────────────────────────────────────┘
-                              │ REST, Server-Sent Events, WebSocket
+                              │ REST (+ polling), WebSocket
 ┌─────────────────────────────▼────────────────────────────────────────┐
 │ MOTEUR — Python, FastAPI                           code/backend/app/ │
 │ planner, deployer · traffic, traffic_agent · capture, cicflowmeter   │
@@ -54,8 +54,8 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 └────────────────────────────────────────────┘ └───────────────────────┘
 ```
 
-L'interface ne parle jamais de Docker : le moteur traduit chaque action. REST sert aux actions, les
-Server-Sent Events aux tâches longues (déploiement, dataset, entraînement), les WebSockets aux terminaux
+L'interface ne parle jamais de Docker : le moteur traduit chaque action. REST sert aux actions ; pour les
+tâches longues (déploiement, dataset, entraînement), l'interface redemande leur état toutes les secondes (polling) ; les WebSockets servent aux terminaux
 et captures. Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
 
 ### Carte du code
@@ -82,7 +82,7 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 | `hooks/useTraffic.js`, `useDetection.js` | état du trafic et de la détection, rafraîchi toutes les 2 s |
 | `hooks/useRecords.js`, `useDatasets.js`, `useModels.js` | listes de datasets et de modèles, et leur création (tâche de fond) |
 | `hooks/useAction.js` | `busy` / `error` d'un bouton qui appelle le moteur ; `toggled()` pour les cases à cocher |
-| **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, SSE, URL des WebSockets) |
+| **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, polling des tâches, URL des WebSockets) |
 | `config/deviceTypes.js`, `exampleTopologies.js` | catalogue des types d'équipements et des services ; exemples |
 | `utils/serializeTopology.js`, `deserializeTopology.js` | schéma React Flow ↔ JSON envoyé au moteur (voir §15) |
 | `utils/ipv4.js`, `ipam.js`, `validators.js` | calcul d'adresses, adressage automatique, contrôles de cohérence |
@@ -131,7 +131,7 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
 4. `deploy` : construit les images, crée un réseau Docker par switch (`_create_network`), un conteneur par
    équipement (`_create_device`), configure routes et interfaces (`_configure_device`), passe le switch surveillé
    en hub (`_enable_hub_mode`) ; chaque étape publie un événement `progress` ;
-5. l'interface suit `GET /api/jobs/{id}/events` (`followJob`) ; `applyJobEvent` met à jour `DeployDialog`.
+5. l'interface redemande `GET /api/jobs/{id}` toutes les secondes (`followJob`) ; `applyJobState` met à jour `DeployDialog`.
 
 **▶ Démarrer (trafic bénin)**
 1. `TrafficPanel.start` calcule pour chaque émetteur ses cibles (`benignTargetsForDests` : IP et services) ;
@@ -553,8 +553,8 @@ docker image rm $(docker image ls -q 'idslab/*')
 ## 15. API et formats
 
 Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les trois tâches
-longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}/events`
-(Server-Sent Events), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
+longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}`, que
+l'interface redemande toutes les secondes (polling), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
 une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (400, 404, 409 ou 503).
 
 **Topologie (JSON, version 2)** : l'interface envoie `{ version, nodes, networks, links }`. Exemples complets

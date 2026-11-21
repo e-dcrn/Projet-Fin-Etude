@@ -8,25 +8,17 @@
  *   steps     libellés des étapes déjà commencées (la dernière est en cours)
  *   warnings  avertissements non bloquants remontés par le serveur
  *   errors    messages d'échec
- *   done      l'événement de fin complet (porte le résultat : { dataset }, { model }…)
+ *   done      le résultat de la tâche ({ dataset }, { model }…), une fois terminée
  */
 export const newRun = (extra = {}) => ({ phase: 'running', step: 0, total: 0, steps: [], warnings: [], errors: [], ...extra });
 
-/** Nouvel état de `run` après un événement reçu du serveur. */
-export function applyJobEvent(run, event) {
+/** Nouvel état de `run` d'après l'état de la tâche renvoyé par GET /jobs/{id}. */
+export function applyJobState(run, job) {
   if (!run) return run;
-  switch (event.type) {
-    case 'progress':
-      return { ...run, step: event.step, total: event.total, steps: [...run.steps, event.label] };
-    case 'warning':
-      return { ...run, warnings: [...run.warnings, event.message] };
-    case 'done':
-      return { ...run, phase: 'done', step: run.total, done: event };
-    case 'error':
-      return { ...run, phase: 'failed', errors: [event.message] };
-    default:
-      return run;
-  }
+  const updated = { ...run, steps: job.steps, warnings: job.warnings, total: job.total ?? run.total, step: job.steps.length };
+  if (job.status === 'done') return { ...updated, phase: 'done', step: updated.total, done: { total: job.total, ...job.result } };
+  if (job.status === 'failed') return { ...updated, phase: 'failed', errors: [job.error] };
+  return updated;
 }
 
-export const isFinal = (event) => event.type === 'done' || event.type === 'error';
+export const isFinal = (job) => job.status !== 'running';

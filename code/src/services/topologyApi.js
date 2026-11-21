@@ -2,8 +2,8 @@
  * Couche d'accès au moteur de simulation (backend/, voir README).
  *
  * L'instanciation d'une topologie est longue : POST /deployments démarre une
- * tâche et renvoie son identifiant, puis la progression est suivie en temps
- * réel via Server-Sent Events (GET /deployments/{id}/events, EventSource).
+ * tâche et renvoie son identifiant, puis l'interface redemande son état toutes
+ * les secondes (GET /jobs/{id}, voir followJob).
  *
  * Le terminal d'un équipement et la capture du trafic d'un lien passent par
  * des WebSockets (terminalUrl / captureUrl, voir TerminalView et CaptureView).
@@ -117,24 +117,22 @@ export const startDeployment = (topology) =>
 
 /**
  * Suit une tâche de fond du serveur (déploiement, dataset, entraînement : voir
- * backend/app/jobs.py) en Server-Sent Events. `onEvent` reçoit chaque événement :
- *   { type: 'progress', step, total, label } | { type: 'warning', message }
- *   { type: 'done', total, ... } | { type: 'error', message }
+ * backend/app/jobs.py) : redemande son état toutes les secondes (polling).
+ * `onUpdate` reçoit l'état : { status: 'running' | 'done' | 'failed', total, steps, warnings, error, result }.
  * Retourne une fonction qui interrompt le suivi.
  */
-export function followJob(id, onEvent) {
-  const source = new EventSource(`${API_BASE_URL}/jobs/${encodeURIComponent(id)}/events`);
-  source.onmessage = (message) => {
-    const event = JSON.parse(message.data);
-    onEvent(event);
-    if (event.type === 'done' || event.type === 'error') source.close();
-  };
-  // En cas de coupure, EventSource se reconnecte seul et reprend au dernier événement
-  // reçu (Last-Event-ID) ; on n'abandonne que si la connexion est définitivement fermée.
-  source.onerror = () => {
-    if (source.readyState === EventSource.CLOSED) onEvent({ type: 'error', message: UNREACHABLE });
-  };
-  return () => source.close();
+export function followJob(id, onUpdate) {
+  const timer = setInterval(async () => {
+    try {
+      const job = await request(`/jobs/${encodeURIComponent(id)}`);
+      onUpdate(job);
+      if (job.status !== 'running') clearInterval(timer);
+    } catch (err) {
+      clearInterval(timer);
+      onUpdate({ status: 'failed', error: err.message, steps: [], warnings: [] });
+    }
+  }, 1000);
+  return () => clearInterval(timer);
 }
 
 /** Annule une tâche de fond (rien n'est sauvegardé). */
