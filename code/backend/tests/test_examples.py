@@ -1,5 +1,5 @@
 """
-Topologies d'exemple (examples/topologies/*.json) : chacune doit être acceptée
+Topologies d'exemple (examples/topologies/*.json) : chacune doit être traduite
 par le planificateur et, une fois instanciée, permettre à toute machine
 adressée d'en joindre toute autre (aller ET retour, comme un ping).
 
@@ -78,7 +78,7 @@ class Router:
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
 def test_example_full_reachability(path):
-    plan = build_plan(Topology.model_validate(load(path)))  # lève TopologyError si incohérent
+    plan = build_plan(Topology.model_validate(load(path)))
     router = Router(plan)
     hosts = [d for d in plan.devices if d.type in ("pc", "server")]
 

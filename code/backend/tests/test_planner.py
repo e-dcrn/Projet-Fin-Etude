@@ -1,7 +1,5 @@
-import pytest
-
 from app.models import Topology
-from app.planner import TopologyError, build_plan
+from app.planner import build_plan
 
 
 def topo(nodes=(), networks=(), links=()):
@@ -59,60 +57,9 @@ def test_reserved_address_skips_used():
     assert next(n for n in plan.networks if n.id == "switch-1").reserved_address == "10.0.1.253"
 
 
-@pytest.mark.parametrize(
-    "mutate, expected",
-    [
-        (lambda t: setattr(t.links[0], "ip", "10.0.9.10"), "même sous-réseau"),
-        (lambda t: setattr(t.links[0], "ip", "10.0.1.1"), "à la fois"),
-        (lambda t: setattr(t.links[0], "ip", ""), "IP manquante"),
-        (lambda t: setattr(t.links[0], "mask", "255.0.255.0"), "masque"),
-        (lambda t: setattr(t.links[0], "ip", "10.0.1.255"), "diffusion"),
-        (lambda t: setattr(t.nodes[0].config, "gateway", "10.0.2.1"), "n'appartient à aucun réseau"),
-        (lambda t: setattr(t.nodes[2].config.routes[0], "interface", "eth7"), "n'existe pas"),
-        (lambda t: setattr(t.nodes[2].config.routes[0], "gateway", "192.168.0.1"), "joignable"),
-        (lambda t: setattr(t.nodes[0], "name", "ROUTER-1"), "plusieurs équipements"),
-        (lambda t: setattr(t.links[1], "interface", "eth0"), "deux fois"),
-        (lambda t: setattr(t.nodes[3].config, "monitoredSegment", "switch-2"), "relié par un câble"),
-    ],
-)
-def test_errors(mutate, expected):
-    t = two_lans()
-    mutate(t)
-    with pytest.raises(TopologyError) as exc:
-        build_plan(t)
-    assert any(expected in e for e in exc.value.errors), exc.value.errors
-
-
-def test_overlapping_networks():
-    t = two_lans()
-    t.links[1].ip, t.links[1].mask = "10.0.0.1", "255.255.0.0"
-    t.links[3].ip, t.links[3].mask = "10.0.0.20", "255.255.0.0"
-    t.nodes[1].config.gateway = "10.0.0.1"
-    t.nodes[2].config.routes = []
-    with pytest.raises(TopologyError) as exc:
-        build_plan(t)
-    assert any("chevauchent" in e for e in exc.value.errors)
-
-
-def test_full_subnet():
-    t = topo(
-        nodes=[node("router-1", "router"), node("router-2", "router")],
-        networks=[net("switch-1")],
-        links=[link("router-1", "switch-1", "eth0", "10.9.0.1", "/30"), link("router-2", "switch-1", "eth0", "10.9.0.2", "/30")],
-    )
-    with pytest.raises(TopologyError) as exc:
-        build_plan(t)
-    assert any("plein" in e for e in exc.value.errors)
-
-
-def declared(t, **subnets):
-    for n in t.networks:
-        n.subnet = subnets.get(n.id.replace("-", "_"), n.subnet)
-    return t
-
-
 def test_declared_subnet():
-    t = declared(two_lans(), switch_1="10.0.1.0/24", switch_2="10.0.2.0/24")
+    t = two_lans()
+    t.networks[0].subnet = "10.0.1.0/24"
     nets = {n.id: n for n in build_plan(t).networks}
     assert str(nets["switch-1"].subnet) == "10.0.1.0/24"
     assert nets["switch-1"].reserved_address == "10.0.1.254"
@@ -125,14 +72,10 @@ def test_declared_subnet_without_addresses():
     assert str(nets["switch-1"].subnet) == "10.0.7.0/24"
 
 
-@pytest.mark.parametrize(
-    "subnet, expected",
-    [("10.0.1.5/24", "réseau invalide"), ("bad", "réseau invalide"), ("10.0.1.0/31", "trop petit"), ("10.0.0.0/16", "n'appartient pas")],
-)
-def test_declared_subnet_errors(subnet, expected):
-    t = declared(two_lans(), switch_1=subnet)
-    if expected == "n'appartient pas":
-        t.links[0].mask = "255.255.255.0"
-    with pytest.raises(TopologyError) as exc:
-        build_plan(t)
-    assert any(expected in e for e in exc.value.errors), exc.value.errors
+def test_hostname_and_masks():
+    devices = {d.id: d for d in build_plan(two_lans()).devices}
+    router = devices["router-1"]
+    assert [str(ep.address) for ep in router.endpoints] == ["10.0.1.1/24", "10.0.2.1/24"]  # masques « 24 » et « /24 »
+    t = two_lans()
+    t.nodes[0].name = "Poste de Paul"
+    assert build_plan(t).devices[0].hostname == "Poste-de-Paul"

@@ -97,7 +97,7 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 | ------- | ---- |
 | **`main.py`** | toutes les routes de l'API (liste en tête du fichier) ; crée les objets ci-dessous |
 | `models.py` | forme du JSON de topologie (pydantic) ; type d'un service ; nom DNS d'un équipement |
-| **`planner.py`** | topologie → plan : vérifie tout, déduit réseaux, interfaces et routes |
+| **`planner.py`** | topologie → plan : traduit switches, équipements, câbles et routes (les vérifications sont faites par l'interface, `validators.js`) |
 | **`deployer.py`** | `LabManager` : exécute le plan avec Docker, construit les images, lance les conteneurs auxiliaires |
 | `service_listener.py` | script exécuté **dans** chaque serveur : démarre les vrais services |
 | `traffic_agent.py` | script exécuté **dans** la boîte à outils : l'utilisateur simulé du trafic bénin |
@@ -126,7 +126,7 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
 **✔ Valider la topologie** (déploiement)
 1. `TopologyEditor.handleValidate` : `serializeTopology` produit le JSON, `validateTopology` liste les problèmes ;
 2. `useDeployment.validate` : sans problème, `startDeployment` → `POST /api/deployments` ;
-3. `main.create_deployment` : `planner.build_plan` vérifie tout (erreur → réponse 400), puis
+3. `main.create_deployment` : `planner.build_plan` traduit la topologie en plan (déjà vérifiée par l'interface), puis
    `jobs.start("deploy", …)` lance `LabManager.deploy` dans un thread ;
 4. `deploy` : construit les images, crée un réseau Docker par switch (`_create_network`), un conteneur par
    équipement (`_create_device`), configure routes et interfaces (`_configure_device`), passe le switch surveillé
@@ -195,7 +195,7 @@ boîte à outils lancée « dans » un équipement pour le trafic bénin, les at
 construit à chaque déploiement sous le nom `idslab/<rôle>` ; le cache de Docker rend cette étape instantanée tant
 qu'aucun Dockerfile n'a changé. Pour ajouter un outil à un équipement, on modifie son Dockerfile.
 
-**Déploiement** : `planner.py` valide et produit un plan, `deployer.py` l'exécute et envoie sa progression.
+**Déploiement** : `planner.py` produit un plan, `deployer.py` l'exécute et envoie sa progression.
 Chaque déploiement supprime le précédent, un échec nettoie tout. Toutes les ressources portent le label
 `idslab.managed=true`. Le réseau est isolé : pas de route vers l'hôte ni Internet.
 
@@ -493,7 +493,7 @@ cd code && npm run build    # l'interface compile
 
 | Fichier | Vérifie |
 | ------- | ------- |
-| `test_planner.py`, `test_examples.py` | topologie → plan ; chaque exemple est accepté et toute machine joint toute autre |
+| `test_planner.py`, `test_examples.py` | topologie → plan ; pour chaque exemple, toute machine joint toute autre |
 | `test_capture.py` | découpage du flux de capture |
 | `test_cicflowmeter.py` | découpage d'un pcap en fenêtres, remplissage de la colonne Label |
 | `test_datasets.py` | programmes, variantes, étiquetage par fenêtres |
@@ -555,7 +555,7 @@ docker image rm $(docker image ls -q 'idslab/*')
 Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les trois tâches
 longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}`, que
 l'interface redemande toutes les secondes (polling), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
-une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (400, 404, 409 ou 503).
+une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (404, 409 ou 503).
 
 **Topologie (JSON, version 2)** : l'interface envoie `{ version, nodes, networks, links }`. Exemples complets
 dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `test_examples.py` le vérifie.
