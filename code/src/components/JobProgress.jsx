@@ -1,10 +1,25 @@
 import { useState } from 'react';
 
+/** Encadré d'erreurs ou d'avertissements (`level` : 'error' | 'warning'), avec un titre facultatif. */
+export function IssueGroup({ title, level, items }) {
+  return (
+    <div className={`issue-group issue-group--${level}`}>
+      {title && <h3 className="issue-group__title">{title}</h3>}
+      <ul>
+        {items.map((message, i) => (
+          <li key={i}>{message}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
- * Suivi d'une tâche de fond (génération de dataset, entraînement : voir useRecords) :
- * titre, barre de progression, erreurs / avertissements, étapes, et boutons
- * « Masquer » / « Annuler » pendant l'exécution. `children` : le résultat, une
- * fois la tâche terminée.
+ * Suivi d'une tâche de fond (déploiement, génération de dataset, entraînement) :
+ * titre, barre de progression, erreurs / avertissements, étapes. Pendant
+ * l'exécution : boutons « Masquer » / « Annuler » si `onCancel` est fourni,
+ * sinon un bouton « Patientez… » inactif (le déploiement ne s'annule pas).
+ * `children` : le résultat, une fois la tâche terminée.
  */
 export default function JobProgress({ run, titles, doneCaption, onCancel, onHide, onDone, doneLabel, titleId, children }) {
   const { phase, step, total, steps, warnings, errors } = run;
@@ -39,8 +54,8 @@ export default function JobProgress({ run, titles, doneCaption, onCancel, onHide
         {total > 0 && <span className="progress__count">{phase === 'done' ? `${total}/${total}` : `Étape ${step}/${total}`}</span>}
       </div>
 
-      {phase === 'failed' && <div className="issue-group issue-group--error"><ul>{errors.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
-      {warnings.length > 0 && <div className="issue-group issue-group--warning"><ul>{warnings.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
+      {phase === 'failed' && <IssueGroup level="error" items={errors} />}
+      {warnings.length > 0 && <IssueGroup level="warning" items={warnings} />}
 
       {phase === 'done' && children}
 
@@ -60,7 +75,9 @@ export default function JobProgress({ run, titles, doneCaption, onCancel, onHide
       )}
 
       <div className="modal__actions">
-        {running ? (
+        {running && !onCancel ? (
+          <button type="button" className="btn btn--primary" disabled>Patientez…</button>
+        ) : running ? (
           <>
             <button type="button" className="btn btn--light" onClick={onHide} title="La tâche continue en arrière-plan">
               Masquer
