@@ -1,7 +1,14 @@
+import re
+
 import pytest
 
 from app.planner import TYPE_LABELS
-from app.settings import DOCKER_DIR, origin_allowed
+from app.settings import DOCKER_DIR, LOCAL_ORIGIN_REGEX
+
+
+def origin_allowed(origin):
+    """Règle appliquée par le CORSMiddleware de Starlette (fullmatch)."""
+    return re.fullmatch(LOCAL_ORIGIN_REGEX, origin) is not None
 
 
 @pytest.mark.parametrize("origin", ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5180"])

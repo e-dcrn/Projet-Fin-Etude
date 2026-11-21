@@ -3,7 +3,6 @@ uvicorn>=0.30
 watchfiles>=0.21  # sans elle, le --reload d'uvicorn (>=0.30) est silencieusement inopérant
 docker>=7.1
 pydantic>=2.6
-websockets>=12
 # Entraînement du ML-IDS (voir app/training.py)
 scikit-learn>=1.3
 pandas>=2.0

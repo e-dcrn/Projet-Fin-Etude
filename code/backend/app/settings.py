@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -13,11 +12,6 @@ DOCKER_DIR = BACKEND_DIR.parent / "docker"        # un Dockerfile par rôle : pc
 # Tout ce qui porte le label « idslab.managed » est supprimé à l'arrêt du réseau.
 PREFIX = "idslab"
 
-# Origines autorisées : l'interface servie en local, quel que soit son port
+# Origines autorisées par CORS : l'interface servie en local, quel que soit son port
 # (Vite passe à 5174, 5175… si 5173 est occupé).
 LOCAL_ORIGIN_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
-
-
-def origin_allowed(origin: str) -> bool:
-    """Même règle que CORS, appliquée aussi aux WebSockets (qui y échappent)."""
-    return re.fullmatch(LOCAL_ORIGIN_REGEX, origin) is not None
