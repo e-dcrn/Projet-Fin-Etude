@@ -123,7 +123,6 @@ def lab_stop():
 @app.post("/api/deployments", status_code=202)
 def create_deployment(topology: Topology):
     plan = build_plan(topology)
-    lab.client  # vérifie que Docker répond avant de lancer la tâche
     job = jobs.start("deploy", lambda job: lab.deploy(plan, job))
     return {"id": job.id}
 

@@ -3,7 +3,7 @@ Détection en direct : un modèle ML-IDS entraîné (voir training.py) analyse l
 trafic du réseau instancié, depuis une Sonde IDS.
 
 Une Sonde IDS est reliée à un switch dont elle surveille le segment : au
-déploiement, ce switch passe en mode « hub » (voir deployer._enable_hub_mode),
+déploiement, ce switch passe en mode « hub » (voir deployer.enable_hub_mode),
 l'équivalent d'un port miroir. La sonde reçoit donc une copie de tout le
 trafic du segment, sans être sur le chemin des paquets (NIDS passif).
 
