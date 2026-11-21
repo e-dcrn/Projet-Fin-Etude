@@ -134,6 +134,11 @@ def current_job_id(kind: str) -> Optional[str]:
     return job.id if job else None
 
 
+def options(catalog: dict) -> list:
+    """Catalogue { id: libellé } → liste d'options pour les menus de l'interface."""
+    return [{"id": k, "label": v} for k, v in catalog.items()]
+
+
 # --------------------------------------------------------------------------- trafic
 
 class Target(BaseModel):
@@ -161,7 +166,7 @@ class ScenarioRequest(BaseModel):
 def traffic_overview():
     return {
         **traffic.overview(),
-        "profiles": [{"id": k, "label": v} for k, v in BENIGN_PROFILES.items()],
+        "profiles": options(BENIGN_PROFILES),
         "attacks": attack_catalog(),
         "speeds": speed_catalog(),
     }
@@ -264,10 +269,6 @@ class TrainingRequest(BaseModel):
     nEstimators: int = Field(100, ge=10, le=500)
     maxDepth: Optional[int] = Field(None, ge=2, le=100)
     excludePort: bool = True                    # ne pas utiliser Dst Port comme feature
-
-
-def options(catalog: dict) -> list:
-    return [{"id": k, "label": v} for k, v in catalog.items()]
 
 
 @app.get("/api/models")
