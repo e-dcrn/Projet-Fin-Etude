@@ -11,10 +11,9 @@ const API_BASE_URL = 'http://localhost:8000/api';
 
 /** Erreur renvoyée par le serveur : `messages` est une liste de textes affichables. */
 export class ApiError extends Error {
-  constructor(messages, status = 0) {
+  constructor(messages) {
     super(messages.join('\n'));
     this.messages = messages;
-    this.status = status;
   }
 }
 
@@ -34,7 +33,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     // 400 / 409 / 503 : { errors: [...] } ; 422 (format invalide) : { detail: [...] }
     const messages = body.errors ?? [`Le serveur a refusé la requête (code ${response.status}).`];
-    throw new ApiError(messages, response.status);
+    throw new ApiError(messages);
   }
   return body;
 }

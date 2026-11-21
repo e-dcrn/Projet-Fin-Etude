@@ -229,8 +229,6 @@ body { background: var(--bg); }
 .add-select { width: 100%; margin-bottom: 4px; color: var(--text-muted); cursor: pointer; font-size: 13px; }
 
 /* Switch */
-.switch-subnet { margin: 0 0 8px; font-weight: 600; }
-.switch-subnet .mono { font-size: 14px; }
 .attached { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
 .attached li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .attached__iface { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
