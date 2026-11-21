@@ -18,7 +18,6 @@ import {
  * - Icon              : composant icône
  * - description       : info-bulle dans la palette
  * - isNetwork         : l'équipement EST un réseau (switch) : les autres s'y relient
- * - hasTerminal       : une fois allumé, un clic ouvre son terminal (ping, curl…)
  * - defaultProperties : propriétés initiales, en plus du nom
  *
  * Modèle de données :
@@ -35,7 +34,6 @@ export const DEVICE_TYPES = {
     color: '#2563eb',
     Icon: PcIcon,
     description: 'Poste client',
-    hasTerminal: true,
     defaultProperties: () => ({ gateway: '', gatewayAuto: true }),
   },
   server: {
@@ -44,7 +42,6 @@ export const DEVICE_TYPES = {
     color: '#7c3aed',
     Icon: ServerIcon,
     description: 'Serveur (web, DNS, base de données…)',
-    hasTerminal: true,
     defaultProperties: () => ({ gateway: '', gatewayAuto: true, services: [] }),
   },
   router: {
@@ -99,5 +96,5 @@ export const DND_MIME_TYPE = 'application/x-ids-device-type';
  */
 export const NODE_ORIGIN = [0.5, 0];
 export const NODE_ICON_SIZE = 52; // largeur/hauteur de .device-node__icon
-export const NODE_PADDING_TOP = 6; // padding haut de .device-node
+const NODE_PADDING_TOP = 6; // padding haut de .device-node
 export const NODE_ICON_CENTER_Y = NODE_PADDING_TOP + NODE_ICON_SIZE / 2;

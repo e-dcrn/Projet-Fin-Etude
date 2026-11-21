@@ -16,7 +16,7 @@ import {
    Contrôles d'un champ isolé (affichés sous le champ, dans le panneau)
    ========================================================================== */
 
-export const INTERFACE_NAME_REGEX = /^[a-z][a-z0-9]{0,14}$/;
+const INTERFACE_NAME_REGEX = /^[a-z][a-z0-9]{0,14}$/;
 
 export function ipFieldError(value, { required = false } = {}) {
   if (!value?.trim()) return required ? 'Adresse IP obligatoire' : null;
