@@ -251,15 +251,8 @@ export default function ModelDialog({ open, models, datasets, onClose }) {
 
 function ListContent({ models, hasDatasets, onNew, onClose }) {
   const [open, setOpen] = useState(null);
-  const [error, setError] = useState(null);
-  const remove = async (m) => {
-    if (!window.confirm(`Supprimer le modèle « ${m.name} » ?`)) return;
-    try {
-      await models.remove(m.id);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+  const { error, act } = useAction();
+  const remove = (m) => window.confirm(`Supprimer le modèle « ${m.name} » ?`) && act(() => models.remove(m.id));
 
   return (
     <>

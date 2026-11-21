@@ -99,15 +99,8 @@ function idsProbes(nodes, onlineIds) {
 }
 
 function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
-  const [error, setError] = useState(null);
-  const remove = async (ds) => {
-    if (!window.confirm(`Supprimer le dataset « ${ds.name} » ?`)) return;
-    try {
-      await datasets.remove(ds.id);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+  const { error, act } = useAction();
+  const remove = (ds) => window.confirm(`Supprimer le dataset « ${ds.name} » ?`) && act(() => datasets.remove(ds.id));
 
   return (
     <>
