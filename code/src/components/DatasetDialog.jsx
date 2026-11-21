@@ -4,7 +4,7 @@ import { toggled, useAction } from '../hooks/useAction.js';
 import { formatDate, formatDuration } from '../utils/format.js';
 import { availableBenignKinds, benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
 
-// Durées du programme (secondes) : bornes identiques à DatasetRequest (backend/app/main.py).
+// Durées du programme (secondes) : leurs bornes ne sont imposées qu'ici (le serveur fait confiance).
 const DURATIONS = [
   { id: 'warmup', label: 'Bénin seul au début', min: 0, max: 600 },
   { id: 'gap', label: 'Bénin entre deux attaques', min: 0, max: 600 },

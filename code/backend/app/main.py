@@ -215,9 +215,10 @@ class DatasetAttack(BaseModel):
     attack: str
     target: str
     speed: str = "fast"
-    repeat: int = Field(1, ge=1, le=10)
+    repeat: int = Field(1, ge=1, le=10)         # borné ici : le champ de l'interface accepte toute saisie
 
 
+# Les bornes des durées et du nombre de variantes sont imposées par l'interface (DatasetDialog).
 class DatasetRequest(BaseModel):
     name: str = ""
     probe: str = ""                             # Sonde IDS : seul point de capture d'un dataset
@@ -225,11 +226,11 @@ class DatasetRequest(BaseModel):
     kinds: List[str] = []                       # types de trafic bénin : « icmp » et un par service (« http », « ssh »…)
     profile: str = "moderate"
     attacks: List[DatasetAttack] = []
-    warmup: int = Field(30, ge=0, le=600)       # trafic bénin seul avant la première attaque (s)
-    gap: int = Field(10, ge=0, le=600)          # trafic bénin seul entre deux attaques (s)
-    cooldown: int = Field(20, ge=0, le=600)     # trafic bénin seul après la dernière attaque (s)
-    maxAttack: int = Field(60, ge=5, le=600)    # durée maximale d'une attaque (s)
-    variants: int = Field(0, ge=0, le=5)        # variantes de test générées ensuite (voir datasets.make_variant)
+    warmup: int = 30                            # trafic bénin seul avant la première attaque (s)
+    gap: int = 10                               # trafic bénin seul entre deux attaques (s)
+    cooldown: int = 20                          # trafic bénin seul après la dernière attaque (s)
+    maxAttack: int = 60                         # durée maximale d'une attaque (s)
+    variants: int = 0                           # variantes de test générées ensuite (voir datasets.make_variant)
 
 
 @app.get("/api/datasets")
@@ -264,8 +265,9 @@ class TrainingRequest(BaseModel):
     train: List[str]                            # datasets d'entraînement
     test: List[str] = []                        # datasets de test (split « dataset »)
     split: str = "dataset"                      # « dataset » ou « temporal »
-    testFraction: float = Field(0.3, ge=0.1, le=0.5)  # part du jeu gardée pour le test (split « temporal »)
+    testFraction: float = 0.3                   # part du jeu gardée pour le test (split « temporal », curseur 10–50 %)
     model: str = "random-forest"
+    # Bornés ici : les champs numériques de l'interface acceptent toute saisie.
     nEstimators: int = Field(100, ge=10, le=500)
     maxDepth: Optional[int] = Field(None, ge=2, le=100)
     excludePort: bool = True                    # ne pas utiliser Dst Port comme feature
