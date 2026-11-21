@@ -134,6 +134,21 @@ gadgets, le code mort et les doublons, sans toucher à la chaîne réseau → do
 | 84 | **Un Dockerfile par rôle** dans `code/docker/`, à la place de `devices.toml` et des Dockerfiles générés en texte. Pas de Docker Compose. | Docker standard et lisible. Compose ne convient pas à un réseau dessiné à la volée, et le lancer pour l'application ajouterait de la complexité (socket Docker, volumes). | `code/docker/`, `deployer.py` | ✅ |
 | 85 | **Garder la validation de la topologie des deux côtés.** | Le frontend donne le retour immédiat pendant l'édition ; le serveur fait foi avant de créer les conteneurs. | `validators.js`, `planner.py` | ✅ |
 
+### Rendre le code « droit au but » (21 novembre 2026)
+
+But : un code qu'un étudiant comprend ligne à ligne. On retire les doublons avec le front, les couches de
+traduction d'erreurs et toute la pile WebSocket, sans toucher à la chaîne réseau → données → entraînement →
+détection. Résultat : l'API (dossier `backend/app/`) passe d'environ 3 717 à 2 685 lignes (−28 %), à
+fonctionnalités égales. Démo revérifiée de bout en bout dans Chrome, 79 tests au vert.
+
+| # | Décision | Justification | Source | État |
+| - | -------- | ------------- | ------ | ---- |
+| 86 | **Suivi des tâches de fond par polling** (`GET /api/jobs/{id}` redemandé chaque seconde) à la place des Server-Sent Events. | Un flux avec reprise après coupure et keep-alive était plus difficile à expliquer qu'une requête répétée. | `jobs.py`, `main.py` | ✅ |
+| 87 | **Le planificateur traduit la topologie sans la revérifier.** Remplace le n° 85. | `validators.js` valide déjà dans l'interface avant l'envoi ; la revérification serveur était un doublon. Un appel direct à l'API avec une topologie incohérente échoue alors plus tard dans Docker, ce qui est accepté. | `planner.py` | ✅ |
+| 88 | **Erreurs Docker non retraduites** : elles remontent telles quelles au lieu d'être réécrites en messages « utilisateur ». | Les couches de traduction alourdissaient le code sans valeur pour un lab local ; le détail reste dans les journaux du serveur. | `deployer.py`, `traffic.py`, `datasets.py`, `detection.py` | ✅ |
+| 89 | **Retirer le terminal et la capture live d'un lien** (vue Wireshark), interface et moteur ; plus aucune WebSocket. Remplace les n° 63, 79 et 80 pour ces deux fonctions. | Décision de l'équipe : les couper retire toute la pile WebSocket (−480 lignes de back, 3 fichiers). Les `capture.pcap` des datasets restent téléchargeables et s'ouvrent dans Wireshark. | décision de l'équipe | ✅ |
+| 90 | **Chasse au code mort finale** : `origin_allowed` et la dépendance `websockets` (ne servaient qu'aux WebSockets), le champ `hasTerminal`, des styles CSS et des exports internes inutilisés. | Plus aucun import, export ni style orphelin. | cette session | ✅ |
+
 ## 6. Questions encore ouvertes
 
 | Question | Pourquoi elle reste ouverte |

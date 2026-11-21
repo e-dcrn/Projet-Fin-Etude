@@ -176,8 +176,8 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
 masque). Un switch n'a pas d'adresse IP, il porte le réseau. L'IPAM (`src/utils/ipam.js`) attribue tout
 automatiquement : réseaux `10.0.N.0/24`, routeurs à partir de `.1`, hôtes à partir de `.10` ; saisir un champ
 le passe en manuel. La dernière adresse de chaque réseau est réservée au bridge. Les tables de routage restent
-à saisir, hors réseaux directement connectés. Les erreurs de cohérence bloquent la création et sont
-revérifiées par le moteur.
+à saisir, hors réseaux directement connectés. Les erreurs de cohérence bloquent la création depuis
+l'interface ; le moteur ne les revérifie pas (il traduit la topologie directement, voir `planner.py`).
 
 **Images** : chaque rôle a son Dockerfile dans `code/docker/` (`pc`, `server`, `router`, `ids`, et `toolbox`, la
 boîte à outils lancée « dans » un équipement pour le trafic bénin, les attaques et les captures). Le moteur les
