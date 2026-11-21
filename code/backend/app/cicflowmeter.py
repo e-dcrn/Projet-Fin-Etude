@@ -45,8 +45,9 @@ PCAP_MAGIC = {
     b"\xa1\xb2\x3c\x4d": (">", True),
 }
 
-# pcap injecté dans /tmp/dump.pcap ; sortie vers un dossier interne ; CSV sur stdout.
-_CMD = "mkdir -p /out && /CICFlowMeter/bin/cfm /tmp/dump.pcap /out >/dev/null 2>&1 && cat /out/*_Flow.csv"
+# pcap injecté dans /tmp/dump.pcap ; sortie vers un dossier interne (vidé à chaque
+# conversion) ; CSV sur stdout.
+_CMD = "rm -rf /out && mkdir -p /out && /CICFlowMeter/bin/cfm /tmp/dump.pcap /out >/dev/null 2>&1 && cat /out/*_Flow.csv"
 
 
 def _tar_bytes(name: str, data: bytes) -> bytes:
@@ -82,7 +83,7 @@ class FlowMeterWorker:
     def convert(self, pcap_bytes: bytes) -> str:
         """pcap → CSV de flux CICFlowMeter (brut, colonne Label vide) ; "" si aucun flux."""
         self.container.put_archive("/tmp", _tar_bytes("dump.pcap", pcap_bytes))
-        result = self.container.exec_run(["sh", "-c", "rm -rf /out && " + _CMD])
+        result = self.container.exec_run(["sh", "-c", _CMD])
         text = result.output.decode(errors="replace")
         lines = text.splitlines()
         # Fenêtre sans flux exploitable (que de l'ARP…) : CICFlowMeter n'écrit pas de CSV.
