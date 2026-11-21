@@ -42,10 +42,6 @@ class Job:
         self.result = {}
         self.cancel_requested = threading.Event()
 
-    @property
-    def finished(self):
-        return self.status != "running"
-
     # -- appelées par le travail pour signaler sa progression
     def begin(self, total):
         self.total = total
@@ -106,16 +102,13 @@ class JobRegistry:
     def __init__(self):
         self.last = {}  # type → dernière tâche lancée
 
-    def busy(self, kind):
-        job = self.last.get(kind)
-        return job is not None and not job.finished
-
     def current(self, kind):
         """Tâche en cours de ce type, ou None."""
-        return self.last[kind] if self.busy(kind) else None
+        job = self.last.get(kind)
+        return job if job is not None and job.status == "running" else None
 
     def start(self, kind, work):
-        if self.busy(kind):
+        if self.current(kind):
             raise UserError("Une tâche du même type est déjà en cours.")
         job = Job()
         self.last[kind] = job

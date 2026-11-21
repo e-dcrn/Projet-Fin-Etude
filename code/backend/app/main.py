@@ -82,7 +82,7 @@ async def user_error(_request: Request, exc: UserError):
 
 
 def ensure_not_deploying() -> None:
-    if jobs.busy("deploy"):
+    if jobs.current("deploy"):
         raise UserError("Un déploiement est en cours.")
 
 
