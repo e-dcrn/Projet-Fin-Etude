@@ -128,9 +128,9 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
 2. `useDeployment.validate` : sans problème, `startDeployment` → `POST /api/deployments` ;
 3. `main.create_deployment` : `planner.build_plan` traduit la topologie en plan (déjà vérifiée par l'interface), puis
    `jobs.start("deploy", …)` lance `LabManager.deploy` dans un thread ;
-4. `deploy` : construit les images, crée un réseau Docker par switch (`_create_network`), un conteneur par
-   équipement (`_create_device`), configure routes et interfaces (`_configure_device`), passe le switch surveillé
-   en hub (`_enable_hub_mode`) ; chaque étape publie un événement `progress` ;
+4. `deploy` : construit les images, crée un réseau Docker par switch (`create_network`), un conteneur par
+   équipement (`create_device`), configure routes et interfaces (`configure_device`), passe le switch surveillé
+   en hub (`enable_hub_mode`) ; chaque étape s'ajoute à l'état de la tâche (`job.step`) ;
 5. l'interface redemande `GET /api/jobs/{id}` toutes les secondes (`followJob`) ; `applyJobState` met à jour `DeployDialog`.
 
 **▶ Démarrer (trafic bénin)**
@@ -555,7 +555,7 @@ docker image rm $(docker image ls -q 'idslab/*')
 Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les trois tâches
 longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}`, que
 l'interface redemande toutes les secondes (polling), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
-une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (404, 409 ou 503).
+une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (404 ou 409).
 
 **Topologie (JSON, version 2)** : l'interface envoie `{ version, nodes, networks, links }`. Exemples complets
 dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `test_examples.py` le vérifie.

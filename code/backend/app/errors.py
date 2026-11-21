@@ -18,11 +18,3 @@ class NotFoundError(UserError):
 
     status = 404
 
-
-class EngineUnavailable(UserError):
-    """Le moteur Docker ne répond pas."""
-
-    status = 503
-
-    def __init__(self) -> None:
-        super().__init__("Le moteur de simulation n'est pas démarré sur la machine hôte.")
