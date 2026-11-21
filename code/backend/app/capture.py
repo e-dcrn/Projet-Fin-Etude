@@ -21,6 +21,7 @@ Protocole (route /api/devices/{id}/interfaces/{interface}/capture) :
 from __future__ import annotations
 
 import asyncio
+import re
 import logging
 import struct
 import threading
@@ -32,9 +33,10 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .cicflowmeter import PCAP_MAGIC
 from .deployer import LabManager
-from .planner import INTERFACE_PATTERN
 from .errors import UserError
 from .settings import PREFIX
+
+INTERFACE_PATTERN = re.compile(r"^[a-z][a-z0-9]{0,14}$")  # eth0, eth1…
 
 log = logging.getLogger(__name__)
 

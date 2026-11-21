@@ -59,7 +59,7 @@ from .detection import DetectionManager
 from .errors import NotFoundError, UserError
 from .jobs import JobRegistry
 from .models import Service, Topology
-from .planner import TopologyError, build_plan
+from .planner import build_plan
 from .sessions import Session, SessionRegistry
 from .settings import LOCAL_ORIGIN_REGEX, origin_allowed
 from .terminal import TerminalSession
@@ -97,8 +97,7 @@ app.add_middleware(
 
 @app.exception_handler(UserError)
 async def user_error(_request: Request, exc: UserError):
-    messages = exc.errors if isinstance(exc, TopologyError) else [str(exc)]
-    return JSONResponse(status_code=exc.status, content={"errors": messages})
+    return JSONResponse(status_code=exc.status, content={"errors": [str(exc)]})
 
 
 def ensure_not_deploying() -> None:
