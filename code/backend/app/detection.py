@@ -25,8 +25,6 @@ Limite connue : un flux à cheval sur deux fenêtres est vu en deux morceaux
 (scans, requêtes web) ne sont pas concernés.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import re
@@ -53,7 +51,6 @@ WINDOW_SEC = FLOW_WINDOW_SEC  # durée d'une fenêtre d'analyse (la même que po
 MAX_EVENTS = 300       # événements (alertes, attaques manquées) conservés
 WINDOW_DIR = "/tmp/ids"
 WINDOW_RE = re.compile(r"^w-(\d+)\.pcap$")
-INTERFACE_RE = re.compile(r"^[\w.@-]+$")
 
 
 def outcome_of(predicted_attack: bool, truly_attack: bool) -> str:
@@ -104,25 +101,18 @@ class DetectionManager:
             raise UserError("Choisissez une Sonde IDS : elle seule reçoit une copie du trafic du segment.")
         meta = self.models.get(model_id)
         bundle = joblib.load(self.models.file_path(model_id, "model.joblib"))
-
         interface = self.traffic.primary_interface(device)
-        if not INTERFACE_RE.match(interface):
-            raise UserError("Interface de la sonde inattendue.")
+
         session = Session(ids=ids_node, ids_name=self.traffic.name_of(device), interface=interface,
                           model_meta=meta, bundle=bundle)
-        try:
-            # Une fenêtre = un fichier ; -U : chaque paquet est écrit aussitôt.
-            session.capture = self.lab.start_netns_helper(
-                device,
-                ["sh", "-c", f"mkdir -p {WINDOW_DIR} && exec tcpdump -i {interface} -U -G {WINDOW_SEC} "
-                             f"-w {WINDOW_DIR}/w-%s.pcap"],
-                role="idscapture", attached=ids_node,
-            )
-            session.worker = FlowMeterWorker(self.lab, role="idsflowmeter")
-        except DockerException as exc:
-            self._cleanup(session)
-            log.error("Démarrage de la détection : %s", exc)
-            raise UserError("Impossible de démarrer la détection sur la sonde.") from exc
+        # tcpdump écrit un pcap par fenêtre (-G WINDOW_SEC) ; -U : chaque paquet écrit aussitôt.
+        session.capture = self.lab.start_netns_helper(
+            device,
+            ["sh", "-c", f"mkdir -p {WINDOW_DIR} && exec tcpdump -i {interface} -U -G {WINDOW_SEC} "
+                         f"-w {WINDOW_DIR}/w-%s.pcap"],
+            role="idscapture", attached=ids_node,
+        )
+        session.worker = FlowMeterWorker(self.lab, role="idsflowmeter")
 
         session.thread = threading.Thread(target=self._loop, args=(session,), daemon=True, name="detection")
         with self._lock:
@@ -264,27 +254,26 @@ class DetectionManager:
 
     def _known_attacks(self, session: Session) -> List[AttackRun]:
         """Attaques lancées depuis l'interface (vérité terrain), avec leur fenêtre de temps."""
-        prefix = PREFIX
         for role in ("scenario", "dataset"):
             for helper in self.lab.helpers(role):
                 labels = helper.labels
-                attack = ATTACKS.get(labels.get(f"{prefix}.attack", ""))
+                attack = ATTACKS.get(labels.get(f"{PREFIX}.attack", ""))
                 if attack is None or helper.id in session.finished:
                     continue
-                run = session.attacks.get(helper.id)
                 state = helper.attrs.get("State", {})
                 start = docker_time(state.get("StartedAt", ""))
                 end = docker_time(state.get("FinishedAt", "")) if helper.status != "running" else time.time()
-                if run is None:
-                    source = self.lab.find_device(labels.get(f"{prefix}.attached", ""))
+                run = session.attacks.get(helper.id)
+                if run is None:  # première fois qu'on voit cette attaque : on la mémorise
+                    source = self.lab.find_device(labels.get(f"{PREFIX}.attached", ""))
                     if source is None or start is None:
                         continue
                     category, subcategory = attack["label"]
                     run = AttackRun(
-                        attack=labels[f"{prefix}.attack"], name=attack["name"], category=category,
-                        subcategory=subcategory, needs=attack["needs"], source=labels.get(f"{prefix}.attached", ""),
+                        attack=labels[f"{PREFIX}.attack"], name=attack["name"], category=category,
+                        subcategory=subcategory, needs=attack["needs"], source=labels.get(f"{PREFIX}.attached", ""),
                         source_name=self.traffic.name_of(source), source_ip=self.traffic.device_ip(source),
-                        target=labels.get(f"{prefix}.target", ""), speed="", start=start,
+                        target=labels.get(f"{PREFIX}.target", ""), speed="", start=start,
                     )
                     session.attacks[helper.id] = run
                 run.end = end
