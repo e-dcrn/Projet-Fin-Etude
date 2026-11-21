@@ -407,14 +407,13 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
 }
 
 function RunContent({ run, datasets, onClose, onDone }) {
-  const dataset = run.done?.dataset;
-  const produced = run.done?.datasets ?? (dataset ? [dataset] : []);
+  const produced = run.done?.datasets ?? [];
   return (
     <JobProgress
       run={run}
       titleId="dataset-title"
       titles={{ running: 'Génération du dataset…', done: produced.length > 1 ? 'Datasets prêts' : 'Dataset prêt', failed: 'Échec de la génération', cancelled: 'Génération annulée' }}
-      doneCaption={produced.length > 1 ? `${produced.length} datasets générés` : `${dataset?.total ?? 0} flux étiquetés`}
+      doneCaption={produced.length > 1 ? `${produced.length} datasets générés` : `${produced[0]?.total ?? 0} flux étiquetés`}
       onCancel={datasets.cancel}
       onHide={onClose}
       onDone={onDone}
