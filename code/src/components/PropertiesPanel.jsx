@@ -20,8 +20,6 @@ export default function PropertiesPanel({
   onUpdateLink,
   onDeleteDevice,
   onDeleteLink,
-  onlineNodeIds,
-  onOpenCapture,
 }) {
   const issuesFor = (id) => issues.filter((issue) => issue.refs.includes(id));
 
@@ -60,19 +58,6 @@ export default function PropertiesPanel({
           ipOptional={deviceType === 'ids'}
           onChange={(patch) => onUpdateLink(selectedEdge.id, patch)}
         />
-        <button
-          type="button"
-          className="btn btn--primary btn--block"
-          disabled={!onlineNodeIds.has(selectedEdge.source)}
-          onClick={() => onOpenCapture(selectedEdge.id)}
-        >
-          Capturer le trafic
-        </button>
-        <p className="panel-hint panel-hint--tight">
-          {onlineNodeIds.has(selectedEdge.source)
-            ? 'Observe en direct les paquets qui passent sur ce câble (double-clic sur le câble : même effet).'
-            : 'Validez la topologie pour démarrer le réseau : la capture sera alors disponible.'}
-        </p>
         <button type="button" className="btn btn--danger btn--block" onClick={() => onDeleteLink(selectedEdge.id)}>
           Supprimer le câble
         </button>

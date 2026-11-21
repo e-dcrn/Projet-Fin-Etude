@@ -4,7 +4,6 @@ import Palette from './Palette.jsx';
 import TopologyCanvas from './TopologyCanvas.jsx';
 import PropertiesPanel from './PropertiesPanel.jsx';
 import DeployDialog from './DeployDialog.jsx';
-import Dock from './Dock.jsx';
 import TrafficPanel from './TrafficPanel.jsx';
 import ScenarioPanel from './ScenarioPanel.jsx';
 import DatasetDialog from './DatasetDialog.jsx';
@@ -13,7 +12,6 @@ import DetectionPanel from './DetectionPanel.jsx';
 import { useTopology } from '../hooks/useTopology.js';
 import { useCableTool } from '../hooks/useCableTool.js';
 import { useDeployment } from '../hooks/useDeployment.js';
-import { useDock } from '../hooks/useDock.js';
 import { useTraffic } from '../hooks/useTraffic.js';
 import { useDatasets } from '../hooks/useDatasets.js';
 import { useModels } from '../hooks/useModels.js';
@@ -33,8 +31,6 @@ export default function TopologyEditor() {
   const [rightPanel, setRightPanel] = useState(null);
   const cableTool = useCableTool(topology.connectDevices, setToast);
   const deployment = useDeployment();
-  const dock = useDock();
-  const { keepOnly, open: openTab } = dock;
 
   // Génération du trafic (active seulement réseau allumé)
   const labRunning = deployment.lab.status === 'running';
@@ -67,18 +63,6 @@ export default function TopologyEditor() {
   const watchingNodeIds = useMemo(
     () => new Set(detection.running && detection.ids ? [detection.ids.node] : []),
     [detection.running, detection.ids],
-  );
-
-  // Un équipement (ou un câble) supprimé de la topologie emporte son terminal (ou sa capture)
-  useEffect(
-    () => keepOnly(new Set(topology.nodes.map((n) => n.id)), new Set(topology.edges.map((e) => e.id))),
-    [topology.nodes, topology.edges, keepOnly],
-  );
-  const openTerminal = useCallback((nodeId) => openTab('terminal', nodeId), [openTab]);
-  const openCapture = useCallback((edgeId) => openTab('capture', edgeId), [openTab]);
-  const capturedEdgeIds = useMemo(
-    () => new Set(dock.tabs.filter((t) => t.kind === 'capture').map((t) => t.target)),
-    [dock.tabs],
   );
 
   // La sélection est portée par React Flow (propriété `selected` des nœuds/liens)
@@ -168,9 +152,6 @@ export default function TopologyEditor() {
       <main className="workspace">
         <Palette />
 
-        {/* Colonne centrale : le canvas, et le panneau du bas (terminaux / captures)
-            glissé dessous — il reste donc entre la palette (gauche) et le panneau
-            de droite, au lieu de passer sous eux. */}
         <div className="workspace__center">
           <TopologyCanvas
             nodes={topology.nodes}
@@ -180,20 +161,8 @@ export default function TopologyEditor() {
             onAddDevice={topology.addDevice}
             cableTool={cableTool}
             onlineNodeIds={deployment.lab.onlineIds}
-            onOpenTerminal={openTerminal}
-            onOpenCapture={openCapture}
-            capturedEdgeIds={capturedEdgeIds}
             alertNodeIds={alertNodeIds}
             watchingNodeIds={watchingNodeIds}
-          />
-          <Dock
-            tabs={dock.tabs}
-            activeKey={dock.activeKey}
-            requests={dock.requests}
-            nodes={topology.nodes}
-            edges={topology.edges}
-            onSelect={dock.select}
-            onClose={dock.close}
           />
         </div>
 
@@ -234,8 +203,6 @@ export default function TopologyEditor() {
             onUpdateLink={topology.updateLink}
             onDeleteDevice={topology.deleteDevice}
             onDeleteLink={topology.deleteLink}
-            onlineNodeIds={deployment.lab.onlineIds}
-            onOpenCapture={openCapture}
           />
         )}
       </main>

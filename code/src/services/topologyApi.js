@@ -4,9 +4,6 @@
  * L'instanciation d'une topologie est longue : POST /deployments démarre une
  * tâche et renvoie son identifiant, puis l'interface redemande son état toutes
  * les secondes (GET /jobs/{id}, voir followJob).
- *
- * Le terminal d'un équipement et la capture du trafic d'un lien passent par
- * des WebSockets (terminalUrl / captureUrl, voir TerminalView et CaptureView).
  */
 
 // URL du moteur de simulation (backend/), lancé sur le port 8000
@@ -22,17 +19,6 @@ export class ApiError extends Error {
 }
 
 const UNREACHABLE = 'Le moteur de simulation est injoignable : vérifiez qu\'il est lancé (voir README).';
-
-/**
- * Fermeture d'une WebSocket (terminal, capture) sans explication du serveur.
- * Refusée avant même d'être établie : moteur arrêté, ou version qui ne connaît
- * pas encore cette fonction (lancé avant une mise à jour du code, sans --reload).
- */
-export function websocketFailure(opened) {
-  return opened
-    ? 'Connexion avec le moteur de simulation perdue.'
-    : 'Le moteur de simulation a refusé la connexion : s\'il est lancé, redémarrez-le pour qu\'il prenne en compte la dernière version du code (voir README).';
-}
 
 async function request(path, options = {}) {
   let response;
@@ -165,26 +151,3 @@ export const deleteModel = (id) => request(`/models/${encodeURIComponent(id)}`, 
 
 /** URL de téléchargement d'un fichier d'un modèle (model.joblib, meta.json). */
 export const modelFileUrl = (id, name) => `${API_BASE_URL}/models/${encodeURIComponent(id)}/files/${name}`;
-
-/**
- * URL WebSocket du terminal d'un équipement (PC ou serveur allumé).
- * Protocole : voir backend/app/terminal.py.
- */
-export function terminalUrl(nodeId, { cols, rows }) {
-  return websocketUrl(`/devices/${encodeURIComponent(nodeId)}/terminal`, { cols, rows });
-}
-
-/**
- * URL WebSocket de la capture du trafic d'un lien (interface d'un équipement allumé).
- * Protocole : voir backend/app/capture.py.
- */
-export function captureUrl(nodeId, interfaceName) {
-  return websocketUrl(`/devices/${encodeURIComponent(nodeId)}/interfaces/${encodeURIComponent(interfaceName)}/capture`);
-}
-
-function websocketUrl(path, params = {}) {
-  const url = new URL(`${API_BASE_URL}${path}`, window.location.href);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.search = new URLSearchParams(params).toString();
-  return url.toString();
-}

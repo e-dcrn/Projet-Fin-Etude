@@ -14,19 +14,17 @@ import { DEVICE_TYPES } from '../config/deviceTypes.js';
  * `data.online` (équipement instancié et allumé), `data.alert` (impliqué dans une
  * alerte récente de la détection) et `data.watching` (sonde IDS en cours d'analyse)
  * sont calculés par TopologyCanvas.
- * Un PC ou un serveur allumé s'ouvre dans un terminal au clic.
  */
 function DeviceNode({ data, selected }) {
   const definition = DEVICE_TYPES[data.deviceType];
   const { Icon } = definition;
   const { name } = data.properties;
-  const terminal = data.online && definition.hasTerminal;
 
   return (
     <div
       className={`device-node${selected ? ' device-node--selected' : ''}${data.alert ? ' device-node--alert' : ''}${data.watching ? ' device-node--watching' : ''}`}
       style={{ '--device-color': definition.color }}
-      title={terminal ? `${definition.description} : cliquer pour ouvrir le terminal` : definition.description}
+      title={definition.description}
     >
       <div className="device-node__icon">
         <Icon />

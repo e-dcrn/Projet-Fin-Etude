@@ -29,8 +29,7 @@ body { background: var(--bg); }
    ========================================================================== */
 .app { display: flex; flex-direction: column; height: 100%; }
 .workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 340px; min-height: 0; }
-/* Colonne centrale : canvas (haut) + panneau du bas (terminaux/captures), empilés.
-   La palette (gauche) et le panneau de droite gardent ainsi toute la hauteur. */
+/* Colonne centrale : le canvas, entre la palette (gauche) et le panneau de droite. */
 .workspace__center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .workspace__center > .canvas { flex: 1; min-height: 0; }
 
@@ -300,40 +299,6 @@ body { background: var(--bg); }
 }
 
 /* ==========================================================================
-   Terminaux des équipements (panneau du bas)
-   ========================================================================== */
-.terminal-dock { position: relative; display: flex; flex-direction: column; flex-shrink: 0; background: #0f172a; }
-.terminal-dock__resizer {
-  position: absolute; top: -3px; left: 0; right: 0; height: 7px; z-index: 5;
-  cursor: ns-resize; touch-action: none;
-}
-.terminal-dock__resizer:hover { background: rgba(37, 99, 235, .5); }
-.terminal-dock__tabs { display: flex; gap: 2px; padding: 5px 8px 0; background: #020617; overflow-x: auto; flex-shrink: 0; }
-.terminal-tab { display: inline-flex; align-items: center; border-radius: 6px 6px 0 0; color: #94a3b8; }
-.terminal-tab:hover { color: #e2e8f0; }
-.terminal-tab--active { background: #0f172a; color: #f1f5f9; }
-.terminal-tab__label {
-  display: inline-flex; align-items: center; gap: 7px; padding: 6px 4px 6px 12px;
-  border: 0; background: none; color: inherit; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
-}
-.terminal-tab__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--device-color); }
-.terminal-tab__close {
-  width: 20px; height: 20px; margin-right: 4px; border: 0; border-radius: 4px;
-  background: none; color: inherit; font-size: 15px; line-height: 1; cursor: pointer;
-}
-.terminal-tab__close:hover { background: #334155; }
-.terminal-dock__body { position: relative; flex: 1; min-height: 0; }
-.terminal-view { position: absolute; inset: 0; padding: 6px 4px 4px 10px; }
-/* visibility (et non display: none) : un terminal masqué garde ses dimensions et reste ajusté */
-.terminal-view--hidden { visibility: hidden; pointer-events: none; }
-.terminal-view__screen { width: 100%; height: 100%; }
-.terminal-view__ended {
-  position: absolute; right: 18px; bottom: 14px; display: flex; align-items: center; gap: 12px;
-  padding: 6px 6px 6px 14px; border-radius: var(--radius); background: #1e293b; color: #cbd5e1; font-size: 13px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
-}
-
-/* ==========================================================================
    Adressage automatique (IPAM)
    ========================================================================== */
 .iface__mode {
@@ -347,90 +312,6 @@ body { background: var(--bg); }
   color: var(--primary); font-size: 12px; cursor: pointer;
 }
 .auto-btn:hover { text-decoration: underline; }
-
-/* ==========================================================================
-   Capture du trafic d'un lien (vue « Wireshark », dans le panneau du bas)
-   ========================================================================== */
-.react-flow__edge.cable--captured .react-flow__edge-path {
-  stroke: var(--primary); stroke-dasharray: 7 5; animation: cable-flow .7s linear infinite;
-}
-@keyframes cable-flow { to { stroke-dashoffset: -12; } }
-
-.terminal-tab__capture {
-  width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid #38bdf8; box-shadow: inset 0 0 0 2px #020617, inset 0 0 0 5px #38bdf8;
-}
-
-.btn--small { padding: 3px 10px; font-size: 12px; }
-
-.capture {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  background: #fff; color: var(--text); font-size: 12px;
-}
-.capture--hidden { visibility: hidden; pointer-events: none; }
-.capture__toolbar, .capture__filterbar {
-  display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
-.capture__toolbar { background: #f8fafc; }
-.capture__status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-.capture__status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
-.capture__status--running::before { background: #22c55e; animation: capture-pulse 1.2s ease-in-out infinite; }
-@keyframes capture-pulse { 50% { opacity: .3; } }
-.capture__title { color: var(--text-muted); font-family: var(--mono); }
-.capture__spacer { flex: 1; }
-.capture__filter {
-  flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
-  font: 12px var(--mono); background: #fff;
-}
-.capture__filter:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
-.capture__filter--valid { background: #d9f99d; }
-.capture__filter--invalid { background: #fecaca; }
-.capture__count { flex-shrink: 0; color: var(--text-muted); }
-.capture__filter-error, .capture__notice { padding: 3px 10px; font-size: 12px; flex-shrink: 0; }
-.capture__filter-error { background: #fef2f2; color: #991b1b; }
-.capture__notice { background: #eff6ff; color: #1e40af; }
-.capture__notice--error { background: #fef2f2; color: #991b1b; }
-
-.capture__list { position: relative; flex: 3 1 0; min-height: 60px; overflow: auto; outline: none; font-family: var(--mono); }
-.capture__row {
-  position: absolute; left: 0; right: 0; height: 20px; display: grid;
-  grid-template-columns: 56px 92px minmax(120px, 1fr) minmax(120px, 1fr) 76px 56px 3fr;
-  align-items: center; padding: 0 8px; cursor: default; white-space: nowrap;
-}
-.capture__row > span { overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
-.capture__row--head {
-  position: sticky; top: 0; z-index: 1; background: #f1f5f9; border-bottom: 1px solid var(--border);
-  font-family: system-ui, sans-serif; font-weight: 600;
-}
-/* Règles de coloration par défaut de Wireshark */
-.capture-row--tcp { background: #e7e6ff; }
-.capture-row--udp { background: #daeeff; }
-.capture-row--icmp { background: #fce0ff; }
-.capture-row--arp { background: #faf0d7; }
-.capture-row--http { background: #e4ffc7; }
-.capture-row--syn-fin { background: #a0a0a0; }
-.capture-row--reset { background: #a40000; color: #fffc9c; }
-.capture-row--icmp-error { background: #12272e; color: #b7f774; }
-.capture-row--other { background: #fff; }
-.capture__row--selected { background: #2563eb; color: #fff; }
-.capture__empty { margin: 0; padding: 28px 16px; color: var(--text-muted); font-family: system-ui, sans-serif; text-align: center; }
-
-.capture__bottom { flex: 2 1 0; min-height: 60px; display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid var(--border); }
-.capture__tree, .capture__hex { overflow: auto; padding: 4px 0; font-family: var(--mono); }
-.capture__tree { border-right: 1px solid var(--border); }
-.capture__layer-title, .capture__field {
-  display: block; width: 100%; padding: 1px 10px; border: 0; background: none;
-  font: inherit; color: inherit; text-align: left; white-space: nowrap; cursor: pointer;
-}
-.capture__field { padding-left: 30px; }
-.capture__layer-title:hover, .capture__field:hover { background: #f1f5f9; }
-.capture__line--active, .capture__line--active:hover { background: #2563eb; color: #fff; }
-.capture__caret { display: inline-block; width: 14px; color: var(--text-muted); }
-.capture__line--active .capture__caret { color: inherit; }
-.capture__hex { padding-left: 10px; white-space: pre; }
-.capture__hex-line { display: flex; gap: 14px; line-height: 18px; }
-.capture__hex-offset { color: var(--text-muted); }
-.capture__byte--marked { background: #2563eb; color: #fff; }
 
 /* ==========================================================================
    Menu des topologies d'exemple (barre d'outils)
