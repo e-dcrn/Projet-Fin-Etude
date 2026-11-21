@@ -7,7 +7,7 @@ API HTTP du moteur de simulation.
   WS     /api/devices/{id}/terminal       terminal interactif sur un PC ou un serveur (voir terminal.py)
   WS     /api/devices/{id}/interfaces/{if}/capture   capture du trafic d'un lien (voir capture.py)
 
-  GET    /api/jobs/{id}/events            progression d'une tâche de fond en Server-Sent Events (voir jobs.py)
+  GET    /api/jobs/{id}                   état d'une tâche de fond, redemandé toutes les secondes (voir jobs.py)
   POST   /api/jobs/{id}/cancel            annule une tâche de fond
 
   GET    /api/lab/traffic                 activité de trafic (agents bénins, scénarios) + catalogues
@@ -42,7 +42,6 @@ Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Callable, List, Optional
@@ -50,7 +49,7 @@ from typing import Callable, List, Optional
 from docker.errors import DockerException
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .capture import CaptureSession
@@ -139,36 +138,10 @@ def find_job(job_id: str):
     return job
 
 
-@app.get("/api/jobs/{job_id}/events")
-async def job_events(job_id: str, request: Request):
-    """Diffuse les événements d'une tâche de fond en Server-Sent Events."""
-    job = find_job(job_id)
-    # Reprise après reconnexion : EventSource renvoie le dernier id reçu
-    last_id = request.headers.get("last-event-id")
-    start = int(last_id) + 1 if last_id and last_id.isdigit() else 0
-
-    async def stream():
-        index, idle = start, 0.0
-        while True:
-            events = job.events_since(index)
-            for event in events:
-                yield f"id: {index}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                index += 1
-            if job.finished and not job.events_since(index):
-                return
-            if await request.is_disconnected():
-                return
-            idle = 0.0 if events else idle + 0.2
-            if idle >= 15:  # commentaire SSE : garde la connexion ouverte
-                yield ": keep-alive\n\n"
-                idle = 0.0
-            await asyncio.sleep(0.2)
-
-    return StreamingResponse(
-        stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+@app.get("/api/jobs/{job_id}")
+def job_status(job_id: str):
+    """État actuel d'une tâche de fond (l'interface le redemande toutes les secondes)."""
+    return find_job(job_id).to_dict()
 
 
 @app.post("/api/jobs/{job_id}/cancel")

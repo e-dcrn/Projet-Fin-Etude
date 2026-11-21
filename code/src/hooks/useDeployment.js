@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchLabStatus, followJob, startDeployment, stopLab } from '../services/topologyApi.js';
-import { applyJobEvent, isFinal, newRun } from '../utils/jobRun.js';
+import { applyJobState, isFinal, newRun } from '../utils/jobRun.js';
 import { hasErrors } from '../utils/validators.js';
 
 /**
@@ -42,9 +42,9 @@ export function useDeployment() {
       setRun(newRun({ deviceCount: topology.nodes.length }));
       try {
         const { id } = await startDeployment(topology);
-        unfollow.current = followJob(id, (event) => {
-          setRun((current) => applyJobEvent(current, event));
-          if (isFinal(event)) refreshLab();
+        unfollow.current = followJob(id, (job) => {
+          setRun((current) => applyJobState(current, job));
+          if (isFinal(job)) refreshLab();
         });
       } catch (err) {
         setRun((current) => ({ ...current, phase: 'failed', errors: err.messages ?? [String(err)] }));

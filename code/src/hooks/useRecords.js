@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelJob, followJob } from '../services/topologyApi.js';
-import { applyJobEvent, isFinal, newRun } from '../utils/jobRun.js';
+import { applyJobState, isFinal, newRun } from '../utils/jobRun.js';
 
 /**
  * Enregistrements produits par une tâche de fond du serveur (datasets, modèles
@@ -45,9 +45,9 @@ export function useRecords(active, api) {
     (jobId) => {
       unfollow.current?.();
       setRun(newRun({ jobId }));
-      unfollow.current = followJob(jobId, (event) => {
-        setRun((current) => applyJobEvent(current, event));
-        if (isFinal(event)) refresh();
+      unfollow.current = followJob(jobId, (job) => {
+        setRun((current) => applyJobState(current, job));
+        if (isFinal(job)) refresh();
       });
     },
     [refresh],

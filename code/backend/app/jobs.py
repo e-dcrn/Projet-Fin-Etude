@@ -2,25 +2,25 @@
 Tâches longues exécutées en arrière-plan (déploiement du réseau, génération
 d'un dataset, entraînement d'un modèle).
 
-Une tâche tourne dans un thread et publie une suite d'événements que
-l'interface suit en temps réel (Server-Sent Events, voir main.py). Les
-événements sont conservés : un client qui se reconnecte reprend là où il
-s'était arrêté.
+Une tâche tourne dans un thread et met à jour son état au fur et à mesure.
+L'interface lit cet état toutes les secondes avec GET /api/jobs/{id} (polling) :
 
-Événements (champ `type`) :
-  progress  { step, total, label }   une nouvelle étape commence
-  warning   { message }              problème non bloquant
-  done      { total, ... }           tâche terminée (+ ce que renvoie le travail)
-  error     { message }              échec ; tout a été nettoyé
+  {
+    "id": "...",
+    "status": "running" | "done" | "failed",
+    "total": 7,                       # nombre d'étapes prévues
+    "steps": ["Nettoyage…", "…"],     # étapes commencées (la dernière est en cours)
+    "warnings": ["…"],                # problèmes non bloquants
+    "error": "…" ou null,             # message d'échec
+    "result": {...}                   # ce que renvoie le travail (dataset, modèle…)
+  }
 """
 
 from __future__ import annotations
 
 import logging
 import threading
-import time
 import uuid
-from typing import Callable, Dict, List, Optional
 
 from .errors import UserError
 
@@ -32,89 +32,98 @@ class JobCancelled(Exception):
 
 
 class Job:
-    def __init__(self) -> None:
+    def __init__(self):
         self.id = uuid.uuid4().hex
-        self.events: List[dict] = []
-        self.finished = False
-        self._step = 0
-        self._total = 0
-        self._lock = threading.Lock()
-        self._cancel = threading.Event()
+        self.status = "running"
+        self.total = 0
+        self.steps = []
+        self.warnings = []
+        self.error = None
+        self.result = {}
+        self.cancel_requested = threading.Event()
 
-    def _emit(self, type_: str, **data) -> None:
-        with self._lock:
-            self.events.append({"type": type_, "time": time.time(), **data})
+    @property
+    def finished(self):
+        return self.status != "running"
 
-    # -- progression, appelée par le travail
-    def begin(self, total: int) -> None:
-        self._total = total
+    # -- appelées par le travail pour signaler sa progression
+    def begin(self, total):
+        self.total = total
 
-    def step(self, label: str) -> None:
-        self._step += 1
-        self._emit("progress", step=self._step, total=self._total, label=label)
+    def step(self, label):
+        self.steps.append(label)
 
-    def warn(self, message: str) -> None:
-        self._emit("warning", message=message)
-
-    def events_since(self, index: int) -> List[dict]:
-        with self._lock:
-            return self.events[index:]
+    def warn(self, message):
+        self.warnings.append(message)
 
     # -- annulation
-    def cancel(self) -> None:
-        self._cancel.set()
+    def cancel(self):
+        self.cancel_requested.set()
 
-    def sleep(self, seconds: float) -> None:
-        """Attend `seconds` secondes, ou lève JobCancelled dès que l'annulation est demandée."""
-        if self._cancel.wait(seconds):
+    def sleep(self, seconds):
+        """Attend `seconds` secondes, ou s'arrête tout de suite si l'annulation est demandée."""
+        if self.cancel_requested.wait(seconds):
             raise JobCancelled()
 
-    def check_cancelled(self) -> None:
-        if self._cancel.is_set():
+    def check_cancelled(self):
+        if self.cancel_requested.is_set():
             raise JobCancelled()
 
-    def run(self, work: Callable[["Job"], Optional[dict]]) -> None:
+    # -- exécution, dans le thread
+    def run(self, work):
         try:
-            result = work(self) or {}
-            self._emit("done", total=self._total, **result)
+            self.result = work(self) or {}
+            self.status = "done"
         except JobCancelled:
-            self._emit("error", message="Opération annulée.")
+            self.error = "Opération annulée."
+            self.status = "failed"
         except UserError as exc:
-            self._emit("error", message=str(exc))
-        except Exception:  # noqa: BLE001 - toute erreur doit être remontée à l'interface
+            self.error = str(exc)
+            self.status = "failed"
+        except Exception:
             log.exception("Échec inattendu d'une tâche de fond")
-            self._emit("error", message="Erreur inattendue (voir les journaux du serveur).")
-        finally:
-            self.finished = True
+            self.error = "Erreur inattendue (voir les journaux du serveur)."
+            self.status = "failed"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "status": self.status,
+            "total": self.total,
+            "steps": list(self.steps),
+            "warnings": list(self.warnings),
+            "error": self.error,
+            "result": self.result,
+        }
 
 
 class JobRegistry:
     """
-    Tâches de fond, une seule à la fois par type (« deploy », « dataset »,
-    « training ») : l'infrastructure est unique. On garde la dernière tâche de
-    chaque type, pour qu'un client puisse en suivre ou reprendre la progression.
+    Une seule tâche à la fois par type (« deploy », « dataset », « training »).
+    On garde la dernière tâche de chaque type pour que l'interface puisse la suivre.
     """
 
-    def __init__(self) -> None:
-        self._last: Dict[str, Job] = {}  # type → dernière tâche lancée
-        self._lock = threading.Lock()
+    def __init__(self):
+        self.last = {}  # type → dernière tâche lancée
 
-    def busy(self, kind: str) -> bool:
-        job = self._last.get(kind)
+    def busy(self, kind):
+        job = self.last.get(kind)
         return job is not None and not job.finished
 
-    def current(self, kind: str) -> Optional[Job]:
-        """Tâche en cours de ce type (None si aucune) : l'interface peut en reprendre le suivi."""
-        return self._last[kind] if self.busy(kind) else None
+    def current(self, kind):
+        """Tâche en cours de ce type, ou None."""
+        return self.last[kind] if self.busy(kind) else None
 
-    def start(self, kind: str, work: Callable[[Job], Optional[dict]]) -> Job:
-        """Lance la tâche ; lève UserError si une tâche du même type tourne déjà."""
-        with self._lock:
-            if self.busy(kind):
-                raise UserError("Une tâche du même type est déjà en cours.")
-            job = self._last[kind] = Job()
-        threading.Thread(target=job.run, args=(work,), daemon=True, name=f"{kind}-{job.id[:8]}").start()
+    def start(self, kind, work):
+        if self.busy(kind):
+            raise UserError("Une tâche du même type est déjà en cours.")
+        job = Job()
+        self.last[kind] = job
+        threading.Thread(target=job.run, args=(work,), daemon=True).start()
         return job
 
-    def get(self, job_id: str) -> Optional[Job]:
-        return next((job for job in self._last.values() if job.id == job_id), None)
+    def get(self, job_id):
+        for job in self.last.values():
+            if job.id == job_id:
+                return job
+        return None
