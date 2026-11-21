@@ -255,7 +255,7 @@ class DatasetBuilder:
             elif i:
                 current.group = {**current.group, "of": metas[0]["id"]}
             metas.append(self._generate(current, job, tag))
-        return {"dataset": metas[0], "datasets": metas}
+        return {"datasets": metas}
 
     def _generate(self, plan, job, tag=""):
         """Joue un programme, puis extrait et étiquette les flux. Renvoie la description du dataset."""
