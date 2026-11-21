@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../services/topologyApi.js';
 
 const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [], speeds: [] };
@@ -14,7 +14,6 @@ const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [], speeds: []
 export function useTraffic(active) {
   const [data, setData] = useState(EMPTY);
   const [error, setError] = useState(null);
-  const timer = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -32,19 +31,16 @@ export function useTraffic(active) {
       return undefined;
     }
     refresh();
-    timer.current = setInterval(refresh, 2000);
-    return () => clearInterval(timer.current);
+    const timer = setInterval(refresh, 2000);
+    return () => clearInterval(timer);
   }, [active, refresh]);
 
   const act = useCallback(
     async (fn) => {
       try {
-        const result = await fn();
+        return await fn();
+      } finally {
         await refresh();
-        return result;
-      } catch (err) {
-        await refresh();
-        throw err;
       }
     },
     [refresh],
@@ -72,7 +68,7 @@ export function useTraffic(active) {
   return {
     profiles: data.profiles,
     attacks: data.attacks,
-    speeds: data.speeds ?? [],
+    speeds: data.speeds,
     benign: data.benign,
     scenarios: data.scenarios,
     benignNodes,
