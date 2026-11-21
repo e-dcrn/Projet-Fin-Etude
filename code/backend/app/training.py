@@ -19,8 +19,6 @@ Une tâche de fond (voir jobs.py) :
 Classification binaire : BENIGN / ATTACK (toutes les attaques sont regroupées).
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import time
@@ -183,20 +181,11 @@ class Trainer:
         self.datasets = datasets
         self.models = models
 
-    def _dataset(self, dataset_id: str) -> dict:
-        try:
-            return self.datasets.get(dataset_id)
-        except UserError as exc:
-            raise UserError(f"Dataset {dataset_id} : {exc}") from exc
-
     def prepare(self, spec: dict) -> TrainingPlan:
-        """Vérifie la demande de l'interface (avant de lancer la tâche)."""
-        if spec["model"] not in MODELS:
-            raise UserError(f"Modèle inconnu « {spec['model']} ».")
-        if spec["split"] not in SPLITS:
-            raise UserError(f"Découpage inconnu « {spec['split']} ».")
-        train = [self._dataset(i) for i in dict.fromkeys(spec.get("train") or [])]
-        test = [self._dataset(i) for i in dict.fromkeys(spec.get("test") or [])] if spec["split"] == "dataset" else []
+        """Vérifie la demande AVANT de lancer la tâche (dataset inconnu, fuite entraînement/test…)."""
+        # dict.fromkeys retire les doublons en gardant l'ordre ; datasets.get lève si l'id est inconnu.
+        train = [self.datasets.get(i) for i in dict.fromkeys(spec.get("train") or [])]
+        test = [self.datasets.get(i) for i in dict.fromkeys(spec.get("test") or [])] if spec["split"] == "dataset" else []
         if not train:
             raise UserError("Choisissez au moins un dataset d'entraînement.")
         if spec["split"] == "dataset":
