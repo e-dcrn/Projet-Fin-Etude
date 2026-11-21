@@ -12,10 +12,8 @@ export function deviceIp(edges, nodeId) {
   return link?.data.ip ?? '';
 }
 
-const isDevice = (n) => n.type === 'device';
 const typeOf = (n) => n.data.deviceType;
 const nameOf = (n) => n.data.properties.name;
-const REACHABLE = ['pc', 'server', 'router', 'ids'];
 
 /** Services ouverts d'un serveur, normalisés pour le serveur (port numérique). */
 function servicesOf(node) {
@@ -24,27 +22,15 @@ function servicesOf(node) {
     .filter((s) => s.port);
 }
 
-const withIp = (nodes, edges) => (node) => ({
-  ip: deviceIp(edges, node.id),
-  name: nameOf(node),
-  services: servicesOf(node),
-});
-
-/** Équipements joignables depuis `sourceId` (tout sauf lui-même, dotés d'une IP). */
-function reachableNodes(nodes, edges, sourceId) {
-  return nodes.filter(
-    (n) => isDevice(n) && REACHABLE.includes(typeOf(n)) && n.id !== sourceId && deviceIp(edges, n.id),
-  );
-}
+/** Équipements dotés d'une adresse IP : les destinataires possibles (un switch n'a pas d'adresse). */
+const addressedDevices = (nodes, edges) => nodes.filter((n) => deviceIp(edges, n.id));
 
 /**
  * Tous les équipements qui peuvent être DESTINATAIRES de trafic bénin (dotés
  * d'une IP), pour les proposer en cases à cocher : { id, name, type, ip }.
  */
 export function reachableDevices(nodes, edges) {
-  return nodes
-    .filter((n) => isDevice(n) && REACHABLE.includes(typeOf(n)) && deviceIp(edges, n.id))
-    .map((n) => ({ id: n.id, name: nameOf(n), type: typeOf(n), ip: deviceIp(edges, n.id) }));
+  return addressedDevices(nodes, edges).map((n) => ({ id: n.id, name: nameOf(n), type: typeOf(n), ip: deviceIp(edges, n.id) }));
 }
 
 /**
@@ -53,17 +39,15 @@ export function reachableDevices(nodes, edges) {
  */
 export function benignTargetsForDests(nodes, edges, sourceId, destIds) {
   const wanted = new Set(destIds);
-  const make = withIp(nodes, edges);
-  return reachableNodes(nodes, edges, sourceId)
-    .filter((n) => wanted.has(n.id))
-    .map(make)
-    .filter((t) => t.ip);
+  return addressedDevices(nodes, edges)
+    .filter((n) => n.id !== sourceId && wanted.has(n.id))
+    .map((n) => ({ ip: deviceIp(edges, n.id), name: nameOf(n), services: servicesOf(n) }));
 }
 
 /** Équipements pouvant être source de trafic (un PC ou un serveur allumé). */
 export function trafficSources(nodes, onlineIds) {
   return nodes
-    .filter((n) => isDevice(n) && ['pc', 'server'].includes(typeOf(n)) && onlineIds.has(n.id))
+    .filter((n) => ['pc', 'server'].includes(typeOf(n)) && onlineIds.has(n.id))
     .map((n) => ({ id: n.id, name: nameOf(n), type: typeOf(n) }));
 }
 
@@ -78,11 +62,10 @@ export function scenarioTargets(nodes, edges, needs) {
       .filter((n) => typeOf(n) === 'switch' && n.data.properties.subnet)
       .map((n) => ({ label: `${nameOf(n)} (${n.data.properties.subnet})`, value: n.data.properties.subnet }));
   }
-  return nodes
-    .filter((n) => isDevice(n) && REACHABLE.includes(typeOf(n)))
-    .map((n) => ({ node: n.id, label: nameOf(n), ip: deviceIp(edges, n.id) }))
-    .filter((t) => t.ip)
-    .map((t) => ({ label: `${t.label} (${t.ip})`, value: t.ip }));
+  return addressedDevices(nodes, edges).map((n) => {
+    const ip = deviceIp(edges, n.id);
+    return { label: `${nameOf(n)} (${ip})`, value: ip };
+  });
 }
 
 /** Type d'un service : son nom s'il désigne un service réel, sinon null (même règle que backend/app/models.py). */
