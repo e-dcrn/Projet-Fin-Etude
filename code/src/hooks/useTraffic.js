@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as api from '../services/topologyApi.js';
 
 const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [], speeds: [] };
@@ -8,7 +8,7 @@ const EMPTY = { benign: [], scenarios: [], profiles: [], attacks: [], speeds: []
  *
  * Tant que `active` est vrai, l'activité (agents bénins en cours, scénarios et
  * leur état) est rafraîchie régulièrement. Les actions renvoient une promesse
- * et déclenchent un rafraîchissement ; les erreurs du serveur (ApiError) sont
+ * et déclenchent un rafraîchissement ; les erreurs du serveur sont
  * laissées remonter à l'appelant, qui les affiche.
  */
 export function useTraffic(active) {
@@ -58,21 +58,14 @@ export function useTraffic(active) {
   const stopScenarios = useCallback((id) => act(() => api.stopScenarios(id)), [act]);
   const clearScenarios = useCallback(() => act(() => api.clearScenarios()), [act]);
 
-  // Équipements où un agent bénin tourne ; sources de scénarios encore en cours
-  const benignNodes = useMemo(() => new Set(data.benign.map((b) => b.node)), [data.benign]);
-  const scenarioSources = useMemo(
-    () => new Set(data.scenarios.filter((s) => s.status === 'running').map((s) => s.source)),
-    [data.scenarios],
-  );
-
   return {
     profiles: data.profiles,
     attacks: data.attacks,
     speeds: data.speeds,
     benign: data.benign,
     scenarios: data.scenarios,
-    benignNodes,
-    scenarioSources,
+    // vrai si du trafic bénin ou une attaque tourne en ce moment
+    active: data.benign.length > 0 || data.scenarios.some((s) => s.status === 'running'),
     error,
     startBenign,
     stopBenign,

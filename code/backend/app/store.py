@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Union
 
-from .errors import NotFoundError
+from fastapi import HTTPException
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class RecordStore:
     """
     Enregistrements d'un même type sous `root`. `files` liste les fichiers
     téléchargeables (nom → type MIME) ; un identifiant ou un fichier inconnu
-    lève NotFoundError.
+    lève une erreur HTTP 404.
     """
 
     def __init__(self, root: Path, files: Dict[str, str], what: str):
@@ -36,10 +36,10 @@ class RecordStore:
 
     def _dir(self, record_id: str) -> Path:
         if not ID_RE.match(record_id or ""):
-            raise NotFoundError(f"{self._what} introuvable.")
+            raise HTTPException(404, f"{self._what} introuvable.")
         path = self.root / record_id
         if not (path / "meta.json").is_file():
-            raise NotFoundError(f"{self._what} introuvable.")
+            raise HTTPException(404, f"{self._what} introuvable.")
         return path
 
     def new_id(self) -> str:
@@ -80,7 +80,7 @@ class RecordStore:
 
     def file_path(self, record_id: str, name: str) -> Path:
         if name not in self.files:
-            raise NotFoundError("Fichier inconnu.")
+            raise HTTPException(404, "Fichier inconnu.")
         return self._dir(record_id) / name
 
     def delete(self, record_id: str) -> None:

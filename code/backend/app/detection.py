@@ -3,7 +3,7 @@ Détection en direct : un modèle ML-IDS entraîné (voir training.py) analyse l
 trafic du réseau instancié, depuis une Sonde IDS.
 
 Une Sonde IDS est reliée à un switch dont elle surveille le segment : au
-déploiement, ce switch passe en mode « hub » (voir deployer.enable_hub_mode),
+démarrage, ce switch passe en mode « hub » (service hub-mode du docker-compose.yml),
 l'équivalent d'un port miroir. La sonde reçoit donc une copie de tout le
 trafic du segment, sans être sur le chemin des paquets (NIDS passif).
 
@@ -37,10 +37,10 @@ from typing import Deque, Dict, List, Optional
 import joblib
 import pandas as pd
 from docker.errors import DockerException, NotFound
+from fastapi import HTTPException
 
 from .cicflowmeter import FLOW_WINDOW_SEC, FlowMeterWorker, parse_timestamp
 from .datasets import AttackRun
-from .errors import UserError
 from .traffic import ATTACKS, TrafficManager, docker_time
 from .training import BENIGN, ModelStore, feature_matrix
 from .settings import PREFIX
@@ -97,8 +97,6 @@ class DetectionManager:
     def start(self, ids_node: str, model_id: str) -> dict:
         self.stop()
         device = self.traffic.require_device(ids_node, "Sonde IDS")
-        if device.labels.get(f"{PREFIX}.type") != "ids":
-            raise UserError("Choisissez une Sonde IDS : elle seule reçoit une copie du trafic du segment.")
         meta = self.models.get(model_id)
         bundle = joblib.load(self.models.file_path(model_id, "model.joblib"))
         interface = self.traffic.primary_interface(device)
@@ -184,8 +182,11 @@ class DetectionManager:
             while not session.stop.wait(1.0):
                 try:
                     self._tick(session)
-                except (NotFound, UserError) as exc:
-                    session.error = str(exc) if isinstance(exc, UserError) else "La sonde a disparu (réseau arrêté ?)."
+                except NotFound:
+                    session.error = "La sonde a disparu (réseau arrêté ?)."
+                    break
+                except HTTPException as exc:
+                    session.error = exc.detail
                     break
                 except Exception as exc:  # noqa: BLE001 - une fenêtre ratée ne doit pas arrêter la détection
                     log.warning("Détection : fenêtre ignorée (%s)", exc)
@@ -199,7 +200,7 @@ class DetectionManager:
         capture = session.capture
         capture.reload()
         if capture.status != "running":
-            raise UserError("La capture de la sonde s'est arrêtée.")
+            raise HTTPException(500, "La capture de la sonde s'est arrêtée.")
         listing = capture.exec_run(["sh", "-c", f"ls {WINDOW_DIR}"]).output.decode(errors="replace").split()
         now = time.time()
         # Une fenêtre est terminée quand sa période est écoulée : tcpdump écrit alors dans la suivante.

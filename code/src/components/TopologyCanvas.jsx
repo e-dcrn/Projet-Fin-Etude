@@ -1,135 +1,79 @@
-import { useCallback, useMemo } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, useReactFlow } from '@xyflow/react';
+import { useState } from 'react';
+import { ReactFlow, Background, Controls } from '@xyflow/react';
 import DeviceNode from './DeviceNode.jsx';
-import CableEdge from './CableEdge.jsx';
-import { DEVICE_TYPES, DND_MIME_TYPE, NODE_ORIGIN, NODE_ICON_CENTER_Y } from '../config/deviceTypes.js';
-import { formatInterface } from '../utils/ipv4.js';
-import { deviceLinks } from '../utils/topologyQueries.js';
+import TerminalPopup from './TerminalPopup.jsx';
 
 // Déclaré hors du composant : React Flow exige une référence stable
 const nodeTypes = { device: DeviceNode };
-const edgeTypes = { cable: CableEdge };
 
-// Câbles : lignes droites de centre à centre, une étiquette à chaque extrémité
-// (interface de l'équipement, port du switch : voir CableEdge)
-const defaultEdgeOptions = { type: 'cable', className: 'cable' };
-
-// Vue initiale du canvas (vide au démarrage, donc pas de fitView)
-const defaultViewport = { x: 0, y: 0, zoom: 1.5 };
-
-/** Lignes affichées sous le nom d'un équipement. */
-function summarize(node, edges) {
-  const { deviceType, properties } = node.data;
-  if (deviceType === 'switch') {
-    // Le réseau des équipements branchés sur le switch (un switch n'a pas d'adresse IP)
-    return properties.subnet ? [`réseau ${properties.subnet}`] : [];
-  }
-  const links = deviceLinks(edges, node.id);
-  if (deviceType === 'router') {
-    return links.length ? [`${links.length} interface${links.length > 1 ? 's' : ''}`] : [];
-  }
-  const addresses = links.filter((l) => l.data.ip).map((l) => formatInterface(l.data.ip, l.data.mask));
-  return addresses.length > 2 ? [addresses[0], `+${addresses.length - 1} autres`] : addresses;
+/** Lignes affichées sous le nom d'un équipement : son réseau (switch) ou ses adresses IP. */
+function linesOf(topology, node) {
+  if (node.type === 'switch') return [node.subnet];
+  return topology.links.filter((l) => l.node === node.id).map((l) => l.ip);
 }
 
 /**
- * Zone de travail React Flow.
- * Gère : le dépôt d'équipements depuis la palette, le déplacement,
- * la sélection, et transmet les clics sur les nœuds à l'outil câble.
+ * Schéma de la topologie (en lecture seule) : les équipements, les câbles, et
+ * pendant la détection les équipements en alerte (entourés de rouge).
+ * `onlineIds`, `alertIds`, `watchingIds` : ensembles d'identifiants d'équipements.
+ *
+ * Un clic sur un équipement (hors switch) ouvre une petite popup avec la commande
+ * `docker exec` pour ouvrir un terminal dessus.
  */
-// Valeur par défaut stable (évite de recalculer les nœuds à chaque rendu)
-const NO_ALERTS = new Set();
+export default function TopologyCanvas({ topology, onlineIds, alertIds, watchingIds }) {
+  const [selected, setSelected] = useState(null); // équipement cliqué, pour la popup terminal
 
-export default function TopologyCanvas({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
-  onAddDevice,
-  cableTool,
-  onlineNodeIds,
-  alertNodeIds = NO_ALERTS,
-  watchingNodeIds = NO_ALERTS,
-}) {
-  const { screenToFlowPosition } = useReactFlow();
-
-  // Autorise le dépôt (sinon le navigateur refuse le drop)
-  const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  // Dépôt d'un équipement : conversion des coordonnées écran → coordonnées du canvas
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
-      const deviceType = event.dataTransfer.getData(DND_MIME_TYPE);
-      if (!DEVICE_TYPES[deviceType]) return;
-
-      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      onAddDevice(deviceType, { x: position.x, y: position.y - NODE_ICON_CENTER_Y });
+  const nodes = topology.nodes.map((n) => ({
+    id: n.id,
+    type: 'device',
+    position: { x: n.x, y: n.y },
+    data: {
+      type: n.type,
+      name: n.name,
+      lines: linesOf(topology, n),
+      online: onlineIds.has(n.id),
+      alert: alertIds.has(n.id),
+      watching: watchingIds.has(n.id),
     },
-    [screenToFlowPosition, onAddDevice],
-  );
+  }));
+  const edges = topology.links.map((l) => ({
+    id: `${l.node}-${l.switch}`,
+    source: l.node,
+    target: l.switch,
+    type: 'straight',
+    className: 'cable',
+  }));
 
-  const onNodeClick = useCallback(
-    (_event, node) => {
-      if (cableTool.isActive) cableTool.handleNodeClick(node.id);
-    },
-    [cableTool],
-  );
-
-  // Ajoute aux nœuds les informations dérivées (résumé, état) et met en surbrillance
-  // l'extrémité de départ du câble en cours de création
-  const displayedNodes = useMemo(
-    () =>
-      nodes.map((n) => ({
-        ...n,
-        className: n.id === cableTool.sourceId ? 'cable-source' : undefined,
-        data: {
-          ...n.data,
-          summary: summarize(n, edges),
-          online: onlineNodeIds.has(n.id),
-          alert: alertNodeIds.has(n.id),
-          watching: watchingNodeIds.has(n.id),
-        },
-      })),
-    [nodes, edges, cableTool.sourceId, onlineNodeIds, alertNodeIds, watchingNodeIds],
-  );
+  // Un switch n'est pas un conteneur : pas de terminal à ouvrir dessus.
+  const onNodeClick = (_event, node) => {
+    const device = topology.nodes.find((n) => n.id === node.id);
+    if (device && device.type !== 'switch') setSelected(device);
+  };
 
   return (
-    <div className={`canvas${cableTool.isActive ? ' canvas--cable-mode' : ''}`}>
+    <div className="canvas">
       <ReactFlow
-        nodes={displayedNodes}
+        key={topology.id} // nouvelle topologie : on recadre la vue
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        nodeOrigin={NODE_ORIGIN}
-        defaultViewport={defaultViewport}
-        defaultEdgeOptions={defaultEdgeOptions}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        nodeOrigin={[0.5, 0]}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
         onNodeClick={onNodeClick}
-        onPaneClick={cableTool.cancel}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
-        nodesDraggable={!cableTool.isActive} // évite les déplacements involontaires pendant le câblage
-        nodesConnectable={false} // les liens se créent uniquement via l'outil câble
-        deleteKeyCode={['Delete', 'Backspace']}
+        fitView
+        minZoom={0.3}
+        zoomOnScroll={false}      // molette / trackpad : ne zoome pas (sinon la topologie « disparaît »)
+        zoomOnDoubleClick={false}
+        preventScrolling={false}  // laisse la page défiler normalement
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={20} />
-        <Controls />
-        <MiniMap position="top-right" pannable zoomable nodeColor={(n) => DEVICE_TYPES[n.data.deviceType]?.color ?? '#999'} />
+        <Controls showInteractive={false} />
       </ReactFlow>
 
-      {cableTool.isActive && (
-        <div className="canvas__banner">
-          {cableTool.sourceId
-            ? 'Cliquez sur le second équipement (Échap pour annuler)'
-            : 'Mode câble : cliquez sur un premier équipement'}
-        </div>
-      )}
+      {selected && <TerminalPopup device={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

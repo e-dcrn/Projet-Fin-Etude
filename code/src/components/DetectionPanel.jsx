@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAction } from '../hooks/useAction.js';
 import { formatPercent } from '../utils/format.js';
+import { devicesOf, namesByIp } from '../utils/topology.js';
 
 // Issue d'un verdict comparé à la vérité terrain (voir backend/app/detection.py).
 const OUTCOMES = {
@@ -12,31 +13,18 @@ const PROTOCOLS = { 1: 'ICMP', 6: 'TCP', 17: 'UDP' };
 
 const clock = (epoch) => (epoch ? new Date(epoch * 1000).toLocaleTimeString('fr-FR') : '');
 
-/** Adresse IP → nom de l'équipement, d'après les câbles de la topologie. */
-function useIpNames(nodes, edges) {
-  return useMemo(() => {
-    const names = new Map(nodes.map((n) => [n.id, n.data?.properties?.name]));
-    return new Map(edges.filter((e) => e.data?.ip).map((e) => [e.data.ip, names.get(e.source) ?? e.data.ip]));
-  }, [nodes, edges]);
-}
-
 /**
- * Panneau de détection en direct : une Sonde IDS (reliée au switch qu'elle
- * surveille) analyse le trafic avec un modèle entraîné. Tout flux classé ATTACK
- * est affiché comme une attaque détectée ; les attaques lancées depuis l'interface
- * permettent en plus de signaler celles que le modèle a manquées.
+ * Panneau de détection en direct : la Sonde IDS de la topologie (reliée au switch
+ * qu'elle surveille) analyse le trafic avec un modèle entraîné. Tout flux classé
+ * ATTACK est affiché comme une attaque détectée ; les attaques lancées depuis
+ * l'interface permettent en plus de signaler celles que le modèle a manquées.
  */
-export default function DetectionPanel({ detection, models, nodes, edges, onlineIds, onClose }) {
-  const probes = useMemo(
-    () => nodes.filter((n) => n.data?.deviceType === 'ids' && onlineIds.has(n.id)).map((n) => ({ id: n.id, name: n.data.properties.name })),
-    [nodes, onlineIds],
-  );
-  const ipNames = useIpNames(nodes, edges);
-  const [ids, setIds] = useState('');
+export default function DetectionPanel({ detection, models, topology, onClose }) {
+  const probe = devicesOf(topology, 'ids')[0];
+  const ipNames = namesByIp(topology);
   const [model, setModel] = useState('');
   const { busy, error, act: guard } = useAction();
 
-  const chosenIds = ids || probes[0]?.id || '';
   const chosenModel = model || models[0]?.id || '';
   const modelMeta = models.find((m) => m.id === (detection.running ? detection.model?.id : chosenModel));
   const name = (ip) => ipNames.get(ip) ?? ip;
@@ -45,7 +33,7 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
   const ago = detection.lastWindowAt ? Math.max(0, Math.round(Date.now() / 1000 - detection.lastWindowAt)) : null;
 
   return (
-    <aside className="traffic-panel nokey" aria-label="Détection en direct">
+    <aside className="traffic-panel" aria-label="Détection en direct">
       <header className="traffic-panel__head">
         <strong>🛡 Détection en direct</strong>
         <button type="button" className="icon-btn" title="Fermer" onClick={onClose}>×</button>
@@ -75,29 +63,19 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
               ■ Arrêter la détection
             </button>
           </>
-        ) : probes.length === 0 ? (
-          <p className="panel-hint">
-            Aucune Sonde IDS allumée : ajoutez-en une, reliez-la au switch à surveiller (« segment surveillé » dans ses
-            propriétés), puis validez la topologie.
-          </p>
         ) : models.length === 0 ? (
           <p className="panel-hint">Aucun modèle : entraînez-en un d'abord (🧠 IDS).</p>
         ) : (
           <>
-            <label className="field field--compact">
-              <span className="field__label">Sonde IDS</span>
-              <select className="field__input" value={chosenIds} onChange={(e) => setIds(e.target.value)}>
-                {probes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
+            <p className="field__hint">Sonde : <strong>{probe.name}</strong></p>
             <label className="field field--compact">
               <span className="field__label">Modèle</span>
               <select className="field__input" value={chosenModel} onChange={(e) => setModel(e.target.value)}>
                 {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </label>
-            <button type="button" className="btn btn--primary btn--block" disabled={busy || !chosenIds || !chosenModel}
-              onClick={() => guard(() => detection.start(chosenIds, chosenModel))}>
+            <button type="button" className="btn btn--primary btn--block" disabled={busy || !chosenModel}
+              onClick={() => guard(() => detection.start(probe.id, chosenModel))}>
               ▶ Démarrer la détection
             </button>
           </>
@@ -138,7 +116,7 @@ export default function DetectionPanel({ detection, models, nodes, edges, online
             </ul>
           )}
           <p className="field__hint">
-            « Manqué » n'est possible que pour les attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets : le moteur ne connaît
+            « Manqué » n'est possible que pour les attaques lancées depuis ⚡ Simulation ou 🗂 Datasets : le moteur ne connaît
             pas celles tapées dans un terminal. Le taux de fausses alertes se lit dans le rapport du modèle (🧠 IDS).
           </p>
         </section>

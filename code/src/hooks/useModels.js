@@ -8,8 +8,6 @@ const MODELS_API = {
   listKey: 'models',
 };
 
-const NO_OPTIONS = { models: [], splits: [] };
-
 /**
  * Modèles ML-IDS entraînés (voir backend/app/training.py) : modèles sauvegardés
  * et entraînement d'un nouveau modèle (voir useRecords pour `run`).
@@ -19,7 +17,6 @@ export function useModels(active) {
   return {
     ...records,
     models: records.records,
-    options: records.info.options ?? NO_OPTIONS,
     train: records.start,
     fileUrl: api.modelFileUrl,
   };

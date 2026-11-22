@@ -1,0 +1,27 @@
+{
+  "name": "Trois réseaux, deux routeurs",
+  "description": "Deux LAN reliés par un réseau de transit et deux routeurs en chaîne (routes statiques). Le serveur est dans LAN-3 ; la sonde IDS surveille le transit 10.0.2.0/24, par où passe tout le trafic entre les deux LAN.",
+  "nodes": [
+    { "id": "switch-1", "type": "switch", "name": "Switch-LAN-1", "subnet": "10.0.1.0/24", "x": -560, "y": 0 },
+    { "id": "switch-2", "type": "switch", "name": "Switch-Transit", "subnet": "10.0.2.0/24", "x": 0, "y": 0 },
+    { "id": "switch-3", "type": "switch", "name": "Switch-LAN-3", "subnet": "10.0.3.0/24", "x": 560, "y": 0 },
+    { "id": "router-1", "type": "router", "name": "Routeur-1", "x": -280, "y": 0 },
+    { "id": "router-2", "type": "router", "name": "Routeur-2", "x": 280, "y": 0 },
+    { "id": "pc-1", "type": "pc", "name": "PC-1", "x": -860, "y": -140 },
+    { "id": "pc-2", "type": "pc", "name": "PC-2", "x": -860, "y": 140 },
+    { "id": "pc-3", "type": "pc", "name": "PC-3", "x": 860, "y": -140 },
+    { "id": "server-1", "type": "server", "name": "Serveur", "x": 860, "y": 140 },
+    { "id": "ids-1", "type": "ids", "name": "IDS-1", "x": 0, "y": -220 }
+  ],
+  "links": [
+    { "node": "router-1", "switch": "switch-1", "ip": "10.0.1.1" },
+    { "node": "router-1", "switch": "switch-2", "ip": "10.0.2.1" },
+    { "node": "router-2", "switch": "switch-2", "ip": "10.0.2.2" },
+    { "node": "router-2", "switch": "switch-3", "ip": "10.0.3.1" },
+    { "node": "pc-1", "switch": "switch-1", "ip": "10.0.1.10" },
+    { "node": "pc-2", "switch": "switch-1", "ip": "10.0.1.11" },
+    { "node": "pc-3", "switch": "switch-3", "ip": "10.0.3.10" },
+    { "node": "server-1", "switch": "switch-3", "ip": "10.0.3.20" },
+    { "node": "ids-1", "switch": "switch-2", "ip": "10.0.2.200" }
+  ]
+}

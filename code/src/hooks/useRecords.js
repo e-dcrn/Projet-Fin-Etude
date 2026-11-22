@@ -21,7 +21,6 @@ import { applyJobState, isFinal, newRun } from '../utils/jobRun.js';
  */
 export function useRecords(active, api) {
   const [records, setRecords] = useState([]);
-  const [info, setInfo] = useState({}); // le reste de la réponse de list() (options…)
   const [error, setError] = useState(null);
   const [run, setRun] = useState(null);
   const unfollow = useRef(null);
@@ -32,7 +31,6 @@ export function useRecords(active, api) {
     try {
       const { [apiRef.current.listKey]: list, ...rest } = await apiRef.current.list();
       setRecords(list);
-      setInfo(rest);
       setError(null);
       return rest;
     } catch (err) {
@@ -92,5 +90,5 @@ export function useRecords(active, api) {
     [refresh],
   );
 
-  return { records, info, error, run, start, cancel, dismissRun, remove };
+  return { records, error, run, start, cancel, dismissRun, remove };
 }

@@ -1,26 +1,27 @@
 """
 API HTTP du moteur de simulation.
 
-  GET    /api/lab                         état du réseau instancié
-  DELETE /api/lab                         arrêt et suppression du réseau
-  POST   /api/deployments                 lance l'instanciation d'une topologie → { id } (tâche de fond)
-  GET    /api/jobs/{id}                   état d'une tâche de fond, redemandé toutes les secondes (voir jobs.py)
-  POST   /api/jobs/{id}/cancel            annule une tâche de fond
+  GET    /api/lab                         topologie en cours et état de ses équipements
+  POST   /api/lab                         démarre une topologie { topology: "1-petit-lan" } (docker compose up)
+  DELETE /api/lab                         arrête le réseau (docker compose down)
 
   GET    /api/lab/traffic                 activité de trafic (agents bénins, scénarios) + catalogues
   POST   /api/lab/traffic/benign          démarre le trafic de fond sur un équipement
   DELETE /api/lab/traffic/benign          arrête le trafic de fond (tous, ou ?node=)
-  POST   /api/lab/scenarios               lance un scénario d'audit → description du scénario
+  POST   /api/lab/scenarios               lance une attaque → description du scénario
   GET    /api/lab/scenarios/{id}/logs     résultat (sortie) d'un scénario
   POST   /api/lab/scenarios/stop          interrompt les scénarios en cours (?id=… pour un seul)
   DELETE /api/lab/scenarios               supprime les scénarios terminés
+
+  GET    /api/jobs/{id}                   état d'une tâche de fond, redemandé toutes les secondes (voir jobs.py)
+  POST   /api/jobs/{id}/cancel            annule une tâche de fond
 
   GET    /api/datasets                    datasets sauvegardés (voir datasets.py) + génération en cours
   POST   /api/datasets                    lance la génération d'un dataset → { id } (tâche de fond)
   GET    /api/datasets/{id}/files/{name}  télécharge flows.csv, capture.pcap ou meta.json
   DELETE /api/datasets/{id}               supprime un dataset
 
-  GET    /api/models                      modèles entraînés (voir training.py) + entraînement en cours + options
+  GET    /api/models                      modèles entraînés (voir training.py) + entraînement en cours
   POST   /api/models                      lance l'entraînement d'un modèle → { id } (tâche de fond)
   GET    /api/models/{id}/files/{name}    télécharge model.joblib ou meta.json
   DELETE /api/models/{id}                 supprime un modèle
@@ -30,8 +31,8 @@ API HTTP du moteur de simulation.
   DELETE /api/lab/detection               arrête la détection
   POST   /api/lab/detection/reset         efface le bilan et les événements (nouvel essai)
 
-Toute erreur destinée à l'utilisateur est une UserError (voir errors.py) : elle
-devient une réponse { errors: [message…] } avec son code HTTP.
+Une erreur prévue est une HTTPException : FastAPI la renvoie sous la forme
+{ "detail": "message" }, que l'interface affiche tel quel.
 
 Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 """
@@ -39,24 +40,20 @@ Lancement : uvicorn app.main:app --port 8000 --reload   (depuis code/backend)
 import logging
 from typing import List, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetStore
-from .deployer import LabManager
 from .detection import DetectionManager
-from .errors import NotFoundError, UserError
 from .jobs import JobRegistry
-from .models import Service, Topology
-from .planner import build_plan
+from .lab import LabManager
 from .settings import LOCAL_ORIGIN_REGEX
-from .training import FILES as MODEL_FILES, MODELS, SPLITS, ModelStore, Trainer
+from .training import FILES as MODEL_FILES, ModelStore, Trainer
 from .traffic import BENIGN_PROFILES, TrafficManager, attack_catalog, speed_catalog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
-log = logging.getLogger(__name__)
 
 lab = LabManager()
 traffic = TrafficManager(lab)
@@ -65,7 +62,7 @@ dataset_builder = DatasetBuilder(traffic, datasets)
 models = ModelStore()
 trainer = Trainer(datasets, models)
 detection = DetectionManager(traffic, models)
-jobs = JobRegistry()           # tâches de fond : « deploy », « dataset », « training »
+jobs = JobRegistry()           # tâches de fond : « dataset », « training »
 
 app = FastAPI(title="IDS Lab – moteur de simulation")
 app.add_middleware(
@@ -76,36 +73,30 @@ app.add_middleware(
 )
 
 
-@app.exception_handler(UserError)
-async def user_error(_request: Request, exc: UserError):
-    return JSONResponse(status_code=exc.status, content={"errors": [str(exc)]})
-
-
-def ensure_not_deploying() -> None:
-    if jobs.current("deploy"):
-        raise UserError("Un déploiement est en cours.")
-
-
 # --------------------------------------------------------------------------- réseau
+
+class StartRequest(BaseModel):
+    topology: str  # nom d'un dossier de code/topologies/
+
 
 @app.get("/api/lab")
 def lab_status():
     return lab.status()
 
 
+@app.post("/api/lab")
+def lab_start(req: StartRequest):
+    """Démarre une topologie. Peut prendre quelques minutes la première fois (construction des images)."""
+    detection.stop()
+    lab.start(req.topology)
+    return lab.status()
+
+
 @app.delete("/api/lab")
 def lab_stop():
-    ensure_not_deploying()
     detection.stop()
-    lab.teardown()
-    return {"ok": True}
-
-
-@app.post("/api/deployments", status_code=202)
-def create_deployment(topology: Topology):
-    plan = build_plan(topology)
-    job = jobs.start("deploy", lambda job: lab.deploy(plan, job))
-    return {"id": job.id}
+    lab.stop()
+    return lab.status()
 
 
 # --------------------------------------------------------------------------- tâches de fond
@@ -113,7 +104,7 @@ def create_deployment(topology: Topology):
 def find_job(job_id: str):
     job = jobs.get(job_id)
     if job is None:
-        raise NotFoundError("Tâche inconnue.")
+        raise HTTPException(404, "Tâche inconnue.")
     return job
 
 
@@ -134,24 +125,18 @@ def current_job_id(kind: str) -> Optional[str]:
     return job.id if job else None
 
 
-def options(catalog: dict) -> list:
-    """Catalogue { id: libellé } → liste d'options pour les menus de l'interface."""
-    return [{"id": k, "label": v} for k, v in catalog.items()]
-
-
 # --------------------------------------------------------------------------- trafic
 
 class Target(BaseModel):
-    ip: str = ""
-    name: str = ""
-    services: List[Service] = []
+    ip: str
+    server: bool = False  # un serveur offre HTTP, SSH et FTP ; les autres machines répondent au ping
 
 
 class BenignRequest(BaseModel):
     node: str
     profile: str = "moderate"
     dest: str = "all"           # libellé des destinataires (affichage)
-    kinds: List[str] = []       # types de trafic : « icmp », un service (« http », « ssh »…) ou un groupe (« web », « service »)
+    kinds: List[str] = []       # types de trafic : « icmp », « http », « ssh », « ftp »
     targets: List[Target] = []
 
 
@@ -166,7 +151,7 @@ class ScenarioRequest(BaseModel):
 def traffic_overview():
     return {
         **traffic.overview(),
-        "profiles": options(BENIGN_PROFILES),
+        "profiles": [{"id": k, "label": v} for k, v in BENIGN_PROFILES.items()],
         "attacks": attack_catalog(),
         "speeds": speed_catalog(),
     }
@@ -221,9 +206,9 @@ class DatasetAttack(BaseModel):
 # Les bornes des durées et du nombre de variantes sont imposées par l'interface (DatasetDialog).
 class DatasetRequest(BaseModel):
     name: str = ""
-    probe: str = ""                             # Sonde IDS : seul point de capture d'un dataset
+    probe: str                                  # Sonde IDS : seul point de capture d'un dataset
     benign: List[DatasetBenign] = []
-    kinds: List[str] = []                       # types de trafic bénin : « icmp » et un par service (« http », « ssh »…)
+    kinds: List[str] = []                       # types de trafic bénin : « icmp », « http », « ssh », « ftp »
     profile: str = "moderate"
     attacks: List[DatasetAttack] = []
     warmup: int = 30                            # trafic bénin seul avant la première attaque (s)
@@ -240,7 +225,6 @@ def list_datasets():
 
 @app.post("/api/datasets", status_code=202)
 def create_dataset(req: DatasetRequest):
-    ensure_not_deploying()
     plan = dataset_builder.prepare(req.model_dump())
     job = jobs.start("dataset", lambda job: dataset_builder.run(plan, job))
     return {"id": job.id}
@@ -263,10 +247,7 @@ def delete_dataset(dataset_id: str):
 class TrainingRequest(BaseModel):
     name: str = ""
     train: List[str]                            # datasets d'entraînement
-    test: List[str] = []                        # datasets de test (split « dataset »)
-    split: str = "dataset"                      # « dataset » ou « temporal »
-    testFraction: float = 0.3                   # part du jeu gardée pour le test (split « temporal », curseur 10–50 %)
-    model: str = "random-forest"
+    test: List[str]                             # datasets de test (jamais vus à l'entraînement)
     # Bornés ici : les champs numériques de l'interface acceptent toute saisie.
     nEstimators: int = Field(100, ge=10, le=500)
     maxDepth: Optional[int] = Field(None, ge=2, le=100)
@@ -275,11 +256,7 @@ class TrainingRequest(BaseModel):
 
 @app.get("/api/models")
 def list_models():
-    return {
-        "models": models.list(),
-        "job": current_job_id("training"),
-        "options": {"models": options(MODELS), "splits": options(SPLITS)},
-    }
+    return {"models": models.list(), "job": current_job_id("training")}
 
 
 @app.post("/api/models", status_code=202)

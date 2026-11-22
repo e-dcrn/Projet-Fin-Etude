@@ -10,8 +10,6 @@
   --primary: #2563eb;
   --danger: #dc2626;
   --cable: #475569;
-  --cable-selected: #2563eb;
-  --selection: #10b981; /* contour d'un équipement sélectionné */
   --success: #16a34a;
   --warning: #d97706;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -25,20 +23,16 @@ html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); }
 
 /* ==========================================================================
-   Mise en page générale : barre d'outils + 3 colonnes
+   Mise en page générale : barre d'outils, schéma, panneau de droite (facultatif)
    ========================================================================== */
 .app { display: flex; flex-direction: column; height: 100%; }
-.workspace { flex: 1; display: grid; grid-template-columns: 200px 1fr 340px; min-height: 0; }
-/* Colonne centrale : le canvas, entre la palette (gauche) et le panneau de droite. */
-.workspace__center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.workspace { flex: 1; display: flex; min-height: 0; }
+.workspace__center { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .workspace__center > .canvas { flex: 1; min-height: 0; }
+.workspace__description { margin: 0; padding: 8px 16px; font-size: 13px; color: var(--text-muted); border-top: 1px solid var(--border); }
+.lab-error { padding: 8px 16px; background: #fef2f2; color: #991b1b; font-size: 13px; white-space: pre-wrap; }
 
-.panel-title {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 0 4px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em;
-}
 .panel-hint { margin: 0 0 16px; font-size: 12px; color: var(--text-muted); }
-.panel-help { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-muted); line-height: 1.8; }
 
 /* ==========================================================================
    Barre d'outils
@@ -49,10 +43,24 @@ body { background: var(--bg); }
 }
 .toolbar__brand { display: flex; align-items: center; gap: 10px; }
 .toolbar__brand strong { font-size: 18px; }
-.toolbar__subtitle { font-size: 13px; color: #94a3b8; }
 .toolbar__brand .lab-status { margin-left: 6px; }
 .toolbar__actions { display: flex; align-items: center; gap: 10px; }
-.toolbar__errors { font-size: 13px; color: #fca5a5; }
+/* Menu de choix de la topologie (barre d'outils) */
+.topo-menu { position: relative; }
+.topo-menu__list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  width: 380px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 6px; list-style: none;
+  border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .25);
+}
+.topo-menu__item {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 10px;
+  border: none; border-radius: 6px; background: none; color: var(--text); text-align: left; cursor: pointer;
+}
+.topo-menu__item:hover, .topo-menu__item:focus-visible { background: var(--bg); outline: none; }
+.topo-menu__item--active { background: #eff6ff; }
+.topo-menu__item strong { font-size: 14px; }
+.topo-menu__desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 
 /* État du réseau instancié */
 .lab-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #94a3b8; }
@@ -73,12 +81,9 @@ body { background: var(--bg); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn--primary { background: var(--primary); border-color: var(--primary); font-weight: 600; }
 .btn--danger { background: transparent; border-color: var(--danger); color: var(--danger); }
-.toolbar .btn--danger { color: #fca5a5; border-color: #7f1d1d; }
 .btn--active { background: #f59e0b; border-color: #f59e0b; color: #0f172a; font-weight: 600; }
 .btn--block { width: 100%; margin-top: 8px; }
-.btn--light, .btn--ghost { background: #fff; border-color: var(--border); color: var(--text); }
-.btn--ghost { border-style: dashed; color: var(--text-muted); }
-.btn--ghost:hover { color: var(--primary); border-color: var(--primary); }
+.btn--light { background: #fff; border-color: var(--border); color: var(--text); }
 .icon-btn {
   width: 24px; height: 24px; padding: 0; border: none; border-radius: 4px;
   background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
@@ -86,40 +91,12 @@ body { background: var(--bg); }
 .icon-btn:hover { background: #fee2e2; color: var(--danger); }
 
 /* ==========================================================================
-   Palette
-   ========================================================================== */
-.palette { padding: 16px; background: var(--panel-bg); border-right: 1px solid var(--border); overflow-y: auto; }
-.palette__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.palette__item {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-  border: 2px solid var(--device-color); border-radius: var(--radius); background: #fff;
-  font-size: 14px; cursor: grab; user-select: none;
-  transition: border-color .15s, box-shadow .15s;
-}
-.palette__item:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
-.palette__item:active { cursor: grabbing; }
-.palette__icon { width: 30px; height: 30px; color: var(--device-color); }
-.palette__icon svg { width: 100%; height: 100%; }
-
-/* ==========================================================================
    Canvas
    ========================================================================== */
 .canvas { position: relative; min-width: 0; }
-.canvas--cable-mode .react-flow__node { cursor: crosshair; }
-.canvas__banner {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  padding: 6px 14px; border-radius: 999px; background: #f59e0b; color: #0f172a;
-  font-size: 13px; font-weight: 600; pointer-events: none; box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
-}
 
 /* Câbles */
 .react-flow__edge.cable .react-flow__edge-path { stroke: var(--cable); stroke-width: 2.5; }
-/* Étiquettes aux extrémités d'un câble : interface côté équipement, port côté switch (CableEdge) */
-.cable-label {
-  position: absolute; pointer-events: none; padding: 0 4px; border-radius: 4px;
-  background: var(--bg); color: var(--text-muted); font: 10px/1.5 var(--mono); white-space: nowrap;
-}
-.react-flow__edge.cable.selected .react-flow__edge-path { stroke: var(--cable-selected); stroke-width: 3.5; }
 
 /* ==========================================================================
    Nœud « équipement »
@@ -127,10 +104,8 @@ body { background: var(--bg); }
 .device-node {
   display: flex; flex-direction: column; align-items: center;
   min-width: 80px; padding: 6px 8px; border-radius: var(--radius);
-  background: transparent; text-align: center;
+  background: transparent; text-align: center; cursor: pointer;
 }
-/* outline (et non border) : la sélection ne décale pas la géométrie du nœud */
-.device-node--selected { outline: 1px solid var(--selection); background: rgba(16, 185, 129, .06); }
 .device-node__icon {
   position: relative; width: 52px; height: 52px; padding: 6px;
   border-radius: 12px; background: #fff; color: var(--device-color);
@@ -144,10 +119,6 @@ body { background: var(--bg); }
   background: #22c55e; border: 2px solid #fff;
 }
 
-/* Prévisualisations de drag : rendues hors écran (voir Palette.jsx) */
-.drag-previews { position: fixed; top: -1000px; left: -1000px; pointer-events: none; }
-.drag-previews .device-node__icon { box-shadow: none; }
-
 /* Poignées invisibles centrées sur l'icône (ancrage des câbles) */
 .device-node .device-node__handle {
   top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -155,93 +126,24 @@ body { background: var(--bg); }
   border: none; background: transparent; opacity: 0; pointer-events: none;
 }
 
-/* Extrémité de départ d'un câble en cours de création */
-.cable-source .device-node__icon { box-shadow: 0 0 0 4px #f59e0b; }
-
 /* ==========================================================================
-   Panneau de propriétés
+   Champs de formulaire
    ========================================================================== */
-.properties { padding: 16px; background: var(--panel-bg); border-left: 1px solid var(--border); overflow-y: auto; }
-.properties__type-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--device-color); }
-.properties__link { font-size: 14px; font-weight: 600; }
-
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
 .field__label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .field__input {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
 }
 .field__input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent; }
-.field__input--error { border-color: var(--danger); }
-.field__error { font-size: 11px; color: var(--danger); }
 .field__hint { font-size: 11px; color: var(--text-muted); }
-.field__input--mono { font-family: var(--mono); font-size: 13px; }
 .field--compact { margin-bottom: 8px; gap: 2px; min-width: 0; }
 .field--compact .field__label { font-size: 11px; font-weight: 500; }
 .field--compact .field__input { padding: 5px 7px; font-size: 13px; width: 100%; }
 
-.mono { font-family: var(--mono); font-size: 12px; }
 .panel-hint--tight { margin: 4px 0 8px; }
 
-/* Sections repliables */
-.section { margin: 0 -16px 12px; border-top: 1px solid var(--border); }
-.section__title {
-  display: flex; align-items: center; gap: 6px; padding: 10px 16px; cursor: pointer;
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text);
-  list-style: none; user-select: none;
-}
-.section__title::-webkit-details-marker { display: none; }
-.section__title::before { content: '▸'; color: var(--text-muted); transition: transform .15s; }
-.section[open] > .section__title::before { transform: rotate(90deg); }
-.section__count {
-  margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--bg);
-  font-size: 11px; font-weight: 600; color: var(--text-muted);
-}
-.section__body { padding: 0 16px; }
-
-/* Interface (câble) */
-.iface { margin-bottom: 10px; padding: 8px 10px 2px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fafc; }
-.iface__header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; }
-.iface__name, .iface__name-input {
-  padding: 1px 6px; border-radius: 4px; background: #0f172a; color: #fff; font-family: var(--mono); font-size: 12px; font-weight: 600;
-}
-.iface__name-input { width: 64px; border: 1px solid transparent; }
-.iface__name-input:focus { outline: 2px solid var(--primary); }
-.iface__arrow { color: var(--text-muted); }
-.iface__network { font-weight: 600; }
-.iface__port { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
-.iface__grid, .row-card__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.iface__hint { margin: -2px 0 8px; font-size: 11px; color: var(--text-muted); }
-
-/* Lignes éditables (routes) */
-.row-card { margin-bottom: 10px; padding: 6px 10px 0; border: 1px solid var(--border); border-radius: var(--radius); }
-.row-card__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
-.row-card__index { font-size: 11px; font-weight: 600; color: var(--text-muted); }
-
-/* Routes directement connectées */
-.route-table { width: 100%; margin-bottom: 10px; border-collapse: collapse; font-size: 12px; }
-.route-table td { padding: 3px 4px; border-bottom: 1px solid var(--border); }
-.route-table__kind { width: 18px; font-weight: 700; color: var(--success); }
-.route-table__dim { color: var(--text-muted); font-size: 11px; }
-
-/* Services d'un serveur */
-.services__row { display: grid; grid-template-columns: 1fr 70px 70px 24px; gap: 6px; align-items: start; }
-.services__row--head { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 2px; }
-.add-select { width: 100%; margin-bottom: 4px; color: var(--text-muted); cursor: pointer; font-size: 13px; }
-
-/* Switch */
-.attached { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
-.attached li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
-.attached__iface { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
-.attached__port { font-family: var(--mono); font-size: 11px; font-weight: 600; }
-
-/* Problèmes concernant l'élément sélectionné */
-.issues { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.issues__item { padding: 6px 8px 6px 10px; border-left: 3px solid; border-radius: 4px; font-size: 12px; line-height: 1.4; }
-.issues__item--error { border-color: var(--danger); background: #fef2f2; color: #991b1b; }
-.issues__item--warning { border-color: var(--warning); background: #fffbeb; color: #92400e; }
-
 /* ==========================================================================
-   Boîte de dialogue de création du réseau
+   Boîtes de dialogue et suivi des tâches de fond
    ========================================================================== */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
@@ -256,6 +158,14 @@ body { background: var(--bg); }
 .modal__title--failed { color: var(--danger); }
 .modal__text { margin: 0 0 14px; font-size: 14px; color: var(--text-muted); }
 .modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.modal--terminal { width: min(520px, calc(100vw - 32px)); }
+.terminal-cmd {
+  display: block; padding: 12px 14px; border-radius: 8px;
+  background: #0f172a; color: #e2e8f0; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all; user-select: all;
+}
 
 .progress { height: 10px; margin: 14px 0 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
 .progress__bar { height: 100%; border-radius: inherit; background: var(--primary); transition: width .4s ease; }
@@ -282,66 +192,17 @@ body { background: var(--bg); }
 
 .issue-group { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.5; }
 .issue-group ul { margin: 0; padding-left: 18px; }
-.issue-group__title { margin: 0 0 4px; font-size: 13px; }
 .issue-group--error { background: #fef2f2; color: #991b1b; }
 .issue-group--warning { background: #fffbeb; color: #92400e; }
-
-/* ==========================================================================
-   Notification
-   ========================================================================== */
-.toast {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-  padding: 10px 18px; border-radius: var(--radius); background: #0f172a; color: #fff;
-  font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
-  max-width: min(640px, calc(100vw - 32px)); z-index: 200;
-}
-
-/* ==========================================================================
-   Adressage automatique (IPAM)
-   ========================================================================== */
-.iface__mode {
-  margin-left: auto; padding: 1px 6px; border-radius: 999px;
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
-  background: #fef3c7; color: #92400e;
-}
-.iface__mode--auto { background: #dcfce7; color: #166534; }
-.auto-btn {
-  margin: -4px 0 10px; padding: 2px 0; border: 0; background: none;
-  color: var(--primary); font-size: 12px; cursor: pointer;
-}
-.auto-btn:hover { text-decoration: underline; }
-
-/* ==========================================================================
-   Menu des topologies d'exemple (barre d'outils)
-   ========================================================================== */
-.examples { position: relative; }
-.examples__menu {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
-  width: 360px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 6px; list-style: none;
-  border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, .25);
-}
-.examples__item {
-  display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 9px 10px;
-  border: none; border-radius: 6px; background: none; color: var(--text); text-align: left; cursor: pointer;
-}
-.examples__item:hover, .examples__item:focus-visible { background: var(--bg); outline: none; }
-.examples__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
-.examples__description { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
-
-.difficulty { flex-shrink: 0; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-.difficulty--easy { background: #dcfce7; color: #166534; }
-.difficulty--medium { background: #fef3c7; color: #92400e; }
-.difficulty--hard { background: #fee2e2; color: #991b1b; }
 
 /* Génération et visualisation du trafic =====================================
    ========================================================================== */
 
 .traffic-list__dest { color: var(--text-muted); font-size: 11px; }
 
-/* Panneau de contrôle du trafic (colonne de droite, à la place des propriétés) */
+/* Panneau de droite (simulation, détection) */
 .traffic-panel {
-  padding: 16px; overflow-y: auto;
+  width: 340px; flex-shrink: 0; padding: 16px; overflow-y: auto;
   background: var(--panel-bg); border-left: 1px solid var(--border);
 }
 .traffic-panel__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -362,21 +223,9 @@ body { background: var(--bg); }
 .traffic-actions { display: flex; gap: 8px; margin: 10px 0 6px; }
 .traffic-actions .btn { flex: 1; }
 
-/* Génération de trafic : presets + cases à cocher (types, émetteurs, destinataires) */
+/* Cases à cocher (types de trafic, émetteurs) */
 .traffic-field { margin-bottom: 10px; }
 .traffic-field > .field__label { display: block; font-size: 11px; font-weight: 500; margin-bottom: 4px; }
-
-.traffic-presets { display: flex; flex-wrap: wrap; gap: 6px; }
-.preset-btn {
-  padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px;
-  background: #fff; color: var(--text); cursor: pointer; font-size: 11px; font-weight: 600;
-}
-.preset-btn:hover { border-color: var(--primary); color: var(--primary); }
-
-.check-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-.check-head__actions { font-size: 11px; color: var(--text-muted); }
-.link-btn { background: none; border: 0; padding: 0; color: var(--primary); cursor: pointer; font-size: 11px; }
-.link-btn:hover { text-decoration: underline; }
 
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .check-list {
@@ -509,6 +358,14 @@ body { background: var(--bg); }
 .det-event--missed .det-event__badge { color: #334155; }
 .det-event__flow { font-weight: 600; }
 .det-event__meta { font-size: 11px; color: var(--text-muted); }
+
+/* Scénarios : résultat de l'attaque (abouti ou non), indépendant de la détection */
+.scenario__result {
+  margin: 4px 0 6px; padding: 4px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+}
+.scenario__result--ok { background: rgba(22, 163, 74, .12); color: var(--success); }
+.scenario__result--fail { background: rgba(220, 38, 38, .10); color: var(--danger); }
 
 /* Scénarios : commande lancée */
 .scenario__cmd { font: 11px/1.4 var(--mono); word-break: break-all; }

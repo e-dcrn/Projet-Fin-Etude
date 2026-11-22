@@ -1,5 +1,5 @@
 /**
- * Suivi d'une tâche de fond du serveur (déploiement, dataset, entraînement :
+ * Suivi d'une tâche de fond du serveur (dataset, entraînement :
  * voir backend/app/jobs.py), tel qu'il est affiché dans l'interface.
  *
  * `run` :

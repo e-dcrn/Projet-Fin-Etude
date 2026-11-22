@@ -1,6 +1,6 @@
 """
-Tâches longues exécutées en arrière-plan (déploiement du réseau, génération
-d'un dataset, entraînement d'un modèle).
+Tâches longues exécutées en arrière-plan (génération d'un dataset, entraînement
+d'un modèle).
 
 Une tâche tourne dans un thread et met à jour son état au fur et à mesure.
 L'interface lit cet état toutes les secondes avec GET /api/jobs/{id} (polling) :
@@ -16,13 +16,11 @@ L'interface lit cet état toutes les secondes avec GET /api/jobs/{id} (polling) 
   }
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 import uuid
 
-from .errors import UserError
+from fastapi import HTTPException
 
 log = logging.getLogger(__name__)
 
@@ -73,8 +71,8 @@ class Job:
         except JobCancelled:
             self.error = "Opération annulée."
             self.status = "failed"
-        except UserError as exc:
-            self.error = str(exc)
+        except HTTPException as exc:  # erreur prévue, au message lisible
+            self.error = exc.detail
             self.status = "failed"
         except Exception:
             log.exception("Échec inattendu d'une tâche de fond")
@@ -95,7 +93,7 @@ class Job:
 
 class JobRegistry:
     """
-    Une seule tâche à la fois par type (« deploy », « dataset », « training »).
+    Une seule tâche à la fois par type (« dataset », « training »).
     On garde la dernière tâche de chaque type pour que l'interface puisse la suivre.
     """
 
@@ -109,7 +107,7 @@ class JobRegistry:
 
     def start(self, kind, work):
         if self.current(kind):
-            raise UserError("Une tâche du même type est déjà en cours.")
+            raise HTTPException(409, "Une tâche du même type est déjà en cours.")
         job = Job()
         self.last[kind] = job
         threading.Thread(target=job.run, args=(work,), daemon=True).start()

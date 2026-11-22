@@ -1,0 +1,90 @@
+# Topologie « Petit LAN » : 3 PC, 1 serveur et 1 sonde IDS sur un même switch.
+#
+#   Serveur  10.0.1.10   (HTTP, SSH, FTP)
+#   PC-1     10.0.1.11
+#   PC-2     10.0.1.12
+#   PC-3     10.0.1.13
+#   IDS-1    10.0.1.200  (reçoit une copie de tout le trafic du switch)
+#
+# Lancée par le moteur (backend/app/lab.py) :  docker compose -f docker-compose.yml up -d --build
+# Arrêtée par :                                docker compose -p idslab down
+#
+# Un « service » Compose = un équipement ; un « network » Compose = un switch.
+# Le nom du service (pc-1…) est l'identifiant de l'équipement, le hostname (PC-1…)
+# est le nom affiché.
+
+name: idslab
+
+services:
+  server-1:
+    build: ../../docker/server
+    image: idslab/server
+    hostname: Serveur
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.10
+    # Docker ajoute une route par défaut vers l'hôte : on la retire, le réseau reste isolé.
+    command: sh -c "ip route del default; exec python3 -u /services.py"
+
+  pc-1:
+    image: alpine:3.20
+    hostname: PC-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.11
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  pc-2:
+    image: alpine:3.20
+    hostname: PC-2
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.12
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  pc-3:
+    image: alpine:3.20
+    hostname: PC-3
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.13
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  ids-1:
+    image: alpine:3.20
+    hostname: IDS-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.200
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  # Passe le switch surveillé en mode « hub » (équivalent d'un port miroir) :
+  # avec ageing_time = 0, le bridge Linux n'apprend plus les adresses MAC et
+  # envoie chaque paquet sur tous ses ports, donc aussi vers la sonde IDS.
+  # Il construit aussi l'image « toolbox » utilisée pour le trafic et les attaques.
+  hub-mode:
+    build: ../../docker/toolbox
+    image: idslab/toolbox
+    network_mode: host
+    privileged: true
+    command: sh -c "echo 0 > /sys/class/net/br-switch-1/bridge/ageing_time"
+    depends_on: [ids-1]
+
+networks:
+  switch-1:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-1   # nom du bridge Linux (utilisé par hub-mode)
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+          gateway: 10.0.1.254   # adresse prise par Docker (l'hôte) sur ce réseau

@@ -1,0 +1,112 @@
+# Topologie « LAN + DMZ » : un LAN utilisateurs et une DMZ reliés par un routeur.
+#
+#   LAN 10.0.10.0/24 : PC-1 .10, PC-2 .11, PC-3 .12, Routeur-1 .1
+#   DMZ 10.0.20.0/24 : Serveur-Web .10, Serveur-Fichiers .11, IDS-1 .200, Routeur-1 .1
+#
+# La sonde IDS surveille la DMZ : elle voit tout ce qui arrive aux serveurs.
+# Voir topologies/1-petit-lan/docker-compose.yml pour les explications communes.
+
+name: idslab
+
+services:
+  router-1:
+    image: alpine:3.20
+    hostname: Routeur-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    sysctls:
+      net.ipv4.ip_forward: 1   # le routeur fait suivre les paquets d'un réseau à l'autre
+    networks:
+      switch-1:
+        ipv4_address: 10.0.10.1
+      switch-2:
+        ipv4_address: 10.0.20.1
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  pc-1:
+    image: alpine:3.20
+    hostname: PC-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.10.10
+    # Passerelle : le routeur, pour joindre la DMZ.
+    command: sh -c "ip route replace default via 10.0.10.1; exec sleep infinity"
+
+  pc-2:
+    image: alpine:3.20
+    hostname: PC-2
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.10.11
+    command: sh -c "ip route replace default via 10.0.10.1; exec sleep infinity"
+
+  pc-3:
+    image: alpine:3.20
+    hostname: PC-3
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.10.12
+    command: sh -c "ip route replace default via 10.0.10.1; exec sleep infinity"
+
+  server-1:
+    build: ../../docker/server
+    image: idslab/server
+    hostname: Serveur-Web
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-2:
+        ipv4_address: 10.0.20.10
+    command: sh -c "ip route replace default via 10.0.20.1; exec python3 -u /services.py"
+
+  server-2:
+    build: ../../docker/server
+    image: idslab/server
+    hostname: Serveur-Fichiers
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-2:
+        ipv4_address: 10.0.20.11
+    command: sh -c "ip route replace default via 10.0.20.1; exec python3 -u /services.py"
+
+  ids-1:
+    image: alpine:3.20
+    hostname: IDS-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-2:
+        ipv4_address: 10.0.20.200
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  # Mode « hub » du switch de la DMZ (surveillé par la sonde IDS).
+  hub-mode:
+    build: ../../docker/toolbox
+    image: idslab/toolbox
+    network_mode: host
+    privileged: true
+    command: sh -c "echo 0 > /sys/class/net/br-switch-2/bridge/ageing_time"
+    depends_on: [ids-1]
+
+networks:
+  switch-1:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-1
+    ipam:
+      config:
+        - subnet: 10.0.10.0/24
+          gateway: 10.0.10.254
+  switch-2:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-2
+    ipam:
+      config:
+        - subnet: 10.0.20.0/24
+          gateway: 10.0.20.254

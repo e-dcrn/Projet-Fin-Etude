@@ -1,15 +1,13 @@
 """Constantes du moteur : emplacements, préfixe des ressources Docker, origines autorisées."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BACKEND_DIR / "data"                   # datasets et modèles sauvegardés
-DOCKER_DIR = BACKEND_DIR.parent / "docker"        # un Dockerfile par rôle : pc, server, router, ids, toolbox
+DATA_DIR = BACKEND_DIR / "data"                     # datasets et modèles sauvegardés
+TOPOLOGIES_DIR = BACKEND_DIR.parent / "topologies"  # un dossier par topologie (docker-compose.yml + topology.json)
 
-# Préfixe des ressources Docker créées (noms, labels, images « idslab/pc »…).
-# Tout ce qui porte le label « idslab.managed » est supprimé à l'arrêt du réseau.
+# Nom du projet Docker Compose (« name: idslab » dans chaque docker-compose.yml)
+# et préfixe des labels des conteneurs auxiliaires (« idslab.role »…).
 PREFIX = "idslab"
 
 # Origines autorisées par CORS : l'interface servie en local, quel que soit son port

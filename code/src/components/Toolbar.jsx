@@ -1,4 +1,4 @@
-import ExamplesMenu from './ExamplesMenu.jsx';
+import TopologyMenu from './TopologyMenu.jsx';
 
 const LAB_STATUS = {
   unknown: { label: 'État inconnu', className: '' },
@@ -8,128 +8,61 @@ const LAB_STATUS = {
 };
 
 /**
- * Barre d'outils supérieure : exemples, outil câble, validation, état du réseau instancié.
+ * Barre d'outils : choix de la topologie, démarrage / arrêt du réseau, et
+ * ouverture des panneaux (simulation, détection) et des boîtes de dialogue
+ * (datasets, modèles).
+ *
+ * `panel` : panneau de droite ouvert ('simulation', 'detection' ou null).
+ * `active` : ce qui tourne en ce moment { simulation, detection, dataset, training }.
  */
-export default function Toolbar({
-  cableModeActive,
-  onToggleCableMode,
-  onValidate,
-  onClear,
-  onLoadExample,
-  onStopLab,
-  onToggleTraffic,
-  trafficActive,
-  trafficRunning,
-  onToggleScenario,
-  scenarioActive,
-  scenarioRunning,
-  onOpenDatasets,
-  datasetRunning,
-  onOpenModels,
-  trainingRunning,
-  onToggleDetection,
-  detectionActive,
-  detectionRunning,
-  nodeCount,
-  errorCount,
-  labStatus,
-  busy,
-}) {
-  const status = LAB_STATUS[labStatus] ?? LAB_STATUS.unknown;
+export default function Toolbar({ lab, topologyId, onChooseTopology, panel, onTogglePanel, active, onOpenDatasets, onOpenModels }) {
+  const status = LAB_STATUS[lab.status];
+  const running = lab.status === 'running';
+  const online = lab.status !== 'offline';
+  const buttonClass = (on) => `btn${on ? ' btn--active' : ''}`;
 
   return (
     <header className="toolbar">
       <div className="toolbar__brand">
         <strong>IDS Lab</strong>
-        <span className="toolbar__subtitle">Éditeur de topologie</span>
         <span className={`lab-status ${status.className}`} title={status.label}>
           <span className="lab-status__dot" />
-          {status.label}
+          {lab.busy ? (running ? 'Arrêt…' : 'Démarrage… (plus long la première fois)') : status.label}
         </span>
       </div>
 
       <div className="toolbar__actions">
-        <ExamplesMenu onLoad={onLoadExample} disabled={busy} />
-
-        <button
-          type="button"
-          className={`btn${cableModeActive ? ' btn--active' : ''}`}
-          onClick={onToggleCableMode}
-          aria-pressed={cableModeActive}
-          title="Cliquez sur un équipement puis sur un switch pour les relier (Échap pour quitter)"
-        >
-          🔌 Câble {cableModeActive ? '(actif)' : ''}
-        </button>
-
-        {labStatus === 'running' && (
-          <button
-            type="button"
-            className={`btn${trafficActive || trafficRunning ? ' btn--active' : ''}`}
-            onClick={onToggleTraffic}
-            aria-pressed={trafficActive}
-            title="Générer du trafic de fond (bénin) sur le réseau"
-          >
-            📡 Trafic{trafficRunning ? ' (actif)' : ''}
-          </button>
-        )}
-        {labStatus === 'running' && (
-          <button
-            type="button"
-            className={`btn${scenarioActive || scenarioRunning ? ' btn--active' : ''}`}
-            onClick={onToggleScenario}
-            aria-pressed={scenarioActive}
-            title="Lancer un scénario d'audit (reconnaissance, force brute)"
-          >
-            ⚡ Scénarios{scenarioRunning ? ' (actif)' : ''}
-          </button>
-        )}
-        {labStatus === 'running' && (
-          <button
-            type="button"
-            className={`btn${detectionActive || detectionRunning ? ' btn--active' : ''}`}
-            onClick={onToggleDetection}
-            aria-pressed={detectionActive}
-            title="Détection en direct : une Sonde IDS analyse le trafic avec un modèle entraîné"
-          >
-            🛡 Détection{detectionRunning ? ' (active)' : ''}
-          </button>
-        )}
-        {labStatus !== 'offline' && (
-          <button
-            type="button"
-            className={`btn${datasetRunning ? ' btn--active' : ''}`}
-            onClick={onOpenDatasets}
-            title="Générer et télécharger des datasets étiquetés (trafic bénin + attaques)"
-          >
-            🗂 Datasets{datasetRunning ? ' (en cours…)' : ''}
-          </button>
-        )}
-        {labStatus !== 'offline' && (
-          <button
-            type="button"
-            className={`btn${trainingRunning ? ' btn--active' : ''}`}
-            onClick={onOpenModels}
-            title="Entraîner et évaluer un modèle ML-IDS sur les datasets"
-          >
-            🧠 IDS{trainingRunning ? ' (entraînement…)' : ''}
+        <TopologyMenu topologyId={topologyId} onChoose={onChooseTopology} disabled={running || lab.busy} />
+        {running ? (
+          <button type="button" className="btn" onClick={lab.stop} disabled={lab.busy}>■ Arrêter</button>
+        ) : (
+          <button type="button" className="btn btn--primary" onClick={() => lab.start(topologyId)} disabled={!online || lab.busy}>
+            ▶ Démarrer le réseau
           </button>
         )}
 
-        <button type="button" className="btn btn--danger" onClick={onClear} disabled={nodeCount === 0}>
-          Tout effacer
-        </button>
-        {labStatus === 'running' && (
-          <button type="button" className="btn" onClick={onStopLab} disabled={busy}>
-            ■ Arrêter
+        {running && (
+          <button type="button" className={buttonClass(panel === 'simulation' || active.simulation)} onClick={() => onTogglePanel('simulation')}
+            title="Générer du trafic bénin et lancer des attaques">
+            ⚡ Simulation{active.simulation ? ' (active)' : ''}
           </button>
         )}
-
-        {/* Réseau en fonctionnement : seul « Arrêter » reste ; pour appliquer une
-            modification, on arrête le réseau puis on valide à nouveau. */}
-        {labStatus !== 'running' && errorCount > 0 && <span className="toolbar__errors">{errorCount} erreur(s)</span>}
-        {labStatus !== 'running' && (
-          <button type="button" className="btn btn--primary" onClick={onValidate} disabled={nodeCount === 0 || busy}>
-            ✔ Valider la topologie
+        {running && (
+          <button type="button" className={buttonClass(panel === 'detection' || active.detection)} onClick={() => onTogglePanel('detection')}
+            title="Détection en direct : la Sonde IDS analyse le trafic avec un modèle entraîné">
+            🛡 Détection{active.detection ? ' (active)' : ''}
+          </button>
+        )}
+        {online && (
+          <button type="button" className={buttonClass(active.dataset)} onClick={onOpenDatasets}
+            title="Générer et télécharger des datasets étiquetés (trafic bénin + attaques)">
+            🗂 Datasets{active.dataset ? ' (en cours…)' : ''}
+          </button>
+        )}
+        {online && (
+          <button type="button" className={buttonClass(active.training)} onClick={onOpenModels}
+            title="Entraîner et évaluer un modèle ML-IDS sur les datasets">
+            🧠 IDS{active.training ? ' (entraînement…)' : ''}
           </button>
         )}
       </div>

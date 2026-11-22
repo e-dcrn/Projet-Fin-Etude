@@ -27,13 +27,12 @@ from pathlib import Path
 from typing import List, Optional
 
 from docker.errors import DockerException
+from fastapi import HTTPException
 
 from .cicflowmeter import FLOW_WINDOW_SEC, parse_timestamp, relabel_csv, windowed_flows_csv
-from .errors import UserError
-from .models import SERVICE_KINDS
-from .settings import DATA_DIR, PREFIX
+from .settings import DATA_DIR
 from .store import RecordStore
-from .traffic import ATTACKS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficManager
+from .traffic import ATTACKS, BENIGN_KINDS, BENIGN_PROFILES, SPEEDS, TARGET_RE, TrafficManager
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +42,6 @@ FILES = {
     "capture.pcap": "application/vnd.tcpdump.pcap",
     "meta.json": "application/json",
 }
-
-BENIGN_KINDS = ("icmp", "tcp", *SERVICE_KINDS)  # ping, ports TCP sans service connu, un type par service
 
 # Marges autour de la fenêtre d'une attaque (s) : l'horloge de l'hôte et celle de
 # la machine Docker, qui horodate les paquets, peuvent légèrement différer.
@@ -190,11 +187,7 @@ class DatasetBuilder:
         Vérifie le programme AVANT de lancer la tâche (qui dure plusieurs minutes),
         et résout chaque équipement en son conteneur et son adresse IP.
         """
-        if not spec.get("probe"):
-            raise UserError("Aucune Sonde IDS : ajoutez-en une à la topologie, c'est le point de capture du dataset.")
         probe = self.traffic.require_device(spec["probe"], "Sonde IDS")
-        if probe.labels.get(f"{PREFIX}.type") != "ids":
-            raise UserError("Le point de capture d'un dataset est toujours une Sonde IDS.")
         kinds = [k for k in spec.get("kinds") or [] if k in BENIGN_KINDS]
 
         benign = []
@@ -206,14 +199,14 @@ class DatasetBuilder:
                 benign.append(BenignSource(entry["node"], info["name"], entry["targets"]))
                 attackers[entry["node"]] = info
         if benign and not kinds:
-            raise UserError("Choisissez au moins un type de trafic bénin.")
+            raise HTTPException(400, "Choisissez au moins un type de trafic bénin.")
 
         runs = []
         for entry in spec.get("attacks") or []:
             attack = ATTACKS[entry["attack"]]
             target = (entry.get("target") or "").strip()
             if not TARGET_RE.match(target):  # la cible entre dans une commande shell : on la restreint
-                raise UserError(f"{attack['name']} : cible invalide (adresse IP ou sous-réseau attendu).")
+                raise HTTPException(400, f"{attack['name']} : cible invalide (adresse IP ou sous-réseau attendu).")
             device = self.traffic.require_device(entry["source"], attack["name"])
             name, ip = self.traffic.name_of(device), self.traffic.device_ip(device)
             attackers.setdefault(entry["source"], {"node": entry["source"], "name": name, "ip": ip})
@@ -225,9 +218,9 @@ class DatasetBuilder:
                     target=target, speed=entry.get("speed") or "fast",
                 ))
         if not runs:
-            raise UserError("Ajoutez au moins une attaque au programme.")
+            raise HTTPException(400, "Ajoutez au moins une attaque au programme.")
         if len(runs) > MAX_RUNS:
-            raise UserError(f"Programme trop long : {len(runs)} attaques (maximum {MAX_RUNS}).")
+            raise HTTPException(400, f"Programme trop long : {len(runs)} attaques (maximum {MAX_RUNS}).")
 
         return DatasetPlan(
             name=(spec.get("name") or "").strip()[:80] or "Dataset sans nom",

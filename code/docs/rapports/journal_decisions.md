@@ -1,6 +1,6 @@
 # Journal des décisions du projet
 
-Du sujet (septembre 2026) à la réunion du 9 novembre 2026, au nettoyage qui l'a suivie et à la simplification du 16 novembre.
+Du sujet (septembre 2026) à la réunion du 9 novembre 2026, au nettoyage qui l'a suivie à la simplification du 16 novembre et au passage à Docker Compose du 21 novembre.
 
 **Sources** : `Sujet.pdf`, slides des 6 et 27 octobre et du 9 novembre, état de l'art, 34 commits du dépôt,
 ancienne documentation (`GUIDE.md`, `SERVICES.md`, `ARCHITECTURE.md`, supprimés le 9 novembre et disponibles
@@ -144,12 +144,27 @@ fonctionnalités égales. Démo revérifiée de bout en bout dans Chrome, 79 tes
 | # | Décision | Justification | Source | État |
 | - | -------- | ------------- | ------ | ---- |
 | 86 | **Suivi des tâches de fond par polling** (`GET /api/jobs/{id}` redemandé chaque seconde) à la place des Server-Sent Events. | Un flux avec reprise après coupure et keep-alive était plus difficile à expliquer qu'une requête répétée. | `jobs.py`, `main.py` | ✅ |
-| 87 | **Le planificateur traduit la topologie sans la revérifier.** Remplace le n° 85. | `validators.js` valide déjà dans l'interface avant l'envoi ; la revérification serveur était un doublon. Un appel direct à l'API avec une topologie incohérente échoue alors plus tard dans Docker, ce qui est accepté. | `planner.py` | ✅ |
+| 87 | **Le planificateur traduit la topologie sans la revérifier.** Remplace le n° 85. | `validators.js` valide déjà dans l'interface avant l'envoi ; la revérification serveur était un doublon. Un appel direct à l'API avec une topologie incohérente échoue alors plus tard dans Docker, ce qui est accepté. | `planner.py` | 🔁 n° 91 |
 | 88 | **Erreurs Docker non retraduites** : elles remontent telles quelles au lieu d'être réécrites en messages « utilisateur ». | Les couches de traduction alourdissaient le code sans valeur pour un lab local ; le détail reste dans les journaux du serveur. | `deployer.py`, `traffic.py`, `datasets.py`, `detection.py` | ✅ |
 | 89 | **Retirer le terminal et la capture live d'un lien** (vue Wireshark), interface et moteur ; plus aucune WebSocket. Remplace les n° 63, 79 et 80 pour ces deux fonctions. | Décision de l'équipe : les couper retire toute la pile WebSocket (−480 lignes de back, 3 fichiers). Les `capture.pcap` des datasets restent téléchargeables et s'ouvrent dans Wireshark. | décision de l'équipe | ✅ |
 | 90 | **Chasse au code mort finale** : `origin_allowed` et la dépendance `websockets` (ne servaient qu'aux WebSockets), le champ `hasTerminal`, des styles CSS et des exports internes inutilisés. | Plus aucun import, export ni style orphelin. | cette session | ✅ |
 
-## 6. Questions encore ouvertes
+## 6. Topologies fixes en Docker Compose (21 novembre)
+
+Objectif : que chaque étudiant comprenne tout le code, en particulier le moteur et Docker. On retire l'éditeur de
+topologie : il obligeait à vérifier, planifier et déployer une topologie quelconque. Les topologies deviennent
+des fichiers Docker Compose écrits à la main.
+
+| # | Décision | Justification | Source | État |
+| - | -------- | ------------- | ------ | ---- |
+| 91 | **Plus d'éditeur : trois topologies prêtes**, chacune un `docker-compose.yml` + un `topology.json` (dessin). Remplace le planificateur, le déployeur maison, l'IPAM et les contrôles de cohérence (n° 85, 87). | Une topologie figée n'a rien à vérifier : si elle a marché une fois, elle marche toujours. Docker Compose est vu en cours et connu des enseignants. | décision de l'équipe | ✅ |
+| 92 | **Serveurs réduits à HTTP, SSH et FTP** ; plus de HTTPS, Telnet, SMTP, DNS, MySQL ni de ports simulés. PC, routeurs et sondes passent sur l'image `alpine:3.20` sans Dockerfile. | Ce sont les seuls services utiles aux attaques et aux évasions ; le reste alourdissait le serveur, l'agent bénin et l'interface. Les anciens datasets et modèles sont à régénérer. | décision de l'équipe | ✅ |
+| 93 | **Panneaux « Trafic » et « Scénarios » fusionnés** en un panneau « Simulation » ; le trafic bénin va vers toutes les autres machines (plus de choix des destinataires ni de presets). | Un seul endroit pour générer le trafic de la démo. | décision de l'équipe | ✅ |
+| 94 | **Démarrage du réseau synchrone** (`POST /api/lab` exécute `docker compose up`) au lieu d'une tâche de fond suivie étape par étape. | Les tâches de fond restent pour les datasets et l'entraînement, vraiment longs. | décision de l'équipe | ✅ |
+| 95 | **Entraînement : random forest seul, test sur datasets séparés seulement** (plus de choix d'algorithme ni de découpage temporel). | Une seule option réelle ; les variantes sont l'évaluation de référence. | décision de l'équipe | ✅ |
+| 96 | **Erreurs : `HTTPException` de FastAPI** au lieu des classes `UserError` / `NotFoundError`. | Un mécanisme standard de moins à expliquer. | `main.py` | ✅ |
+
+## 7. Questions encore ouvertes
 
 | Question | Pourquoi elle reste ouverte |
 | -------- | --------------------------- |

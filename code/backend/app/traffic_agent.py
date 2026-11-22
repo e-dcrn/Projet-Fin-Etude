@@ -1,43 +1,29 @@
 """
 Agent de trafic « bénin », exécuté DANS un conteneur éphémère qui partage la
-pile réseau d'un équipement (python3 -u -c <ce fichier> '<profil JSON>').
+pile réseau d'un équipement (python3 -u -c <ce fichier> '<configuration JSON>').
 
-Il imite un utilisateur ordinaire qui travaille avec les serveurs de la
-topologie. Chaque action est une SESSION complète, avec les vrais clients
-des protocoles, contre les vrais services des serveurs (service_listener.py) :
+Il imite un utilisateur ordinaire. Chaque action est une SESSION complète, avec
+les vrais clients des protocoles, contre les vrais services des serveurs
+(docker/server/services.py) :
 
-  - web (HTTP, HTTPS)  : navigation — une page, puis son style, son script et
-    ses images sur la même connexion (comme un navigateur), plusieurs pages
-    avec des temps de lecture, parfois un téléchargement, un appel d'API ou
-    une connexion par formulaire ;
-  - SSH                : connexion réussie, quelques commandes espacées de
-    pauses, ou copie d'un fichier (SFTP) dans un sens ou dans l'autre ;
-  - FTP                : connexion, listing, téléchargement ou dépôt de fichiers ;
-  - SMTP               : envoi d'un courriel, parfois avec une pièce jointe ;
-  - MySQL              : connexion et quelques requêtes (lecture, commande) ;
-  - Telnet             : connexion, une ou deux commandes ;
-  - DNS                : résolution du nom d'un équipement (souvent juste avant
-    d'aller dessus), parfois un nom inexistant ;
-  - ICMP               : ping (1 à 4 paquets, tailles variables).
+  - web (HTTP) : navigation — une page, puis son style, son script et ses images
+    sur la même connexion (comme un navigateur), plusieurs pages avec des temps
+    de lecture, parfois un téléchargement, un appel d'API ou une connexion ;
+  - SSH        : quelques commandes espacées de pauses, ou copie d'un fichier (SFTP) ;
+  - FTP        : connexion, listing, téléchargement ou dépôt de fichiers ;
+  - ICMP       : ping (1 à 4 paquets, tailles variables).
 
 Un vrai utilisateur se trompe parfois de mot de passe : de temps en temps, une
 connexion échoue une fois avant de réussir. Ce n'est PAS une force brute (une
-seule erreur, puis le bon mot de passe), et c'est ce qu'un IDS doit savoir
-distinguer.
+seule erreur, puis le bon mot de passe), et c'est ce qu'un IDS doit savoir distinguer.
 
-La configuration, préparée par le moteur (traffic.py), décrit le rythme et les cibles :
+Configuration, préparée par le moteur (traffic.py) :
 {
-  "profile": "slow" | "moderate" | "steady" | "intense",  # fréquence (voir PROFILES)
-  "kinds": ["icmp", "http", "ssh", "tcp"…],  # types de trafic cochés : ping, un par service, autres ports TCP
-  "targets": [ { "ip": "10.0.20.10", "host": "serveur-web",       # host : nom DNS (domaine « domain »)
-                 "services": [ { "port": 80, "protocol": "tcp", "kind": "http" } ] } ],
-  "account": { "user": "labuser", "password": "…" },  # compte de démonstration des serveurs
-  "domain": "lab",
-  "seed": 1234            # optionnel : rend le choix des actions reproductible
+  "profile": "slow" | "moderate" | "steady" | "intense",   # fréquence (voir PROFILES)
+  "kinds": ["icmp", "http", "ssh", "ftp"],                 # types de trafic cochés
+  "targets": [{ "ip": "10.0.1.10", "server": true }],      # un serveur offre HTTP, SSH et FTP
+  "account": { "user": "labuser", "password": "…" }
 }
-
-Autonome : bibliothèque standard + clients présents dans l'image
-(curl, ssh/sshpass, mariadb). Rien n'est installé sur l'équipement.
 """
 
 import ftplib
@@ -47,30 +33,23 @@ import json
 import os
 import random
 import re
-import smtplib
-import socket
-import ssl
-import struct
 import subprocess
 import sys
 import threading
 import time
-import warnings
-from email.message import EmailMessage
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-import telnetlib  # noqa: E402 - déprécié mais présent en Python 3.12 (image de la boîte à outils)
 
 # Fréquence : (pause mini, pause maxi) en secondes entre deux sessions,
 # facteur appliqué aux temps de lecture À L'INTÉRIEUR d'une session,
-# nombre de sessions menées en parallèle (plusieurs onglets, plusieurs outils).
+# nombre de sessions menées en parallèle.
 PROFILES = {
     "slow": ((8.0, 12.0), 1.0, 1),      # ~1 action / 10 s
     "moderate": ((2.0, 4.0), 0.6, 1),   # ~1 action / 3 s
     "steady": ((0.6, 1.4), 0.35, 2),    # ~1 action / s
     "intense": ((0.2, 0.45), 0.15, 3),  # ~3 actions / s
 }
-DEFAULT_PROFILE = "moderate"
+
+# Poids : la navigation web domine le trafic d'un vrai réseau.
+WEIGHTS = {"http": 5, "ssh": 2, "ftp": 1.5, "icmp": 1.5}
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
@@ -84,24 +63,14 @@ SHELL_COMMANDS = [
 ]
 REMOTE_FILES = ["notes.txt", "data/ventes.csv", "data/rapport.pdf", "photos/photo-1.jpg", "photos/photo-3.jpg",
                 "backup/archive.tar.gz"]
-SQL_QUERIES = [
-    "SELECT * FROM produits WHERE id = {i};",
-    "SELECT nom, prix FROM produits WHERE prix < {p} ORDER BY prix LIMIT 20;",
-    "SELECT COUNT(*) FROM commandes;",
-    "INSERT INTO commandes (produit, quantite, client) VALUES ({i}, {q}, 'client-{c}');",
-    "SELECT * FROM commandes ORDER BY cree DESC LIMIT 10;",
-    "UPDATE produits SET stock = stock - 1 WHERE id = {i} AND stock > 0;",
-    "SELECT * FROM produits;",
-]
+SSH_OPTIONS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+               "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR"]
 
 
-def log(message):
-    print(message, flush=True)
-
-
-def quiet(cmd, timeout, **kwargs):
+def quiet(cmd, timeout):
+    """Lance une commande sans afficher sa sortie (et l'abandonne après `timeout` secondes)."""
     try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout, **kwargs)
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout)
     except subprocess.TimeoutExpired:
         pass
 
@@ -109,12 +78,11 @@ def quiet(cmd, timeout, **kwargs):
 class User:
     """Un utilisateur : choisit des sessions et les joue avec ses temps de lecture."""
 
-    def __init__(self, rng, think, account, domain):
+    def __init__(self, rng, think, account):
         self.rng = rng
         self.think_factor = think
         self.user = account["user"]
         self.password = account["password"]
-        self.domain = domain
 
     def think(self, low=0.5, high=4.0):
         time.sleep(self.rng.uniform(low, high) * self.think_factor)
@@ -125,101 +93,83 @@ class User:
 
     # ---------------------------------------------------------------- web
 
-    def web(self, ip, port, tls):
+    def web(self, ip):
         rng = self.rng
-        ua = rng.choice(USER_AGENTS)
+        headers = {"User-Agent": rng.choice(USER_AGENTS), "Accept": "*/*", "Connection": "keep-alive"}
+        conn = http.client.HTTPConnection(ip, 80, timeout=10)
 
-        def connect():
-            if tls:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                return http.client.HTTPSConnection(ip, port, timeout=10, context=ctx)
-            return http.client.HTTPConnection(ip, port, timeout=10)
-
-        def get(conn, path, method="GET", body=None, headers=None):
-            hdrs = {"User-Agent": ua, "Accept": "*/*", "Connection": "keep-alive", **(headers or {})}
-            conn.request(method, path, body=body, headers=hdrs)
+        def get(path, method="GET", body=None):
+            extra = {"Content-Type": "application/x-www-form-urlencoded"} if body else {}
+            conn.request(method, path, body=body, headers={**headers, **extra})
             resp = conn.getresponse()
-            data = resp.read()
-            return resp.status, data
+            return resp.status, resp.read()
 
-        conn = connect()
         try:
             choice = rng.random()
             if choice < 0.12:  # appli qui interroge une API
                 for _ in range(rng.randint(2, 8)):
-                    get(conn, rng.choice(["/api/status", f"/api/produits?page={rng.randint(1, 10)}"]))
+                    get(rng.choice(["/api/status", f"/api/produits?page={rng.randint(1, 10)}"]))
                     self.think(0.3, 2.0)
                 return
             if choice < 0.20:  # connexion à l'intranet par formulaire
-                get(conn, "/contact.html")
+                get("/contact.html")
                 self.think(1, 4)
                 password = "pasword123" if self.typo(0.15) else self.password
-                form = f"user={self.user}&password={password}"
-                status, _ = get(conn, "/login", "POST", form, {"Content-Type": "application/x-www-form-urlencoded"})
+                status, _ = get("/login", "POST", f"user={self.user}&password={password}")
                 if status != 302:
                     self.think(1, 3)
-                    get(conn, "/login", "POST", f"user={self.user}&password={self.password}",
-                        {"Content-Type": "application/x-www-form-urlencoded"})
+                    get("/login", "POST", f"user={self.user}&password={self.password}")
             # navigation : l'accueil puis quelques pages en suivant leurs liens, chacune avec ses ressources
             page = "/index.html"
             for _ in range(rng.randint(1, 4)):
-                _, html = get(conn, page)
+                _, html = get(page)
                 for asset in dict.fromkeys(re.findall(rb'(?:src|href)="(/static/[^"]+)"', html)):
-                    get(conn, asset.decode())
+                    get(asset.decode())
                 downloads = re.findall(rb'href="(/downloads/[^"]+)"', html)
                 if downloads and rng.random() < 0.10:  # téléchargement d'un fichier proposé sur la page
-                    get(conn, rng.choice(downloads).decode())
+                    get(rng.choice(downloads).decode())
                 self.think(1.5, 8.0)  # lecture de la page
-                links = re.findall(rb'href="(/[\w-]+\.html)"', html)
-                if not links:
-                    break
-                page = rng.choice(links).decode()
+                page = rng.choice(re.findall(rb'href="(/[\w-]+\.html)"', html)).decode()
         finally:
             conn.close()
 
     # ---------------------------------------------------------------- SSH
 
-    def ssh(self, ip, port):
+    def ssh(self, ip):
         rng = self.rng
-        base = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-                "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR"]
         if self.typo():
-            quiet(["sshpass", "-p", "Password123", "ssh", *base, "-p", str(port), f"{self.user}@{ip}", "true"], 15)
+            quiet(["sshpass", "-p", "Password123", "ssh", *SSH_OPTIONS, f"{self.user}@{ip}", "true"], 15)
             self.think(1, 3)
-        if rng.random() < 0.3:  # copie de fichier (SFTP)
+        if rng.random() < 0.3:  # copie de fichier (SFTP), dans un sens ou dans l'autre
             if rng.random() < 0.7:
                 src, dst = f"{self.user}@{ip}:{rng.choice(REMOTE_FILES)}", "/tmp/recu"
             else:
                 with open("/tmp/envoi", "wb") as f:
                     f.write(os.urandom(rng.randint(5_000, 1_500_000)))
                 src, dst = "/tmp/envoi", f"{self.user}@{ip}:upload/fichier-{rng.randint(1, 999)}.bin"
-            quiet(["sshpass", "-p", self.password, "scp", *base, "-P", str(port), src, dst], 60)
+            quiet(["sshpass", "-p", self.password, "scp", *SSH_OPTIONS, src, dst], 60)
             return
         # session : quelques commandes, avec des pauses comme un humain au clavier
         steps = []
         for _ in range(rng.randint(1, 5)):
             steps.append(rng.choice(SHELL_COMMANDS))
             steps.append(f"sleep {rng.uniform(0.5, 6.0) * self.think_factor:.1f}")
-        quiet(["sshpass", "-p", self.password, "ssh", *base, "-p", str(port), f"{self.user}@{ip}", "; ".join(steps)], 90)
+        quiet(["sshpass", "-p", self.password, "ssh", *SSH_OPTIONS, f"{self.user}@{ip}", "; ".join(steps)], 90)
 
     # ---------------------------------------------------------------- FTP
 
-    def ftp(self, ip, port):
+    def ftp(self, ip):
         rng = self.rng
-        ftp = ftplib.FTP()
-        ftp.connect(ip, port, timeout=10)
+        if self.typo():  # un login raté, puis le bon mot de passe
+            ftp = ftplib.FTP(ip, timeout=10)
+            try:
+                ftp.login(self.user, "password12")
+            except ftplib.error_perm:
+                pass
+            ftp.close()
+            self.think(1, 3)
+        ftp = ftplib.FTP(ip, timeout=10)
         try:
-            if self.typo():
-                try:
-                    ftp.login(self.user, "password12")
-                except ftplib.error_perm:
-                    pass
-                ftp.close()
-                self.think(1, 3)
-                ftp = ftplib.FTP()
-                ftp.connect(ip, port, timeout=10)
             ftp.login(self.user, self.password)
             ftp.retrlines("LIST", lambda _line: None)
             for _ in range(rng.randint(1, 3)):
@@ -233,203 +183,48 @@ class User:
         finally:
             ftp.close()
 
-    # ---------------------------------------------------------------- SMTP
-
-    def smtp(self, ip, port, sender):
-        rng = self.rng
-        msg = EmailMessage()
-        msg["From"] = f"{sender}@{self.domain}"
-        msg["To"] = f"{rng.choice(['equipe', 'support', 'direction', self.user, 'compta'])}@{self.domain}"
-        msg["Subject"] = rng.choice(["Compte rendu", "Réunion de demain", "Facture", "Question", "Rapport mensuel"])
-        msg.set_content("\n".join(f"Ligne {i} du message." for i in range(rng.randint(3, 400))))
-        if rng.random() < 0.3:
-            msg.add_attachment(os.urandom(rng.randint(20_000, 600_000)), maintype="application",
-                               subtype="octet-stream", filename="piece-jointe.bin")
-        with smtplib.SMTP(ip, port, timeout=15) as s:
-            s.ehlo(f"{sender}.{self.domain}")
-            s.send_message(msg)
-
-    # ---------------------------------------------------------------- MySQL
-
-    def mysql(self, ip, port):
-        rng = self.rng
-        queries = []
-        for _ in range(rng.randint(1, 6)):
-            q = rng.choice(SQL_QUERIES).format(i=rng.randint(1, 200), p=rng.randint(10, 300),
-                                               q=rng.randint(1, 5), c=rng.randint(1, 99))
-            queries.append(q)
-            if rng.random() < 0.4:
-                queries.append(f"SELECT SLEEP({rng.uniform(0.2, 3.0) * self.think_factor:.1f});")
-        password = "password1234" if self.typo() else self.password
-        cmd = ["mariadb", "-h", ip, "-P", str(port), "-u", self.user, f"-p{password}", "--skip-ssl",
-               "--connect-timeout=5", "boutique", "-e", " ".join(queries)]
-        quiet(cmd, 60)
-        if password != self.password:
-            self.think(1, 3)
-            cmd[cmd.index(f"-p{password}")] = f"-p{self.password}"
-            quiet(cmd, 60)
-
-    # ---------------------------------------------------------------- Telnet
-
-    def telnet(self, ip, port):
-        rng = self.rng
-        with telnetlib.Telnet(ip, port, timeout=10) as t:
-            t.read_until(b"login: ", 10)
-            t.write(self.user.encode() + b"\n")
-            t.read_until(b"Password: ", 10)
-            t.write(self.password.encode() + b"\n")
-            t.read_until(b"$ ", 10)
-            for _ in range(rng.randint(1, 3)):
-                self.think(0.5, 3)
-                t.write(rng.choice(SHELL_COMMANDS).encode() + b"\n")
-                t.read_until(b"$ ", 10)
-            t.write(b"exit\n")
-            t.read_all()
-
     # ---------------------------------------------------------------- ICMP
 
     def ping(self, ip):
-        rng = self.rng
-        quiet(["ping", "-c", str(rng.randint(1, 4)), "-s", str(rng.choice([56, 56, 56, 100, 500, 1000])),
-               "-W", "2", ip], 15)
+        size = self.rng.choice([56, 56, 56, 100, 500, 1000])
+        quiet(["ping", "-c", str(self.rng.randint(1, 4)), "-s", str(size), "-W", "2", ip], 15)
 
 
-# ---------------------------------------------------------------------- DNS
-
-def dns_query(server, port, name, qtype=1, timeout=3.0):
-    """Une vraie requête DNS (UDP), construite à la main : renvoie le code de réponse."""
-    qid = random.randint(0, 0xFFFF)
-    header = struct.pack(">HHHHHH", qid, 0x0100, 1, 0, 0, 0)  # récursion demandée, 1 question
-    qname = b"".join(bytes([len(p)]) + p.encode() for p in name.strip(".").split(".")) + b"\x00"
-    packet = header + qname + struct.pack(">HH", qtype, 1)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.settimeout(timeout)
-        s.sendto(packet, (server, port))
-        try:
-            data, _ = s.recvfrom(2048)
-        except socket.timeout:
-            return None
-    return data[3] & 0x0F if len(data) >= 4 else None
-
-
-def tcp_touch(ip, port):
-    """Service inconnu : ouvre une connexion, lit la bannière, referme."""
-    try:
-        with socket.create_connection((ip, port), timeout=4) as sock:
-            sock.settimeout(2)
-            try:
-                sock.recv(256)
-                sock.sendall(b"\r\n")
-            except OSError:
-                pass
-    except OSError:
-        pass
-
-
-# ---------------------------------------------------------------------- choix des actions
-
-# Poids : la navigation web domine le trafic d'un vrai réseau.
-WEIGHTS = {"http": 5, "https": 5, "ssh": 2, "ftp": 1.5, "smtp": 1.5, "mysql": 2, "telnet": 0.5,
-           "dns": 1, "ping": 1.5, "other": 0.5}
-
-
-def build_actions(targets, kinds, me):
-    """Liste pondérée des sessions possibles : (poids, libellé, ip, nom DNS de la cible, fonction(user)).
-
-    `kinds` : types cochés (« icmp », « http », « ssh »…, « tcp » pour les ports sans
-    service connu). Seuls les services ouverts de chaque cible sont contactés, et rien
-    n'est implicite : un type non coché ne produit aucun trafic. Le DNS n'est pas une
-    session à part (voir worker)."""
+def build_actions(targets, kinds):
+    """Sessions possibles : (type, ip). Un serveur offre HTTP, SSH et FTP ; toute machine répond au ping."""
     actions = []
     for target in targets:
-        ip = target.get("ip")
-        if not ip:
-            continue
-        name = target.get("host", "")
-        for svc in target.get("services", []):
-            port = int(svc.get("port", 0) or 0)
-            if not port:
-                continue
-            kind = svc.get("kind")
-            if (kind or "tcp") not in kinds:
-                continue
-            if kind == "dns":
-                continue  # le DNS est utilisé par les autres sessions (voir resolve) et seul
-            proto = svc.get("protocol", "tcp")
-            if proto != "tcp":
-                continue
-            fn = {
-                "http": lambda u, ip=ip, p=port: u.web(ip, p, tls=False),
-                "https": lambda u, ip=ip, p=port: u.web(ip, p, tls=True),
-                "ssh": lambda u, ip=ip, p=port: u.ssh(ip, p),
-                "ftp": lambda u, ip=ip, p=port: u.ftp(ip, p),
-                "smtp": lambda u, ip=ip, p=port: u.smtp(ip, p, me),
-                "mysql": lambda u, ip=ip, p=port: u.mysql(ip, p),
-                "telnet": lambda u, ip=ip, p=port: u.telnet(ip, p),
-            }.get(kind, lambda u, ip=ip, p=port: tcp_touch(ip, p))
-            actions.append((WEIGHTS.get(kind, WEIGHTS["other"]), f"{kind or 'tcp'} {ip}:{port}", ip, name, fn))
-        if "icmp" in kinds:
-            actions.append((WEIGHTS["ping"], f"ping {ip}", ip, name, lambda u, ip=ip: u.ping(ip)))
+        offered = ["icmp", "http", "ssh", "ftp"] if target.get("server") else ["icmp"]
+        actions += [(kind, target["ip"]) for kind in offered if kind in kinds]
     return actions
 
 
-def dns_servers(targets):
-    return [(t["ip"], int(s.get("port", 53))) for t in targets if t.get("ip")
-            for s in t.get("services", []) if s.get("kind") == "dns"]
-
-
-def worker(index, config, actions, resolvers, stop):
-    profile = config.get("profile", DEFAULT_PROFILE)
-    (low, high), think, _ = PROFILES.get(profile, PROFILES[DEFAULT_PROFILE])
-    seed = config.get("seed")
-    rng = random.Random(None if seed is None else seed + index)
-    domain = config["domain"]
-    user = User(rng, think, config["account"], domain)
-    names = [n for _, _, _, n, _ in actions if n] or ["serveur"]
-    weights = [a[0] for a in actions]
-
-    while not stop.is_set():
+def worker(config, actions):
+    """Un utilisateur qui enchaîne les sessions, sans fin (l'arrêt se fait en supprimant le conteneur)."""
+    (low, high), think, _ = PROFILES[config["profile"]]
+    rng = random.Random()
+    user = User(rng, think, config["account"])
+    sessions = {"http": user.web, "ssh": user.ssh, "ftp": user.ftp, "icmp": user.ping}
+    while True:
+        kind, ip = rng.choices(actions, [WEIGHTS[k] for k, _ in actions])[0]
         try:
-            if resolvers and rng.random() < 0.08:
-                # requête DNS isolée (un nom existant, parfois un nom inexistant)
-                server, port = rng.choice(resolvers)
-                name = rng.choice(names) if rng.random() < 0.8 else f"intranet-{rng.randint(1, 9)}"
-                dns_query(server, port, f"{name}.{domain}", rng.choice([1, 1, 1, 28]))
-            elif actions:
-                _, label, _ip, name, fn = rng.choices(actions, weights)[0]
-                if resolvers and name and rng.random() < 0.6:
-                    server, port = rng.choice(resolvers)
-                    dns_query(server, port, f"{name}.{domain}")  # on résout avant de se connecter
-                try:
-                    fn(user)
-                except Exception as exc:  # noqa: BLE001 - une session ratée ne doit pas tuer l'agent
-                    log(f"session {label} : {exc}")
-        except Exception as exc:  # noqa: BLE001
-            log(f"action : {exc}")
+            sessions[kind](ip)
+        except Exception as exc:  # une session ratée ne doit pas arrêter l'agent
+            print(f"session {kind} {ip} : {exc}", flush=True)
         time.sleep(rng.uniform(low, high))
 
 
 def main():
-    config = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
-    profile = config.get("profile", DEFAULT_PROFILE)
-    _, _, workers = PROFILES.get(profile, PROFILES[DEFAULT_PROFILE])
-    kinds = set(config.get("kinds") or ["icmp"])
-    targets = config.get("targets", [])
-    me = socket.gethostname().lower()
-    actions = build_actions(targets, kinds, me)
-    resolvers = dns_servers(targets) if "dns" in kinds else []
+    config = json.loads(sys.argv[1])
+    actions = build_actions(config["targets"], config["kinds"])
+    if not actions:
+        print("aucune action à générer : agent de trafic inactif", flush=True)
+        threading.Event().wait()  # on reste en vie : l'arrêt se fait en supprimant le conteneur
 
-    if not actions and not resolvers:
-        log("aucune action à générer : agent de trafic inactif")
-        # On reste en vie : l'arrêt se fait en supprimant le conteneur.
-        while True:
-            time.sleep(3600)
-
-    log(f"agent de trafic « {profile} » démarré ({len(actions)} session(s) possible(s), "
-        f"{workers} en parallèle, types : {','.join(sorted(kinds))})")
-    stop = threading.Event()
-    threads = [threading.Thread(target=worker, args=(i, config, actions, resolvers, stop), daemon=True)
-               for i in range(workers)]
+    _, _, parallel = PROFILES[config["profile"]]
+    print(f"agent de trafic « {config['profile']} » démarré : {len(actions)} session(s) possible(s), "
+          f"{parallel} en parallèle", flush=True)
+    threads = [threading.Thread(target=worker, args=(config, actions)) for _ in range(parallel)]
     for t in threads:
         t.start()
     for t in threads:

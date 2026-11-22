@@ -8,11 +8,11 @@ Une tâche de fond (voir jobs.py) :
      source, Flow ID, Timestamp) qui feraient apprendre un raccourci (« telle IP
      = attaque ») au lieu d'un comportement, on nettoie les inf / NaN fréquents
      dans les sorties de CICFlowMeter, on écarte les colonnes constantes ;
-  3. entraîne le modèle (voir MODELS) ;
-  4. l'évalue sur des données qu'il n'a JAMAIS vues : un autre dataset (le plus
-     sûr), ou la fin chronologique du jeu (découpage temporel). Un découpage
-     aléatoire des lignes mettrait des flux quasi identiques des deux côtés et
-     gonflerait les scores : il n'est volontairement pas proposé ;
+  3. entraîne un random forest ;
+  4. l'évalue sur des données qu'il n'a JAMAIS vues : d'autres datasets (en
+     général les variantes du dataset d'entraînement, voir datasets.make_variant).
+     Un découpage aléatoire des lignes mettrait des flux quasi identiques des deux
+     côtés et gonflerait les scores : il n'est volontairement pas proposé ;
   5. sauvegarde le modèle (model.joblib) et ses métriques (meta.json) dans
      data/models/<id>/.
 
@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import joblib
 import numpy as np
@@ -35,8 +35,9 @@ from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 
 from .cicflowmeter import FLOW_WINDOW_SEC
+from fastapi import HTTPException
+
 from .datasets import DatasetStore
-from .errors import UserError
 from .jobs import Job
 from .settings import DATA_DIR
 from .store import RecordStore
@@ -58,9 +59,6 @@ ID_COLUMNS = ("Flow ID", "Src IP", "Src Port", "Dst IP", "Timestamp", "Label")
 # raccourci (« tout ce qui ne vise pas le port 80 est une attaque ») : exclu par défaut.
 PORT_COLUMN = "Dst Port"
 
-MODELS = {"random-forest": "Random forest"}
-SPLITS = {"dataset": "Dataset(s) de test séparé(s)", "temporal": "Découpage temporel (fin du jeu en test)"}
-
 TOP_FEATURES = 15
 
 
@@ -75,10 +73,7 @@ class ModelStore(RecordStore):
 class TrainingPlan:
     name: str
     train: List[dict]          # métadonnées des datasets d'entraînement
-    test: List[dict]           # métadonnées des datasets de test (split « dataset »)
-    split: str
-    test_fraction: float
-    model: str
+    test: List[dict]           # métadonnées des datasets de test
     n_estimators: int
     max_depth: Optional[int]
     exclude_port: bool
@@ -121,14 +116,6 @@ def feature_matrix(frame: pd.DataFrame, exclude_port: bool, columns: Optional[Li
 def drop_constant(features: pd.DataFrame) -> pd.DataFrame:
     """Écarte les colonnes constantes (aucune information pour le modèle)."""
     return features.loc[:, features.nunique(dropna=False) > 1]
-
-
-def temporal_split(frame: pd.DataFrame, test_fraction: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Les flux les plus anciens pour l'entraînement, les plus récents pour le test."""
-    stamps = pd.to_datetime(frame["Timestamp"], format="%Y-%m-%d %H:%M:%S.%f", errors="coerce")
-    ordered = frame.assign(_ts=stamps).sort_values("_ts", kind="stable").drop(columns="_ts")
-    cut = int(round(len(ordered) * (1 - test_fraction)))
-    return ordered.iloc[:cut], ordered.iloc[cut:]
 
 
 def evaluate(y_true: pd.Series, y_pred: np.ndarray, train_classes: List[str]) -> dict:
@@ -185,21 +172,17 @@ class Trainer:
         """Vérifie la demande AVANT de lancer la tâche (dataset inconnu, fuite entraînement/test…)."""
         # dict.fromkeys retire les doublons en gardant l'ordre ; datasets.get lève si l'id est inconnu.
         train = [self.datasets.get(i) for i in dict.fromkeys(spec.get("train") or [])]
-        test = [self.datasets.get(i) for i in dict.fromkeys(spec.get("test") or [])] if spec["split"] == "dataset" else []
+        test = [self.datasets.get(i) for i in dict.fromkeys(spec.get("test") or [])]
         if not train:
-            raise UserError("Choisissez au moins un dataset d'entraînement.")
-        if spec["split"] == "dataset":
-            if not test:
-                raise UserError("Choisissez au moins un dataset de test (différent de ceux d'entraînement).")
-            shared = {m["id"] for m in train} & {m["id"] for m in test}
-            if shared:
-                raise UserError("Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
+            raise HTTPException(400, "Choisissez au moins un dataset d'entraînement.")
+        if not test:
+            raise HTTPException(400, "Choisissez au moins un dataset de test (différent de ceux d'entraînement).")
+        if {m["id"] for m in train} & {m["id"] for m in test}:
+            raise HTTPException(400, "Un même dataset ne peut pas servir à la fois à l'entraînement et au test.")
 
-        default_name = MODELS[spec["model"]]
         return TrainingPlan(
-            name=(spec.get("name") or "").strip()[:80] or default_name,
-            train=train, test=test, split=spec["split"], test_fraction=float(spec["testFraction"]),
-            model=spec["model"], n_estimators=int(spec["nEstimators"]),
+            name=(spec.get("name") or "").strip()[:80] or "Random forest",
+            train=train, test=test, n_estimators=int(spec["nEstimators"]),
             max_depth=int(spec["maxDepth"]) if spec.get("maxDepth") else None,
             exclude_port=bool(spec.get("excludePort", True)),
         )
@@ -209,21 +192,18 @@ class Trainer:
         began = time.time()
 
         job.step("Chargement des datasets")
-        if plan.split == "dataset":
-            train_frame = load_frames(self.datasets, plan.train)
-            test_frame = load_frames(self.datasets, plan.test)
-        else:
-            train_frame, test_frame = temporal_split(load_frames(self.datasets, plan.train), plan.test_fraction)
+        train_frame = load_frames(self.datasets, plan.train)
+        test_frame = load_frames(self.datasets, plan.test)
         if train_frame.empty or test_frame.empty:
-            raise UserError("Pas assez de flux pour entraîner puis tester le modèle.")
+            raise HTTPException(400, "Pas assez de flux pour entraîner puis tester le modèle.")
         job.check_cancelled()
 
         job.step("Préparation des features")
         y_train = targets(train_frame["Label"])
         y_test = targets(test_frame["Label"])
         if y_train.nunique() < 2:
-            raise UserError(
-                f"Le jeu d'entraînement ne contient qu'une classe ({y_train.iloc[0]}) : il faut des flux bénins ET des attaques."
+            raise HTTPException(
+                400, f"Le jeu d'entraînement ne contient qu'une classe ({y_train.iloc[0]}) : il faut des flux bénins ET des attaques."
             )
         x_train = drop_constant(feature_matrix(train_frame, plan.exclude_port))
         x_test = feature_matrix(test_frame, plan.exclude_port, list(x_train.columns))
@@ -231,7 +211,7 @@ class Trainer:
             job.warn(f"Le jeu de test ne contient qu'une classe ({y_test.iloc[0]}) : certaines métriques n'ont pas de sens.")
         job.check_cancelled()
 
-        job.step(f"Entraînement ({MODELS[plan.model].lower()}, {plan.n_estimators} arbres, {len(x_train)} flux)")
+        job.step(f"Entraînement (random forest, {plan.n_estimators} arbres, {len(x_train)} flux)")
         # Poids équilibrés par ÉTIQUETTE d'origine (bénin, port-scan, ssh-patator…), pas seulement
         # BENIGN / ATTACK : un scan produit des milliers de flux, une force brute quelques dizaines,
         # et un simple équilibrage binaire laissait le scan décider de ce qu'est une attaque.
@@ -252,7 +232,7 @@ class Trainer:
         metrics["byAttack"] = by_attack(test_frame["Label"], predicted)
         # Score sur chaque dataset de test séparément : un modèle qui réussit l'un et rate
         # l'autre ne se voit pas dans la moyenne.
-        names = {m["id"]: m["name"] for m in plan.test or plan.train}
+        names = {m["id"]: m["name"] for m in plan.test}
         metrics["byDataset"] = []
         for dataset_id, rows in test_frame.reset_index(drop=True).groupby("_dataset").groups.items():
             part = evaluate(y_test.reset_index(drop=True).iloc[rows].reset_index(drop=True), predicted[rows], list(model.classes_))
@@ -273,14 +253,12 @@ class Trainer:
             "createdAt": datetime.fromtimestamp(began, timezone.utc).isoformat(timespec="seconds"),
             "durationSec": round(time.time() - began, 1),
             "trainSeconds": round(train_seconds, 3),
-            "model": plan.model,
             "params": {"nEstimators": plan.n_estimators, "maxDepth": plan.max_depth,
-                       "excludePort": plan.exclude_port, "split": plan.split,
-                       "testFraction": plan.test_fraction if plan.split == "temporal" else None},
+                       "excludePort": plan.exclude_port},
             "train": {"datasets": [{"id": m["id"], "name": m["name"]} for m in plan.train],
                       "rows": len(x_train), "counts": _counts(y_train),
                       "attacks": _counts(train_frame["Label"].astype(str).str.strip())},
-            "test": {"datasets": [{"id": m["id"], "name": m["name"]} for m in (plan.test or plan.train)],
+            "test": {"datasets": [{"id": m["id"], "name": m["name"]} for m in plan.test],
                      "rows": len(x_test), "counts": _counts(y_test)},
             "featureCount": len(x_train.columns),
             "flowWindowSec": FLOW_WINDOW_SEC,  # flux découpés comme en détection (voir cicflowmeter.py)

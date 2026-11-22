@@ -1,0 +1,19 @@
+{
+  "name": "Petit LAN",
+  "description": "Trois PC, un serveur (HTTP, SSH, FTP) et une sonde IDS sur un même switch 10.0.1.0/24. La topologie de la démonstration des évasions.",
+  "nodes": [
+    { "id": "switch-1", "type": "switch", "name": "Switch-1", "subnet": "10.0.1.0/24", "x": 0, "y": 0 },
+    { "id": "server-1", "type": "server", "name": "Serveur", "x": -300, "y": 0 },
+    { "id": "pc-1", "type": "pc", "name": "PC-1", "x": 300, "y": -140 },
+    { "id": "pc-2", "type": "pc", "name": "PC-2", "x": 300, "y": 0 },
+    { "id": "pc-3", "type": "pc", "name": "PC-3", "x": 300, "y": 140 },
+    { "id": "ids-1", "type": "ids", "name": "IDS-1", "x": 0, "y": -220 }
+  ],
+  "links": [
+    { "node": "server-1", "switch": "switch-1", "ip": "10.0.1.10" },
+    { "node": "pc-1", "switch": "switch-1", "ip": "10.0.1.11" },
+    { "node": "pc-2", "switch": "switch-1", "ip": "10.0.1.12" },
+    { "node": "pc-3", "switch": "switch-1", "ip": "10.0.1.13" },
+    { "node": "ids-1", "switch": "switch-1", "ip": "10.0.1.200" }
+  ]
+}

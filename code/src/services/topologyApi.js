@@ -1,21 +1,13 @@
 /**
  * Couche d'accès au moteur de simulation (backend/, voir README).
  *
- * L'instanciation d'une topologie est longue : POST /deployments démarre une
- * tâche et renvoie son identifiant, puis l'interface redemande son état toutes
- * les secondes (GET /jobs/{id}, voir followJob).
+ * Les tâches longues (génération d'un dataset, entraînement) renvoient un
+ * identifiant, puis l'interface redemande leur état toutes les secondes
+ * (GET /jobs/{id}, voir followJob).
  */
 
 // URL du moteur de simulation (backend/), lancé sur le port 8000
 const API_BASE_URL = 'http://localhost:8000/api';
-
-/** Erreur renvoyée par le serveur : `messages` est une liste de textes affichables. */
-export class ApiError extends Error {
-  constructor(messages) {
-    super(messages.join('\n'));
-    this.messages = messages;
-  }
-}
 
 const UNREACHABLE = 'Le moteur de simulation est injoignable : vérifiez qu\'il est lancé (voir README).';
 
@@ -27,21 +19,23 @@ async function request(path, options = {}) {
       headers: { 'Content-Type': 'application/json', ...options.headers },
     });
   } catch {
-    throw new ApiError([UNREACHABLE]);
+    throw new Error(UNREACHABLE);
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    // 400 / 409 / 503 : { errors: [...] } ; 422 (format invalide) : { detail: [...] }
-    const messages = body.errors ?? [`Le serveur a refusé la requête (code ${response.status}).`];
-    throw new ApiError(messages);
+    // Erreur prévue (HTTPException) : { detail: "message" } ; requête mal formée (422) : detail est une liste.
+    throw new Error(typeof body.detail === 'string' ? body.detail : `Le serveur a refusé la requête (code ${response.status}).`);
   }
   return body;
 }
 
-/** État du réseau instancié : { running, devices: [{ id, name, running }], networks: [id] } */
+/** État du réseau : { running, topology: "1-petit-lan" ou null, devices: [{ id, running }] } */
 export const fetchLabStatus = () => request('/lab');
 
-/** Arrête et supprime le réseau instancié. */
+/** Démarre une topologie (docker compose up) → nouvel état du réseau. */
+export const startLab = (topology) => request('/lab', { method: 'POST', body: JSON.stringify({ topology }) });
+
+/** Arrête le réseau (docker compose down) → nouvel état du réseau. */
 export const stopLab = () => request('/lab', { method: 'DELETE' });
 
 // --- Génération de trafic (voir backend/app/traffic.py) --------------------
@@ -52,8 +46,8 @@ export const stopLab = () => request('/lab', { method: 'DELETE' });
  */
 export const fetchTraffic = () => request('/lab/traffic');
 
-/** Démarre le trafic de fond (bénin) sur un équipement. `kinds` : types de trafic
- *  à générer (« icmp », « http », « service ») ; `dest` : libellé d'affichage. */
+/** Démarre le trafic de fond (bénin) sur un équipement. `targets` : [{ ip, server }] ;
+ *  `kinds` : types de trafic (« icmp », « http », « ssh », « ftp ») ; `dest` : libellé d'affichage. */
 export const startBenign = (node, profile, targets, dest = 'all', kinds = ['icmp']) =>
   request('/lab/traffic/benign', { method: 'POST', body: JSON.stringify({ node, profile, dest, kinds, targets }) });
 
@@ -92,16 +86,8 @@ export const stopDetection = () => request('/lab/detection', { method: 'DELETE' 
 /** Efface le bilan et les événements (la détection en cours continue, repartie de zéro). */
 export const resetDetection = () => request('/lab/detection/reset', { method: 'POST' });
 
-
 /**
- * Lance l'instanciation d'une topologie sérialisée (serializeTopology()).
- * @returns {Promise<{ id: string }>}
- */
-export const startDeployment = (topology) =>
-  request('/deployments', { method: 'POST', body: JSON.stringify(topology) });
-
-/**
- * Suit une tâche de fond du serveur (déploiement, dataset, entraînement : voir
+ * Suit une tâche de fond du serveur (dataset, entraînement : voir
  * backend/app/jobs.py) : redemande son état toutes les secondes (polling).
  * `onUpdate` reçoit l'état : { status: 'running' | 'done' | 'failed', total, steps, warnings, error, result }.
  * Retourne une fonction qui interrompt le suivi.
@@ -139,10 +125,10 @@ export const datasetFileUrl = (id, name) => `${API_BASE_URL}/datasets/${encodeUR
 
 // --- Modèles ML-IDS (voir backend/app/training.py) -------------------------
 
-/** Modèles entraînés : { models: [meta…], job, options: { models, splits } } */
+/** Modèles entraînés : { models: [meta…], job: id de l'entraînement en cours ou null } */
 export const fetchModels = () => request('/models');
 
-/** Lance l'entraînement d'un modèle (datasets, découpage, hyperparamètres) → { id } */
+/** Lance l'entraînement d'un modèle (datasets d'entraînement et de test, hyperparamètres) → { id } */
 export const startTraining = (spec) => request('/models', { method: 'POST', body: JSON.stringify(spec) });
 
 /** Supprime un modèle entraîné. */

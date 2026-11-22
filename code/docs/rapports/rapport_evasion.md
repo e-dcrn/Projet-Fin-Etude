@@ -1,6 +1,6 @@
 # Rapport : évasion d'un ML-NIDS par-flux
 
-Expériences du 17 novembre 2026, dans Chrome, sur IDS Lab. Objectif du PFE : passer d'une chaîne ML-IDS qui
+Expériences des 17 et 21 novembre 2026, dans Chrome, sur IDS Lab. Objectif du PFE : passer d'une chaîne ML-IDS qui
 fonctionne de bout en bout à une **attaque adversariale** de l'état de l'art — ici une **évasion** (tromper un
 modèle déjà entraîné), au niveau des vrais paquets.
 
@@ -17,17 +17,22 @@ retour, 0 donnée), lente ou rapide : sa fiche est identique et criarde, donc d�
 > *Analogie : pour passer inaperçu à l'entrée d'une soirée, arriver plus lentement ne sert à rien si tu portes
 > toujours le même costume reconnaissable. Le videur regarde ton costume, pas ta vitesse de marche.*
 
-**Évasion 2 — imiter le trafic normal (mimétisme) : ✅ marche.** Le trafic normal contient déjà des logins
-ratés (un utilisateur qui se trompe de mot de passe). L'IDS n'a donc pas appris « login raté = attaque », mais a
-appris à reconnaître l'**outil** d'attaque (hydra), qui laisse une signature. En refaisant la force brute avec le
-**même outil que le trafic normal** (la bibliothèque `ftplib`) et au **même rythme humain**, chaque essai produit
-une fiche quasi identique à un vrai login raté : l'IDS ne les distingue plus et **88,5 % passent pour du normal**.
-> *Même analogie : cette fois tu mets exactement le même costume que les invités attendus. Le videur te laisse
-> entrer, parce que tu ne ressembles plus à l'intrus qu'il a appris à repérer.*
+**Évasion 2 — donner aux connexions la forme du trafic normal (mimétisme) : ✅ marche.** On regarde d'abord sur
+quoi l'IDS décide : surtout la **taille des paquets** (un flux bénin échange de vrais octets, un login raté
+n'en échange presque pas). On fait alors en sorte que chaque tentative de mot de passe **échange autant d'octets
+qu'une session normale** : avant et après l'essai, le client envoie de vraies commandes FTP, certaines avec une
+longue ligne, d'autres qui reçoivent une longue réponse. La « fiche » de chaque tentative ressemble alors à
+celle d'une session normale, et **90 % passent pour du normal** — alors que la même force brute lancée avec
+l'outil `hydra` est détectée à 87 %.
+> *Analogie : cette fois tu ne changes pas que ta vitesse de marche, tu t'habilles exactement comme les invités
+> attendus. Le videur regarde le costume ; tu ne ressembles plus à l'intrus qu'il a appris à repérer.*
+> Détail important : il ne suffit pas d'utiliser le même **outil** que les invités — il faut porter le même
+> **costume** (ici, la taille des échanges), car c'est cela que le videur regarde.
 
 **La leçon.** Contre un IDS qui juge **chaque connexion sur sa forme**, changer le **rythme** ne sert à rien ; il
-faut changer la **forme des connexions** pour qu'elles ressemblent au trafic normal. C'est ce que l'état de l'art
-résume par : la robustesse dépend du **couple modèle + façon de calculer les features**, pas du modèle seul.
+faut changer la **forme des connexions** (ici leur taille) pour qu'elles ressemblent au trafic normal. C'est ce
+que l'état de l'art résume par : la robustesse dépend du **couple modèle + façon de calculer les features**, pas
+du modèle seul.
 
 ## Le détecteur attaqué
 
@@ -93,54 +98,73 @@ fait que l'attaque en enchaîne des dizaines en rafale.
 
 ## Expérience 2 — Évasion par mimétisme du client (Okada)
 
-**Idée (Okada et al., « XAI-driven black-box adversarial attacks »).** Modifier précisément les flux pour qu'ils
-ressemblent au bénin dans les features utilisées par le modèle, et répartir la force brute sur des sessions qui
-ressemblent à des sessions légitimes. Réalisation ici : la **force brute FTP furtive**
-(`ftp-bruteforce-stealth`) utilise le **même client que l'agent bénin** (`ftplib`) et la **même cadence
-humaine** (pauses de 1–4 s) au lieu de hydra. Chaque essai raté produit alors un flux quasi identique au login
-raté que l'agent bénin génère déjà ; après le mot de passe correct, une session bénigne (LIST + téléchargements)
-est jouée. Sous-catégorie `ftp-patator-stealth`, pour mesurer son rappel séparément.
+**Idée (Okada et al., « XAI-driven black-box adversarial attacks »).** Lire les features sur lesquelles le modèle
+décide, puis modifier l'attaque pour que ses flux tombent dans la zone bénigne **de ces features précises**.
 
-**Protocole (refait de zéro).** Topologie « Petit LAN + services (SSH, FTP) ». Datasets et modèles précédents
-supprimés.
-- Dataset **Entraînement** : bénin (HTTP/SSH/FTP/ICMP) + scan de ports + force brute FTP **normale** (hydra).
-- Dataset **Test** : bénin + force brute FTP **normale** + force brute FTP **furtive**.
-- Entraînement sur le dataset d'entraînement, test sur le dataset de test ; lecture du rappel par sous-catégorie.
+**Ce que le modèle regarde (mesuré).** Les features les plus importantes de ce random forest sont des **tailles de
+paquet** : `Packet Length Mean/Std`, `Average Packet Size`, `Packet Length Variance`, `Flow Bytes/s`. Or une
+tentative d'authentification FTP ratée est un flux **minuscule** (quelques octets de commande), là où une session
+bénigne échange de vrais octets. Médianes mesurées (flux FTP, port 21) :
 
-**Résultat (modèle `20261117-204143`, 17 novembre 2026, tout refait de zéro).** Random forest entraîné sur le
-dataset d'entraînement (BENIGN 1699, port-scan 409, ftp-patator 53), évalué sur le dataset de test (BENIGN 2243,
-ftp-patator 60, ftp-patator-stealth 26). Détection par type d'attaque :
+| feature | bénin | login raté « nu » (hydra ou ftplib) |
+| ------- | ----- | ----------------------------------- |
+| Packet Length Mean | ~290 | ~8 |
+| Total Length of Fwd Packet | ~580 | ~55 |
+| Flow Bytes/s | ~500 000 | ~50 |
 
-| Attaque (jeu de test)             | Flux | Détectés | Rappel   |
-| --------------------------------- | ---- | -------- | -------- |
-| ftp-patator (normale, hydra)      | 60   | 50       | **83,3 %** |
-| ftp-patator-stealth (furtive)     | 26   | 3        | **11,5 %** |
+**Premier essai, insuffisant.** Refaire la force brute avec le **même client que l'agent bénin** (`ftplib`) et à
+cadence humaine ne suffit **pas** : le client n'est pas ce que le modèle regarde. Un login raté reste un flux
+pauvre, quel que soit l'outil qui l'émet. Mesuré : ~45 à 56 % de rappel, l'attaque reste à moitié détectée.
 
-Faux positifs sur le bénin = **0 %** (les logins ratés « typo » de l'agent bénin restent bien classés BENIGN).
+**Réalisation qui fonctionne (perturbation en problem-space).** On **étoffe** chaque tentative pour lui donner la
+taille d'une session bénigne : avant (et après) l'essai de mot de passe, le client envoie de vraies commandes FTP
+autorisées sans authentification — les unes portant une **grande ligne d'arguments** (`NOOP <~120–500 octets>`,
+octets dans le sens aller), les autres recevant une **réponse longue** (`HELP`, `FEAT`, octets dans le sens
+retour). Les features de taille du flux montent alors dans la zone bénigne. Code : `ftp-bruteforce-stealth` dans
+`backend/app/traffic.py` (fonction `pad`). On garde `ftplib` et la cadence humaine entre les essais.
 
-**L'évasion fonctionne.** En imitant le client bénin (`ftplib`) et sa cadence humaine, **88,5 % des flux de la
-force brute FTP furtive sont classés BENIGN** par un modèle qui détecte pourtant la même force brute lancée avec
-hydra (83,3 %). La différence ne tient ni à la cible, ni au protocole, ni au nombre d'essais, mais uniquement à
-la **forme des flux** : hydra a une micro-structure que le modèle a apprise comme « attaque » ; le client bénin
-produit des flux que le modèle a appris comme « normaux ». C'est l'évasion Okada réalisée en problem-space.
+**Protocole.** Topologie « Petit LAN ». Deux datasets (sans variantes) :
+- **Entraînement** : bénin (HTTP/SSH/FTP/ICMP, soutenu) + scan de ports + force brute FTP **normale** (hydra) ;
+- **Test** : bénin + force brute FTP **normale** (hydra) + force brute FTP **furtive** (étoffée).
 
-**Coût de l'attaque.** Lenteur (cadence humaine : ~1 essai/2,5 s au lieu d'une rafale hydra) et le fait de devoir
-imiter un client légitime. On ne « casse » pas le modèle : on reste sous son seuil en ressemblant au bénin.
+Entraînement d'un random forest (100 arbres) sur le dataset d'entraînement, test sur le dataset de test, lecture
+du rappel par sous-catégorie dans « Détection par type d'attaque ».
+
+**Résultat (modèle `9483ed0c`, 21 novembre 2026, codebase Docker Compose).**
+
+| Attaque (jeu de test)              | Flux | Détectés | Rappel   |
+| ---------------------------------- | ---- | -------- | -------- |
+| ftp-patator (normale, hydra)       | 31   | 27       | **87,1 %** |
+| ftp-patator-stealth (furtive)      | 32   | 3        | **9,4 %**  |
+
+Fausses alertes sur le bénin = **0,26 %**.
+
+**L'évasion fonctionne.** La même force brute FTP, contre le même serveur, avec les mêmes mots de passe, passe de
+**87,1 % détectée** (lancée avec hydra) à **9,4 %** (lancée en imitant la taille des flux d'une session bénigne).
+La différence ne tient ni à la cible, ni au protocole, ni au nombre d'essais, mais uniquement à la **forme des
+flux dans les features utilisées par le modèle** — exactement l'évasion Okada réalisée en problem-space.
+
+**Coût de l'attaque.** Lenteur (cadence humaine, ~1 essai / 2,5 s au lieu d'une rafale) et octets de remplissage
+en plus à chaque tentative. On ne « casse » pas le modèle : on reste sous son seuil en ressemblant au bénin.
 
 ## Conclusion
 
 1. L'évasion par **temporisation** (TrafficManipulator/TANTRA) échoue contre un random forest **par flux**
    (démontré, rappel 100 % → 100 %) : ce n'est pas un échec d'implémentation mais un enseignement sur le couple
    modèle–extracteur.
-2. L'évasion par **mimétisme du client bénin** (Okada) réussit : la force brute FTP furtive tombe à **11,5 %**
-   de rappel (contre 83,3 % pour la même attaque lancée avec hydra), sans aucun faux positif ajouté.
+2. L'évasion par **mimétisme en problem-space** (Okada) réussit : en étoffant chaque tentative pour que la
+   **taille de ses flux** ressemble à une session bénigne, la force brute FTP furtive tombe à **9,4 %** de
+   rappel (contre 87,1 % pour la même attaque lancée avec hydra), quasi sans faux positif ajouté. Imiter le seul
+   *client* (ftplib) ne suffit pas : il faut perturber les *features* que le modèle utilise (la taille des paquets).
 3. Règle générale pour ce détecteur : pour évader un ML-NIDS **par flux**, il faut rendre les **flux** eux-mêmes
    semblables au bénin dans les features utilisées ; agir seulement sur le **rythme** ne suffit pas.
 
 ## Reproduire
 
-Topologie « Petit LAN + services (SSH, FTP) ». Deux datasets (sans variantes) : un d'entraînement
-(bénin HTTP/SSH/FTP/ICMP intense + `tcp-connect-scan` + `ftp-bruteforce`), un de test (même bénin +
-`ftp-bruteforce` + `ftp-bruteforce-stealth`). Entraîner un random forest sur l'entraînement, tester sur le test,
-lire « Détection par type d'attaque ». L'attaque furtive est `ftp-bruteforce-stealth` dans le catalogue
-(`backend/app/traffic.py`), sous-catégorie `ftp-patator-stealth`.
+Topologie « Petit LAN ». Deux datasets (sans variantes), trafic bénin soutenu HTTP/SSH/FTP/ICMP :
+- **entraînement** : bénin + `tcp-connect-scan` + `ftp-bruteforce` (hydra) ;
+- **test** : bénin + `ftp-bruteforce` (hydra) + `ftp-bruteforce-stealth` (furtive).
+
+Entraîner un random forest sur l'entraînement, tester sur le test, lire « Détection par type d'attaque » :
+`ftp-patator` doit rester largement détecté, `ftp-patator-stealth` doit s'effondrer. L'attaque furtive est
+`ftp-bruteforce-stealth` dans le catalogue (`backend/app/traffic.py`, fonction `pad` pour le remplissage).

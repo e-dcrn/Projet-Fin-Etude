@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import JobProgress from './JobProgress.jsx';
+import { BENIGN_KINDS } from './SimulationPanel.jsx';
 import { toggled, useAction } from '../hooks/useAction.js';
 import { formatDate, formatDuration } from '../utils/format.js';
-import { availableBenignKinds, benignTargetsForDests, deviceIp, reachableDevices, scenarioTargets, trafficSources } from '../utils/trafficTargets.js';
+import { attackTargets, benignTargets, devicesOf, ipOf } from '../utils/topology.js';
 
 // Durées du programme (secondes) : leurs bornes ne sont imposées qu'ici (le serveur fait confiance).
 const DURATIONS = [
@@ -59,7 +60,7 @@ function DownloadLinks({ id, fileUrl }) {
  *   form → programme d'un nouveau dataset : sonde, trafic bénin, attaques, durées
  *   et, pendant / après une génération, sa progression.
  */
-export default function DatasetDialog({ open, datasets, traffic, nodes, edges, onlineIds, labRunning, onClose }) {
+export default function DatasetDialog({ open, datasets, traffic, topology, labRunning, onClose }) {
   const [view, setView] = useState('list');
   if (!open) return null;
 
@@ -75,30 +76,16 @@ export default function DatasetDialog({ open, datasets, traffic, nodes, edges, o
             onDone={() => { datasets.dismissRun(); setView('list'); }}
           />
         ) : view === 'form' ? (
-          <FormContent
-            datasets={datasets}
-            traffic={traffic}
-            nodes={nodes}
-            edges={edges}
-            onlineIds={onlineIds}
-            onBack={() => setView('list')}
-          />
+          <FormContent datasets={datasets} traffic={traffic} topology={topology} onBack={() => setView('list')} />
         ) : (
-          <ListContent datasets={datasets} labRunning={labRunning} hasIds={idsProbes(nodes, onlineIds).length > 0}
-            onNew={() => setView('form')} onClose={onClose} />
+          <ListContent datasets={datasets} labRunning={labRunning} onNew={() => setView('form')} onClose={onClose} />
         )}
       </div>
     </div>
   );
 }
 
-/** Sondes IDS allumées : le seul point de capture possible d'un dataset. */
-function idsProbes(nodes, onlineIds) {
-  return nodes.filter((n) => n.data?.deviceType === 'ids' && onlineIds.has(n.id))
-    .map((n) => ({ id: n.id, name: n.data.properties.name }));
-}
-
-function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
+function ListContent({ datasets, labRunning, onNew, onClose }) {
   const { error, act } = useAction();
   const remove = (ds) => window.confirm(`Supprimer le dataset « ${ds.name} » ?`) && act(() => datasets.remove(ds.id));
 
@@ -137,15 +124,9 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
       )}
 
       <div className="modal__actions">
-        {!labRunning ? (
-          <span className="modal__hint">Démarrez le réseau pour générer un dataset.</span>
-        ) : !hasIds && (
-          <span className="modal__hint">
-            Pas de dataset possible : la topologie n'a aucune Sonde IDS, donc aucun point de capture.
-          </span>
-        )}
+        {!labRunning && <span className="modal__hint">Démarrez le réseau pour générer un dataset.</span>}
         <button type="button" className="btn btn--light" onClick={onClose}>Fermer</button>
-        <button type="button" className="btn btn--primary" onClick={onNew} disabled={!labRunning || !hasIds}>
+        <button type="button" className="btn btn--primary" onClick={onNew} disabled={!labRunning}>
           + Nouveau dataset
         </button>
       </div>
@@ -153,22 +134,17 @@ function ListContent({ datasets, labRunning, hasIds, onNew, onClose }) {
   );
 }
 
-function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
-  const sources = useMemo(() => trafficSources(nodes, onlineIds), [nodes, onlineIds]);
-  // Point de capture : toujours une Sonde IDS (tout le segment, comme la détection en direct).
-  const probes = useMemo(() => idsProbes(nodes, onlineIds), [nodes, onlineIds]);
-  const dests = useMemo(() => reachableDevices(nodes, edges), [nodes, edges]);
-  // Types de trafic bénin proposés : seulement ceux des services ouverts dans la topologie.
-  const kindList = useMemo(() => availableBenignKinds(nodes, edges, dests.map((d) => d.id)), [nodes, edges, dests]);
-  const ipTargets = useMemo(() => scenarioTargets(nodes, edges, 'ip'), [nodes, edges]);
-  const subnetTargets = useMemo(() => scenarioTargets(nodes, edges, 'subnet'), [nodes, edges]);
+function FormContent({ datasets, traffic, topology, onBack }) {
+  const sources = devicesOf(topology, 'pc', 'server');
+  // Point de capture : la Sonde IDS (tout le segment, comme la détection en direct).
+  const probe = devicesOf(topology, 'ids')[0];
+  const ipTargets = attackTargets(topology, 'ip');
+  const subnetTargets = attackTargets(topology, 'subnet');
 
-  // Valeurs par défaut : la première Sonde IDS, les PC comme émetteurs de trafic
-  // bénin, et un premier scan du premier serveur depuis un PC.
-  const [probeChoice, setProbe] = useState('');
-  const probe = probes.some((p) => p.id === probeChoice) ? probeChoice : (probes[0]?.id ?? '');
-  const serverIp = deviceIp(edges, sources.find((s) => s.type === 'server')?.id ?? '');
-  const defaultTarget = () => serverIp || ipTargets[0]?.value || '';
+  // Valeurs par défaut : les PC comme émetteurs de trafic bénin, et un premier
+  // scan du premier serveur depuis un PC.
+  const serverIp = ipOf(topology, devicesOf(topology, 'server')[0].id);
+  const defaultTarget = () => serverIp;
   const [name, setName] = useState('');
   const [emittersOff, setEmittersOff] = useState(() => new Set(sources.filter((s) => s.type !== 'pc').map((s) => s.id)));
   const [kindsOff, setKindsOff] = useState(() => new Set()); // types décochés (un type disponible est coché d'office)
@@ -186,23 +162,22 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
   const toggleEmitter = (id) => setEmittersOff((prev) => toggled(prev, id));
 
   const emitters = sources.filter((s) => !emittersOff.has(s.id));
-  const kindsArr = kindList.map((k) => k.id).filter((id) => !kindsOff.has(id));
+  const kindsArr = BENIGN_KINDS.map((k) => k.id).filter((id) => !kindsOff.has(id));
   const toggleKind = (id) => setKindsOff((prev) => toggled(prev, id));
   const runCount = rows.reduce((n, r) => n + Number(r.repeat || 0), 0);
   // Pire cas : chaque attaque va jusqu'à sa durée maximale (+ ~30 s d'extraction des flux).
   const maxSeconds = (durations.warmup + runCount * durations.maxAttack + Math.max(runCount - 1, 0) * durations.gap
     + durations.cooldown + 30) * (1 + variants);
   const rowsValid = rows.length > 0 && rows.every((r) => r.attack && r.source && r.target && r.repeat >= 1);
-  const canStart = probe && rowsValid && (emitters.length === 0 || kindsArr.length > 0) && !busy;
+  const canStart = rowsValid && (emitters.length === 0 || kindsArr.length > 0) && !busy;
 
   const submit = () => {
-    const allDestIds = dests.map((d) => d.id);
     return act(() => datasets.generate({
         name,
-        probe,
+        probe: probe.id,
         kinds: kindsArr,
         profile,
-        benign: emitters.map((em) => ({ node: em.id, targets: benignTargetsForDests(nodes, edges, em.id, allDestIds) })),
+        benign: emitters.map((em) => ({ node: em.id, targets: benignTargets(topology, em.id) })),
         attacks: rows.map(({ attack, source, target, speed, repeat }) => ({ attack, source, target, speed, repeat: Number(repeat) })),
         ...durations,
         variants,
@@ -216,18 +191,6 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
         Sur la topologie affichée : un modèle entraîné sur ce dataset ne vaudra que pour ce réseau.
       </p>
       {error && <div className="traffic-error" role="alert">{error}</div>}
-      {probes.length === 0 && (
-        <div className="traffic-error" role="alert">
-          Pas de dataset possible : aucune Sonde IDS allumée, donc aucun point de capture. Ajoutez une Sonde IDS reliée
-          au switch à surveiller, puis validez la topologie.
-        </div>
-      )}
-      {sources.length === 0 && (
-        <div className="traffic-error" role="alert">
-          Aucun équipement allumé dans la topologie affichée : chargez la topologie du réseau en cours (ou validez-la
-          pour la démarrer).
-        </div>
-      )}
 
       <div className="dataset-form">
         <div className="dataset-form__grid">
@@ -236,21 +199,10 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
             <input className="field__input" value={name} placeholder="ex. Scans + force brute, petit LAN"
               onChange={(e) => setName(e.target.value)} maxLength={80} />
           </label>
-          {probes.length > 1 ? (
-            <label className="field field--compact">
-              <span className="field__label">Sonde IDS (point de capture)</span>
-              <select className="field__input" value={probe} onChange={(e) => setProbe(e.target.value)}>
-                {probes.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="field field--compact">
-              <span className="field__label">Point de capture</span>
-              <span className="field__input field__input--static">{probes[0]?.name ?? 'aucune Sonde IDS'}</span>
-            </div>
-          )}
+          <div className="field field--compact">
+            <span className="field__label">Point de capture</span>
+            <span className="field__input field__input--static">{probe.name}</span>
+          </div>
         </div>
         <p className="field__hint">
           La capture se fait toujours sur la Sonde IDS : elle reçoit une copie de tout le trafic du switch qu'elle
@@ -280,18 +232,15 @@ function FormContent({ datasets, traffic, nodes, edges, onlineIds, onBack }) {
           </label>
         </div>
         <div className="traffic-field">
-          <span className="field__label">Types (services ouverts dans la topologie)</span>
+          <span className="field__label">Types de trafic</span>
           <div className="check-row">
-            {kindList.map((k) => (
-              <label key={k.id} className="check" title={`Vers : ${k.hosts.join(', ')}`}>
+            {BENIGN_KINDS.map((k) => (
+              <label key={k.id} className="check">
                 <input type="checkbox" checked={!kindsOff.has(k.id)} onChange={() => toggleKind(k.id)} />
                 <span>{k.label}</span>
               </label>
             ))}
           </div>
-          {kindList.some((k) => k.id === 'dns') && (
-            <p className="field__hint">Le DNS n'est pas une session à part : ce sont des résolutions de noms avant les autres sessions.</p>
-          )}
         </div>
 
         <h3 className="traffic-section__title">Attaques (jouées l'une après l'autre)</h3>

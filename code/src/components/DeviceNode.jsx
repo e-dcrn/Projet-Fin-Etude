@@ -1,30 +1,24 @@
-import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { DEVICE_TYPES } from '../config/deviceTypes.js';
 
 /**
- * Rendu personnalisé d'un équipement sur le canvas.
+ * Un équipement sur le schéma : icône, nom, adresses.
  *
- * Les liens sont créés par clic (outil câble), pas par glisser depuis une poignée.
- * On place donc deux poignées invisibles au centre de l'icône : React Flow en a
- * besoin pour calculer les extrémités des liens, et cela donne des câbles qui
- * partent du centre de l'équipement, comme dans Packet Tracer.
+ * React Flow a besoin de « poignées » pour savoir où attacher les câbles : on en
+ * place deux, invisibles, au centre de l'icône.
  *
- * `data.summary` (lignes affichées sous le nom : adresses, réseau…) et
- * `data.online` (équipement instancié et allumé), `data.alert` (impliqué dans une
- * alerte récente de la détection) et `data.watching` (sonde IDS en cours d'analyse)
- * sont calculés par TopologyCanvas.
+ * `data` (préparé par TopologyCanvas) : type, name, lines (adresses ou réseau),
+ * online (conteneur allumé), alert (impliqué dans une alerte récente), watching
+ * (sonde IDS en cours d'analyse).
  */
-function DeviceNode({ data, selected }) {
-  const definition = DEVICE_TYPES[data.deviceType];
-  const { Icon } = definition;
-  const { name } = data.properties;
+export default function DeviceNode({ data }) {
+  const { color, Icon, description } = DEVICE_TYPES[data.type];
 
   return (
     <div
-      className={`device-node${selected ? ' device-node--selected' : ''}${data.alert ? ' device-node--alert' : ''}${data.watching ? ' device-node--watching' : ''}`}
-      style={{ '--device-color': definition.color }}
-      title={definition.description}
+      className={`device-node${data.alert ? ' device-node--alert' : ''}${data.watching ? ' device-node--watching' : ''}`}
+      style={{ '--device-color': color }}
+      title={description}
     >
       <div className="device-node__icon">
         <Icon />
@@ -32,15 +26,10 @@ function DeviceNode({ data, selected }) {
         <Handle type="target" position={Position.Top} isConnectable={false} className="device-node__handle" />
         {data.online && <span className="device-node__status" title="En fonctionnement" />}
       </div>
-      <div className="device-node__name">{name || '(sans nom)'}</div>
-      {data.summary?.map((line) => (
-        <div key={line} className="device-node__ip">
-          {line}
-        </div>
+      <div className="device-node__name">{data.name}</div>
+      {data.lines.map((line) => (
+        <div key={line} className="device-node__ip">{line}</div>
       ))}
     </div>
   );
 }
-
-// memo : évite de re-rendre tous les nœuds quand un seul est déplacé
-export default memo(DeviceNode);

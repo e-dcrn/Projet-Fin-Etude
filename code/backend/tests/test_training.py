@@ -9,10 +9,10 @@ import pandas as pd
 import pytest
 
 from app.datasets import DatasetStore
-from app.errors import UserError
+from fastapi import HTTPException
 from app.jobs import Job
 from app.training import (
-    ModelStore, Trainer, by_attack, evaluate, feature_matrix, targets, temporal_split,
+    ModelStore, Trainer, by_attack, evaluate, feature_matrix, targets,
 )
 
 COLUMNS = ["Flow ID", "Src IP", "Src Port", "Dst IP", "Dst Port", "Protocol", "Timestamp",
@@ -47,8 +47,7 @@ def stores(tmp_path):
 
 
 def _spec(**overrides):
-    spec = {"name": "", "train": ["20261030-100001"], "test": ["20261030-100002"], "split": "dataset",
-            "testFraction": 0.3, "model": "random-forest", "nEstimators": 20,
+    spec = {"name": "", "train": ["20261030-100001"], "test": ["20261030-100002"], "nEstimators": 20,
             "maxDepth": None, "excludePort": True}
     spec.update(overrides)
     return spec
@@ -69,13 +68,6 @@ def test_feature_matrix_drops_identifiers_port_and_cleans_values():
 def test_binary_targets():
     labels = pd.Series(["BENIGN", "port-scan", "ssh-patator"])
     assert list(targets(labels)) == ["BENIGN", "ATTACK", "ATTACK"]
-
-
-def test_temporal_split_keeps_latest_flows_for_test():
-    frame = pd.read_csv(io.StringIO(_csv(seed=1))).sample(frac=1, random_state=0)  # ordre mélangé
-    train, test = temporal_split(frame, 0.25)
-    assert len(test) == 30
-    assert train["Timestamp"].max() < test["Timestamp"].min()
 
 
 def test_evaluate_detection_and_false_positives():
@@ -106,14 +98,12 @@ def test_train_on_one_dataset_and_test_on_another(stores):
 
 def test_prepare_rejects_leaky_or_incomplete_requests(stores):
     trainer = Trainer(*stores)
-    with pytest.raises(UserError):  # même dataset des deux côtés
+    with pytest.raises(HTTPException):  # même dataset des deux côtés
         trainer.prepare(_spec(test=["20261030-100001"]))
-    with pytest.raises(UserError):  # pas de jeu de test
+    with pytest.raises(HTTPException):  # pas de jeu de test
         trainer.prepare(_spec(test=[]))
-    with pytest.raises(UserError):  # dataset inconnu
+    with pytest.raises(HTTPException):  # dataset inconnu
         trainer.prepare(_spec(train=["20991231-000000"]))
-    # Découpage temporel : un seul dataset suffit.
-    assert trainer.prepare(_spec(split="temporal", test=[])).test == []
 
 
 def test_by_attack_reveals_an_attack_hidden_by_the_global_score():

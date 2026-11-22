@@ -1,9 +1,18 @@
-# Serveur : chaque service ouvert est un vrai service, lancé par
-# backend/app/service_listener.py (que le moteur passe en commande au démarrage).
+# Serveur : trois vrais services, lancés par services.py.
+#   HTTP : petit site web écrit en Python (bibliothèque standard)
+#   SSH  : OpenSSH
+#   FTP  : vsftpd
 FROM python:3.12-alpine
 
-# openssh (SSH), vsftpd (FTP), busybox-extras (telnetd), opensmtpd (SMTP), dnsmasq (DNS),
-# mariadb (MySQL), openssl (certificat du site HTTPS). HTTP/HTTPS : serveur web Python.
-# shadow : useradd/chpasswd pour le compte de démonstration. curl : tests depuis le terminal.
-RUN apk add --no-cache openssh vsftpd busybox-extras opensmtpd dnsmasq mariadb mariadb-client \
-        openssl shadow curl
+RUN apk add --no-cache openssh vsftpd
+
+# Compte de démonstration (réseau ISOLÉ, mot de passe volontairement faible :
+# la force brute doit « réussir » pour illustrer l'attaque).
+RUN adduser -D -s /bin/sh labuser && echo "labuser:password123" | chpasswd
+
+# Clés d'hôte SSH, et configuration du serveur FTP.
+RUN ssh-keygen -A
+COPY vsftpd.conf /etc/vsftpd/vsftpd.conf
+
+COPY services.py /services.py
+CMD ["python3", "-u", "/services.py"]

@@ -1,0 +1,125 @@
+# Topologie « Trois réseaux, deux routeurs » : deux LAN reliés par un réseau de transit.
+#
+#   LAN-1   10.0.1.0/24 : PC-1 .10, PC-2 .11, Routeur-1 .1
+#   Transit 10.0.2.0/24 : Routeur-1 .1, Routeur-2 .2, IDS-1 .200
+#   LAN-3   10.0.3.0/24 : PC-3 .10, Serveur .20, Routeur-2 .1
+#
+# Chaque routeur a une route statique vers le LAN qu'il ne touche pas. La sonde
+# IDS surveille le transit, par où passe tout le trafic entre les deux LAN.
+# Voir topologies/1-petit-lan/docker-compose.yml pour les explications communes.
+
+name: idslab
+
+services:
+  router-1:
+    image: alpine:3.20
+    hostname: Routeur-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    sysctls:
+      net.ipv4.ip_forward: 1
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.1
+      switch-2:
+        ipv4_address: 10.0.2.1
+    # LAN-3 est joignable par Routeur-2.
+    command: sh -c "ip route del default; ip route add 10.0.3.0/24 via 10.0.2.2; exec sleep infinity"
+
+  router-2:
+    image: alpine:3.20
+    hostname: Routeur-2
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    sysctls:
+      net.ipv4.ip_forward: 1
+    networks:
+      switch-2:
+        ipv4_address: 10.0.2.2
+      switch-3:
+        ipv4_address: 10.0.3.1
+    # LAN-1 est joignable par Routeur-1.
+    command: sh -c "ip route del default; ip route add 10.0.1.0/24 via 10.0.2.1; exec sleep infinity"
+
+  pc-1:
+    image: alpine:3.20
+    hostname: PC-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.10
+    command: sh -c "ip route replace default via 10.0.1.1; exec sleep infinity"
+
+  pc-2:
+    image: alpine:3.20
+    hostname: PC-2
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-1:
+        ipv4_address: 10.0.1.11
+    command: sh -c "ip route replace default via 10.0.1.1; exec sleep infinity"
+
+  pc-3:
+    image: alpine:3.20
+    hostname: PC-3
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-3:
+        ipv4_address: 10.0.3.10
+    command: sh -c "ip route replace default via 10.0.3.1; exec sleep infinity"
+
+  server-1:
+    build: ../../docker/server
+    image: idslab/server
+    hostname: Serveur
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-3:
+        ipv4_address: 10.0.3.20
+    command: sh -c "ip route replace default via 10.0.3.1; exec python3 -u /services.py"
+
+  ids-1:
+    image: alpine:3.20
+    hostname: IDS-1
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      switch-2:
+        ipv4_address: 10.0.2.200
+    command: sh -c "ip route del default; exec sleep infinity"
+
+  # Mode « hub » du switch de transit (surveillé par la sonde IDS).
+  hub-mode:
+    build: ../../docker/toolbox
+    image: idslab/toolbox
+    network_mode: host
+    privileged: true
+    command: sh -c "echo 0 > /sys/class/net/br-switch-2/bridge/ageing_time"
+    depends_on: [ids-1]
+
+networks:
+  switch-1:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-1
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+          gateway: 10.0.1.254
+  switch-2:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-2
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+          gateway: 10.0.2.254
+  switch-3:
+    driver_opts:
+      com.docker.network.bridge.name: br-switch-3
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
+          gateway: 10.0.3.254

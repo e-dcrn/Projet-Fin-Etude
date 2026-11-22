@@ -159,10 +159,7 @@ function ModelReport({ model }) {
     <div className="model-report">
       <Kpis metrics={metrics} />
       <p className="field__hint">
-        Entraîné sur {names(train.datasets)} ({train.rows} flux) · testé sur{' '}
-        {model.params.split === 'temporal'
-          ? `les ${formatPercent(model.params.testFraction)} les plus récents de ce même jeu`
-          : names(test.datasets)}{' '}
+        Entraîné sur {names(train.datasets)} ({train.rows} flux) · testé sur {names(test.datasets)}{' '}
         ({test.rows} flux jamais vus) · {model.featureCount} features
         {model.params.excludePort ? ' (Dst Port exclu)' : ''}.
         {model.trainSeconds != null && (
@@ -331,16 +328,12 @@ function DatasetChecklist({ datasets, selected, disabled, onToggle }) {
 }
 
 function FormContent({ models, datasets, onBack }) {
-  const { options } = models;
   const [name, setName] = useState('');
   // Par défaut : le dernier dataset de base pour l'entraînement et ses variantes pour le test ;
   // sinon le plus ancien dataset pour l'entraînement et le plus récent pour le test.
   const [defaults] = useState(() => defaultSelection(datasets));
   const [train, setTrain] = useState(() => new Set(defaults.train));
   const [test, setTest] = useState(() => new Set(defaults.test));
-  const [split, setSplit] = useState(defaults.test.length ? 'dataset' : 'temporal');
-  const [testFraction, setTestFraction] = useState(30);
-  const [model, setModel] = useState('random-forest');
   const [nEstimators, setNEstimators] = useState(100);
   const [maxDepth, setMaxDepth] = useState('');
   const [excludePort, setExcludePort] = useState(true);
@@ -348,17 +341,13 @@ function FormContent({ models, datasets, onBack }) {
 
   const toggle = (setter) => (id) => setter((prev) => toggled(prev, id));
 
-  const canStart = train.size > 0 && (split === 'temporal' || test.size > 0) && !busy;
-
+  const canStart = train.size > 0 && test.size > 0 && !busy;
 
   const submit = () =>
     act(() => models.train({
         name,
         train: [...train],
-        test: split === 'dataset' ? [...test] : [],
-        split,
-        testFraction: testFraction / 100,
-        model,
+        test: [...test],
         nEstimators: Number(nEstimators),
         maxDepth: maxDepth ? Number(maxDepth) : null,
         excludePort,
@@ -377,38 +366,16 @@ function FormContent({ models, datasets, onBack }) {
         </label>
 
         <h3 className="traffic-section__title">Données d'entraînement</h3>
-        <DatasetChecklist datasets={datasets} selected={train} disabled={split === 'dataset' ? test : new Set()} onToggle={toggle(setTrain)} />
+        <DatasetChecklist datasets={datasets} selected={train} disabled={test} onToggle={toggle(setTrain)} />
 
         <h3 className="traffic-section__title">Données de test (jamais vues à l'entraînement)</h3>
-        <div className="check-row">
-          {options.splits.map((s) => (
-            <label key={s.id} className="check">
-              <input type="radio" name="split" checked={split === s.id} onChange={() => setSplit(s.id)} />
-              <span>{s.label}</span>
-            </label>
-          ))}
-        </div>
-        {split === 'dataset' ? (
-          <DatasetChecklist datasets={datasets} selected={test} disabled={train} onToggle={toggle(setTest)} />
-        ) : (
-          <label className="field field--compact field--inline">
-            <span className="field__label">Part gardée pour le test : {testFraction} % (les flux les plus récents)</span>
-            <input type="range" min={10} max={50} step={5} value={testFraction} onChange={(e) => setTestFraction(Number(e.target.value))} />
-          </label>
-        )}
+        <DatasetChecklist datasets={datasets} selected={test} disabled={train} onToggle={toggle(setTest)} />
         <p className="field__hint">
-          Un dataset de test séparé est l'évaluation la plus honnête. Le découpage temporel garde la fin du jeu pour le
-          test ; attention, une attaque jouée une seule fois peut alors manquer d'un côté.
+          En général : le dataset de base pour l'entraînement, ses variantes pour le test.
         </p>
 
-        <h3 className="traffic-section__title">Modèle</h3>
+        <h3 className="traffic-section__title">Random forest</h3>
         <div className="dataset-form__durations">
-          <label className="field field--compact">
-            <span className="field__label">Algorithme</span>
-            <select className="field__input" value={model} onChange={(e) => setModel(e.target.value)}>
-              {options.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-          </label>
           <label className="field field--compact">
             <span className="field__label">Nombre d'arbres</span>
             <input className="field__input" type="number" min={10} max={500} value={nEstimators} onChange={(e) => setNEstimators(e.target.value)} />

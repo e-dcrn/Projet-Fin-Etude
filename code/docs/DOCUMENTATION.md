@@ -37,15 +37,15 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │ INTERFACE — React 19, React Flow, Vite                     code/src/ │
-│ éditeur · Trafic, Scénarios, Datasets, IDS, Détection                │
+│ schéma · Simulation, Datasets, IDS, Détection                        │
 └─────────────────────────────┬────────────────────────────────────────┘
                               │ REST (+ polling)
 ┌─────────────────────────────▼────────────────────────────────────────┐
 │ MOTEUR — Python, FastAPI                           code/backend/app/ │
-│ planner, deployer · traffic, traffic_agent · capture, cicflowmeter   │
+│ lab · traffic, traffic_agent · cicflowmeter                          │
 │ datasets · training · detection                                      │
 └───────────┬──────────────────────────────────────────────┬───────────┘
-            │ SDK Docker                                   │ fichiers
+            │ docker compose + SDK Docker                  │ fichiers
 ┌───────────▼────────────────────────────────┐ ┌───────────▼───────────┐
 │ RÉSEAU DU LAB (conteneurs)                 │ │ backend/data/         │
 │ PC · routeurs · serveurs · sonde IDS       │ │ datasets : pcap, CSV  │
@@ -54,7 +54,7 @@ Sommaire : [1. Vocabulaire](#1-vocabulaire) · [2. Architecture](#2-architecture
 ```
 
 L'interface ne parle jamais de Docker : le moteur traduit chaque action. REST sert aux actions ; pour les
-tâches longues (déploiement, dataset, entraînement), l'interface redemande leur état toutes les secondes (polling). Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
+tâches longues (dataset, entraînement), l'interface redemande leur état toutes les secondes (polling). Pas de base de données : tout est fichier dans `backend/data/`, ignoré par git.
 
 ### Carte du code
 
@@ -65,25 +65,19 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 
 | Fichier | Rôle |
 | ------- | ---- |
-| `main.jsx`, `App.jsx` | point d'entrée ; `ReactFlowProvider` englobe toute l'application |
-| **`components/TopologyEditor.jsx`** | assemblage : relie les hooks aux composants, aucune logique métier |
-| `components/Toolbar.jsx`, `ExamplesMenu.jsx`, `Palette.jsx` | barre d'outils, menu des exemples, palette d'équipements |
-| `components/TopologyCanvas.jsx`, `DeviceNode.jsx`, `CableEdge.jsx` | schéma React Flow : équipements et câbles |
-| `components/PropertiesPanel.jsx`, `properties/*.jsx` | panneau de droite : nom, interfaces, passerelle, services, routes |
-| `components/DeployDialog.jsx` | bilan des contrôles puis progression du déploiement |
-| `components/TrafficPanel.jsx`, `ScenarioPanel.jsx`, `DetectionPanel.jsx` | panneaux Trafic bénin, Scénarios, Détection |
+| `main.jsx` | point d'entrée |
+| **`App.jsx`** | assemblage : relie les hooks aux composants, aucune logique métier |
+| `components/Toolbar.jsx` | choix de la topologie, ▶ Démarrer / ■ Arrêter, boutons des panneaux |
+| `components/TopologyCanvas.jsx`, `DeviceNode.jsx` | schéma React Flow (lecture seule) : équipements, câbles, alertes |
+| `components/SimulationPanel.jsx`, `DetectionPanel.jsx` | panneaux Simulation (trafic bénin + attaques) et Détection |
 | `components/DatasetDialog.jsx`, `ModelDialog.jsx`, `JobProgress.jsx` | datasets ; modèles et rapport ; progression d'une tâche |
-| **`hooks/useTopology.js`** | état du schéma (nœuds, câbles) et toutes les actions d'édition ; lance l'IPAM |
-| `hooks/useCableTool.js` | outil câble (clic A → clic B) |
-| **`hooks/useDeployment.js`** | état du réseau (allumé, arrêté) et déploiement |
+| **`hooks/useLab.js`** | état du réseau (topologie en cours, équipements allumés), démarrage et arrêt |
 | `hooks/useTraffic.js`, `useDetection.js` | état du trafic et de la détection, rafraîchi toutes les 2 s |
 | `hooks/useRecords.js`, `useDatasets.js`, `useModels.js` | listes de datasets et de modèles, et leur création (tâche de fond) |
 | `hooks/useAction.js` | `busy` / `error` d'un bouton qui appelle le moteur ; `toggled()` pour les cases à cocher |
 | **`services/topologyApi.js`** | **toutes** les requêtes vers le moteur (REST, polling des tâches) |
-| `config/deviceTypes.js`, `exampleTopologies.js` | catalogue des types d'équipements et des services ; exemples |
-| `utils/serializeTopology.js`, `deserializeTopology.js` | schéma React Flow ↔ JSON envoyé au moteur (voir §15) |
-| `utils/ipv4.js`, `ipam.js`, `validators.js` | calcul d'adresses, adressage automatique, contrôles de cohérence |
-| `utils/topologyQueries.js`, `trafficTargets.js` | lectures du schéma : câbles d'un équipement, cibles et types de trafic possibles |
+| **`utils/topology.js`** | lit les `topologies/*/topology.json` ; adresses, cibles d'attaque, destinataires du trafic bénin |
+| `config/deviceTypes.js` | couleur, icône et info-bulle de chaque type d'équipement |
 | `utils/jobRun.js` | état affiché d'une tâche de fond, mis à jour à chaque interrogation (polling) |
 | `utils/format.js`, `styles/app.css` | mise en forme des dates et taux ; styles |
 
@@ -92,24 +86,24 @@ les *utils* sont des fonctions pures (sans état), testables isolément.
 | Fichier | Rôle |
 | ------- | ---- |
 | **`main.py`** | toutes les routes de l'API (liste en tête du fichier) ; crée les objets ci-dessous |
-| `models.py` | forme du JSON de topologie (pydantic) ; type d'un service ; nom DNS d'un équipement |
-| **`planner.py`** | topologie → plan : traduit switches, équipements, câbles et routes (les vérifications sont faites par l'interface, `validators.js`) |
-| **`deployer.py`** | `LabManager` : exécute le plan avec Docker, construit les images, lance les conteneurs auxiliaires |
-| `service_listener.py` | script exécuté **dans** chaque serveur : démarre les vrais services |
+| **`lab.py`** | `LabManager` : `docker compose up` / `down` d'une topologie, retrouve ses conteneurs, lance les conteneurs auxiliaires |
 | `traffic_agent.py` | script exécuté **dans** la boîte à outils : l'utilisateur simulé du trafic bénin |
 | **`traffic.py`** | `TrafficManager` : agents bénins, catalogue et lancement des attaques |
 | `cicflowmeter.py` | découpage d'un pcap en fenêtres de 5 s ; conversion en flux par CICFlowMeter |
 | **`datasets.py`** | `DatasetBuilder` : joue un programme, capture, étiquette, sauvegarde |
 | **`training.py`** | `Trainer` : features, entraînement, évaluation, sauvegarde du modèle |
 | **`detection.py`** | `DetectionManager` : capture continue sur la sonde, classement, vérité terrain |
-| `jobs.py` | tâches de fond (thread + suite d'événements) |
+| `jobs.py` | tâches de fond (thread + état interrogé par l'interface) |
 | `store.py` | stockage sur disque des datasets et des modèles (un dossier + `meta.json`) |
-| `errors.py`, `settings.py` | `UserError` (message affiché à l'utilisateur) ; constantes (dossiers, préfixe `idslab`) |
+| `settings.py` | constantes (dossiers, nom du projet Compose `idslab`, origines autorisées) |
 
-**Images** : `docker/<rôle>/Dockerfile` pour `pc`, `server`, `router`, `ids` et `toolbox` (voir §3).
+Une erreur prévue est une `HTTPException` de FastAPI : l'interface affiche son message (`detail`).
 
-Pour **ajouter un modèle** : une entrée dans `MODELS` et sa construction dans `Trainer.run`
-(`training.py`) ; la détection le prend en charge sans changement, car `model.joblib` porte la liste
+**Topologies** : `topologies/<id>/docker-compose.yml` (ce que Docker lance) et `topology.json` (ce que
+l'interface dessine). **Images** : `docker/server/` (Dockerfile, `services.py`, `vsftpd.conf`) et
+`docker/toolbox/Dockerfile` ; les PC, routeurs et sondes utilisent directement l'image `alpine:3.20` (voir §3).
+
+Pour **ajouter un modèle** : le construire dans `Trainer.run` (`training.py`) à la place du random forest ; la détection le prend en charge sans changement, car `model.joblib` porte la liste
 ordonnée de ses features.
 
 ### Suivre le code : ce que déclenche chaque bouton
@@ -118,30 +112,32 @@ Le même schéma revient partout : un **composant** appelle un **hook**, qui app
 **route** de `main.py` appelle un **gestionnaire** du moteur (`LabManager`, `TrafficManager`…), qui pilote Docker.
 Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interface suit les événements.
 
-**✔ Valider la topologie** (déploiement)
-1. `TopologyEditor.handleValidate` : `serializeTopology` produit le JSON, `validateTopology` liste les problèmes ;
-2. `useDeployment.validate` : sans problème, `startDeployment` → `POST /api/deployments` ;
-3. `main.create_deployment` : `planner.build_plan` traduit la topologie en plan (déjà vérifiée par l'interface), puis
-   `jobs.start("deploy", …)` lance `LabManager.deploy` dans un thread ;
-4. `deploy` : construit les images, crée un réseau Docker par switch (`create_network`), un conteneur par
-   équipement (`create_device`), configure routes et interfaces (`configure_device`), passe le switch surveillé
-   en hub (`enable_hub_mode`) ; chaque étape s'ajoute à l'état de la tâche (`job.step`) ;
-5. l'interface redemande `GET /api/jobs/{id}` toutes les secondes (`followJob`) ; `applyJobState` met à jour `DeployDialog`.
+**▶ Démarrer le réseau**
+1. `Toolbar` → `useLab.start(id)` → `POST /api/lab { topology: id }` ;
+2. `main.lab_start` → `LabManager.start` : arrête la topologie précédente (`stop`), puis
+   `docker compose -f topologies/<id>/docker-compose.yml up -d --build` ;
+3. la réponse donne le nouvel état (`LabManager.status`) : la pastille verte s'allume sur chaque équipement.
 
-**▶ Démarrer (trafic bénin)**
-1. `TrafficPanel.start` calcule pour chaque émetteur ses cibles (`benignTargetsForDests` : IP et services) ;
+**▶ Démarrer (trafic bénin, panneau ⚡ Simulation)**
+1. `SimulationPanel.startBenign` calcule pour chaque PC coché ses destinataires (`benignTargets` : toutes les
+   autres machines, `server: true` pour un serveur) ;
 2. `POST /api/lab/traffic/benign` → `TrafficManager.start_benign` ;
 3. le moteur lance un conteneur `toolbox` dans la pile réseau du PC, avec `python3 -c <traffic_agent.py>
    <configuration JSON>` ;
 4. dans le conteneur, `traffic_agent.main` → `build_actions` (sessions possibles) → `worker` (boucle : choisit
    une session au hasard selon les poids, la joue, attend).
 
-**⚡ Lancer le scénario** (attaque)
+**⚡ Lancer l'attaque** (panneau ⚡ Simulation)
 1. `POST /api/lab/scenarios` → `TrafficManager.run_scenario` vérifie la cible, puis `_pause_benign` arrête
    l'agent bénin de la source ;
 2. un conteneur `toolbox` lance la commande `nmap` ou `hydra` ; ses labels Docker (source, cible, attaque)
    servent de **vérité terrain** à la détection ;
 3. un thread (`_resume_after`) attend la fin de l'attaque et relance l'agent bénin.
+
+Une fois le scénario terminé, `_scenario_info` renvoie un champ `result` (`{ok, text}` ou `null`), calculé par
+`attack_result(attack, logs)` qui lit la sortie de l'outil : mot de passe trouvé (hydra et force brute furtive),
+ports ouverts (scans nmap) ou machines actives (balayage). C'est le **résultat de l'attaque** (a-t-elle abouti ?),
+**indépendant de la détection** : une évasion réussie trouve le mot de passe tout en restant classée bénigne.
 
 **▶ Générer le dataset**
 1. `DatasetDialog.submit` → `POST /api/datasets` → `DatasetBuilder.prepare` vérifie le programme ;
@@ -164,71 +160,66 @@ Une opération longue devient une **tâche de fond** (`jobs.py`) dont l'interfac
 
 ## 3. Le réseau
 
-| Sur le schéma | Dans Docker |
-| ------------- | ----------- |
-| Switch | réseau `bridge`, un segment de niveau 2 avec son sous-réseau |
-| PC | conteneur Alpine avec les clients de chaque service, nmap et hydra |
-| Serveur | conteneur Python qui lance les vrais démons déclarés |
-| Routeur | conteneur multi-réseaux, `ip_forward=1`, routes statiques |
-| Sonde IDS | conteneur relié au switch surveillé, passé en mode hub |
+On ne dessine plus la topologie : on choisit l'une des **trois topologies prêtes**, chacune avec un serveur et
+une sonde IDS. Chacune est un dossier de `code/topologies/` :
 
-**Règles** : un câble relie toujours un équipement à un switch ; chaque câble est une interface (IP +
-masque). Un switch n'a pas d'adresse IP, il porte le réseau. L'IPAM (`src/utils/ipam.js`) attribue tout
-automatiquement : réseaux `10.0.N.0/24`, routeurs à partir de `.1`, hôtes à partir de `.10` ; saisir un champ
-le passe en manuel. La dernière adresse de chaque réseau est réservée au bridge. Les tables de routage restent
-à saisir, hors réseaux directement connectés. Les erreurs de cohérence bloquent la création depuis
-l'interface ; le moteur ne les revérifie pas (il traduit la topologie directement, voir `planner.py`).
+| Topologie | Réseaux | Sonde IDS sur |
+| --------- | ------- | ------------- |
+| `1-petit-lan` | un switch 10.0.1.0/24 : Serveur, PC-1 à 3 | le switch (tout le trafic) — topologie des évasions |
+| `2-lan-dmz` | LAN 10.0.10.0/24 (PC) + DMZ 10.0.20.0/24 (2 serveurs), un routeur | la DMZ |
+| `3-trois-reseaux` | LAN-1 (PC-1, PC-2), transit 10.0.2.0/24, LAN-3 (PC-3, Serveur), deux routeurs | le transit |
 
-**Images** : chaque rôle a son Dockerfile dans `code/docker/` (`pc`, `server`, `router`, `ids`, et `toolbox`, la
-boîte à outils lancée « dans » un équipement pour le trafic bénin, les attaques et les captures). Le moteur les
-construit à chaque déploiement sous le nom `idslab/<rôle>` ; le cache de Docker rend cette étape instantanée tant
-qu'aucun Dockerfile n'a changé. Pour ajouter un outil à un équipement, on modifie son Dockerfile.
+| Dans le `docker-compose.yml` | Équipement |
+| ---------------------------- | ---------- |
+| `networks:` (bridge, sous-réseau fixé) | un switch |
+| service `alpine:3.20` | un PC, un routeur (`net.ipv4.ip_forward: 1`) ou la sonde IDS |
+| service `idslab/server` (construit depuis `docker/server/`) | un serveur (HTTP, SSH, FTP) |
+| service `hub-mode` | passe le switch surveillé en mode hub (voir plus bas) et construit l'image `toolbox` |
 
-**Déploiement** : `planner.py` produit un plan, `deployer.py` l'exécute et envoie sa progression.
-Chaque déploiement supprime le précédent, un échec nettoie tout. Toutes les ressources portent le label
-`idslab.managed=true`. Le réseau est isolé : pas de route vers l'hôte ni Internet.
+Tout est écrit à la main dans le fichier : adresses (`ipv4_address`), passerelles et routes statiques (dans la
+`command` de chaque service : `ip route replace default via …`), nom affiché (`hostname`). Comme ces fichiers
+ne changent pas, il n'y a rien à vérifier au démarrage : s'ils ont marché une fois, ils marchent toujours. Le
+`topology.json` voisin décrit le même réseau pour le dessin (mêmes identifiants, mêmes adresses).
+
+Docker prend l'adresse `.254` de chaque réseau pour l'hôte ; la route par défaut qu'il ajoute vers lui est
+retirée (`ip route del default`) ou remplacée par le routeur : le réseau est isolé de l'hôte et d'Internet.
+
+**Démarrer / arrêter** (`lab.py`) : `docker compose -f topologies/<id>/docker-compose.yml up -d --build`, et
+`docker compose -p idslab down`. Toutes les topologies portent le même nom de projet (`name: idslab`) : une
+seule tourne à la fois. Les conteneurs auxiliaires (trafic, attaques, captures, CICFlowMeter) sont lancés à la
+demande par le moteur avec le SDK Docker et portent le label `idslab.managed=true` ; l'arrêt les supprime aussi.
 
 **Port miroir** : un bridge Linux apprend les adresses MAC et n'envoie à chaque port que ce qui lui est
 destiné. Avec `ageing_time = 0`, il n'apprend plus et diffuse tout, comme un hub : la sonde reçoit une copie
-de tout le segment. **Elle ne voit que ce switch** : une attaque qui ne le traverse pas lui est invisible.
+de tout le segment. C'est ce que fait le service `hub-mode` (conteneur `privileged`, `network_mode: host`, qui
+écrit dans `/sys/class/net/br-switch-N/bridge/ageing_time`). **La sonde ne voit que ce switch** : une attaque
+qui ne le traverse pas lui est invisible.
 
-**Modifier le réseau** : ■ Arrêter, modifier, ✔ Valider ; rien ne s'applique à chaud.
+**Ajouter une topologie** : copier un dossier de `topologies/`, modifier le `docker-compose.yml` et le
+`topology.json` ; elle apparaît dans la liste de l'interface.
 
 ---
 
 ## 4. Les services
 
-Une simple bannière ne produit pas les échanges d'une vraie session : le modèle apprendrait des artefacts.
+Chaque serveur lance trois vrais services (`docker/server/services.py`). Une simple bannière ne produirait pas
+les échanges d'une vraie session : le modèle apprendrait des artefacts.
 
 | Service | Port | Implémentation | Contenu |
 | ------- | ---- | -------------- | ------- |
 | HTTP | 80 | serveur HTTP/1.1 Python, connexions persistantes (annoncé `nginx/1.26.1`) | 20 pages de 6 à 50 Ko, images, téléchargements de 0,45 à 9 Mo, API JSON, `POST /login` |
-| HTTPS | 443 | le même en TLS 1.3, certificat auto-signé | idem |
 | SSH | 22 | OpenSSH avec SFTP | fichiers de `labuser` |
-| FTP | 21 | vsftpd, passif sur 40000-40100, dépôt autorisé | mêmes fichiers, `upload/` |
-| Telnet | 23 | telnetd + `/bin/login` | shell, tout en clair |
-| SMTP | 25 | OpenSMTPD, tout destinataire vers la boîte de `labuser` | sans authentification ni STARTTLS |
-| DNS | 53 | dnsmasq, autorité sur `.lab` | un nom par équipement : `serveur-web.lab` |
-| MySQL | 3306 | MariaDB 11 (démarrage de quelques secondes) | base `boutique` : `produits` (200), `commandes` |
-| autre nom | – | simulé : bannière en TCP, écho en UDP | pas de vrai protocole |
+| FTP | 21 | vsftpd (`vsftpd.conf`), passif sur 40000-40100, dépôt autorisé | mêmes fichiers, `upload/` |
 
-Le type d'un service est son **nom** (`http`, `ssh`…, sans tenir compte des majuscules) : la règle est dans
-`models.Service.kind`, et le moteur transmet ce type aux serveurs et aux agents. Si un démon
-échoue au démarrage, le service retombe sur le simulateur et le journal du serveur l'indique. Compte unique,
-volontairement faible pour la force brute : **`labuser` / `password123`**.
+Compte unique, créé dans le Dockerfile, volontairement faible pour la force brute : **`labuser` / `password123`**.
 
-Test rapide avec `docker exec` sur un PC, avec `S=<IP du serveur>` :
+Test rapide depuis la boîte à outils, placée dans la pile réseau de PC-1 (topologie 1) :
 
-| Service | Commande |
-| ------- | -------- |
-| Ports | `for p in 21 22 23 25 53 80 443 3306; do nc -zv -w 2 $S $p; done` |
-| HTTP, HTTPS | `curl http://$S/` ; `curl -k https://$S/` |
-| SSH | `ssh labuser@$S` |
-| FTP | `curl ftp://labuser:password123@$S/` |
-| Telnet | `telnet $S` |
-| SMTP | `echo "Subject: test" > /tmp/m; curl -s smtp://$S --mail-from pc-1@lab --mail-rcpt labuser@lab -T /tmp/m` |
-| DNS | `nslookup serveur-web.lab $S` |
-| MySQL | `mariadb -h $S -u labuser -ppassword123 boutique -e "SELECT * FROM produits LIMIT 5;"` |
+```bash
+docker run --rm -it --network container:idslab-pc-1-1 idslab/toolbox sh
+nmap -p 21,22,80 10.0.1.10
+sshpass -p password123 ssh -o StrictHostKeyChecking=no labuser@10.0.1.10 ls
+```
 
 ---
 
@@ -236,24 +227,19 @@ Test rapide avec `docker exec` sur un PC, avec `S=<IP du serveur>` :
 
 Un **agent** (`traffic_agent.py`) tourne dans un conteneur qui partage la pile réseau de l'émetteur : pour
 la sonde, c'est bien le PC qui parle. Chaque action est une session complète avec un vrai client. Le moteur
-lui fournit tout ce qu'il doit savoir (cibles et type de leurs services, noms DNS, compte de démonstration).
+lui fournit ses destinataires (IP, et si c'est un serveur) et le compte de démonstration.
 
 | Type | Session |
 | ---- | ------- |
 | Web | navigation (l'accueil puis 1 à 3 pages en suivant leurs liens, avec leurs ressources sur la même connexion, 10 % de téléchargements) ; API (12 %) ; formulaire de connexion (8 %) |
 | SSH | commandes (70 %) ou `scp` (30 %) |
 | FTP | listing, 1 à 3 transferts |
-| SMTP | courriel de 3 à 400 lignes, pièce jointe dans 30 % des cas |
-| MySQL | 1 à 6 requêtes |
-| Telnet | 1 à 3 commandes |
-| DNS | résolution avant 60 % des sessions, requêtes isolées dont des noms inexistants |
-| Ping | 1 à 4 paquets, tailles variables |
+| Ping | 1 à 4 paquets, tailles variables, vers toutes les machines |
 
-Poids relatifs : HTTP 5, HTTPS 5, SSH 2, MySQL 2, FTP 1,5, SMTP 1,5, Ping 1,5, Telnet 0,5, autre 0,5. Seuls les
-services **ouverts chez les destinataires** reçoivent des sessions.
+Poids relatifs : HTTP 5, SSH 2, FTP 1,5, Ping 1,5.
 
-En SSH, FTP et MySQL, une connexion sur 20 commence par **une** erreur de mot de passe, suivie du bon : une
-erreur isolée n'est pas une force brute, et le modèle doit le savoir.
+En SSH, FTP et sur le formulaire web, une connexion sur 20 commence par **une** erreur de mot de passe, suivie
+du bon : une erreur isolée n'est pas une force brute, et le modèle doit le savoir.
 
 | Fréquence | Pause entre sessions | Sessions en parallèle |
 | --------- | -------------------- | --------------------- |
@@ -274,11 +260,14 @@ erreur isolée n'est pas une force brute, et le modèle doit le savoir.
 | Identification des services | `nmap -sV --top-ports 100` | service-detection |
 | Scan approfondi | `nmap -A` | aggressive-scan |
 | Force brute SSH, FTP | `hydra -l labuser -P <liste> -f` | ssh-patator, ftp-patator |
-| **Force brute FTP (furtive, évasion)** | `ftplib` (client bénin), cadence humaine | ftp-patator-stealth |
+| **Force brute FTP (furtive, évasion)** | `ftplib` + commandes de remplissage, cadence humaine | ftp-patator-stealth |
 
 La dernière ligne est une **attaque d'évasion par mimétisme** (Okada) : au lieu de hydra, elle utilise le même
-client FTP que le trafic bénin pour que ses flux ressemblent à des logins ratés légitimes. Résultat mesuré et
-explication « pour étudiant » dans [`rapports/rapport_evasion.md`](rapports/rapport_evasion.md).
+client FTP que le trafic bénin (`ftplib`) et **étoffe chaque essai** avec des commandes FTP autorisées avant
+login (FEAT, SYST, STAT, NOOP…) pour donner au flux la forme d'une **session bénigne** (nombre de paquets,
+octets, drapeaux PSH, temps inter-paquets). Un login raté « nu » ne suffit pas : c'est un flux pauvre que le
+modèle reconnaît comme attaque quel que soit le client. Résultat mesuré et explication « pour étudiant » dans
+[`rapports/rapport_evasion.md`](rapports/rapport_evasion.md).
 
 Quatre vitesses « normales » : nmap `-T2` à `-T5`, hydra 1 à 16 connexions parallèles. Les attaques tournent
 dans un conteneur qui partage la pile réseau de la source. Pour obtenir des flux étiquetés, on passe par les
@@ -293,7 +282,7 @@ ci-dessus) ; en étalant les paquets, les features de temps (`Fwd IAT Min`, `Flo
 sortent de la zone « attaque » apprise et des flux peuvent être classés BENIGN.
 
 **Usage** : ne pas l'inclure dans un dataset d'entraînement (sinon le modèle apprend aussi le rythme lent).
-On entraîne sur les vitesses normales, puis on lance l'attaque en vitesse **Évasion** depuis **⚡ Scénarios**
+On entraîne sur les vitesses normales, puis on lance l'attaque en vitesse **Évasion** depuis **⚡ Simulation**
 et on compare, dans le bilan de détection, le **rappel** (part des flux d'attaque détectés) avant et après, le
 tout contre le **coût** payé (l'attaque dure bien plus longtemps). C'est l'expérience « avant/après »
 recommandée par l'état de l'art pour mesurer une évasion.
@@ -310,9 +299,8 @@ il faut modifier la **forme des flux eux-mêmes** (compléter les connexions, r�
 sessions isolées à la Okada, ajouter du remplissage) — c'est la piste de l'évasion ciblée par l'importance
 des features, à implémenter ensuite.
 
-`nmap` et `hydra` sont aussi installés sur les PC, pour rejouer à la main. Ces attaques-là ne sont pas connues
-du moteur : elles ne figurent pas dans la vérité terrain. Pendant la génération d'un dataset, elles seraient
-étiquetées BENIGN.
+Une attaque lancée à la main (par exemple avec `docker run … idslab/toolbox nmap …`) n'est pas connue du
+moteur : elle ne figure pas dans la vérité terrain. Pendant la génération d'un dataset, elle serait étiquetée BENIGN.
 
 ---
 
@@ -356,8 +344,8 @@ fenêtres, décompte), téléchargeables depuis l'interface.
 - **Nettoyage** : `inf` et `NaN` remplacés par 0, colonnes constantes écartées.
 - **Poids équilibrés par étiquette d'origine** (bénin, port-scan, ssh-patator…) : un scan produit des milliers
   de flux, une force brute quelques dizaines ; sans cela, le scan décide seul de ce qu'est une attaque.
-- **Test** : datasets séparés (les variantes), ou fin chronologique du jeu. Pas de découpage aléatoire : des
-  flux quasi identiques se retrouveraient des deux côtés et gonfleraient les scores.
+- **Test** : toujours sur des datasets séparés (en général les variantes du dataset d'entraînement). Pas de
+  découpage aléatoire : des flux quasi identiques se retrouveraient des deux côtés et gonfleraient les scores.
 
 | Métrique | Définition |
 | -------- | ---------- |
@@ -402,7 +390,7 @@ l'attaque la plus volumineuse et peut masquer une attaque ratée.
 2. chaque fenêtre terminée passe dans un conteneur CICFlowMeter permanent ;
 3. le modèle classe chaque flux ;
 4. tout flux classé `ATTACK` est affiché comme **attaque détectée**, que le moteur connaisse l'attaque ou non ;
-5. la vérité terrain (attaques lancées depuis ⚡ Scénarios ou 🗂 Datasets : source, cible, début, fin) sert seulement à
+5. la vérité terrain (attaques lancées depuis ⚡ Simulation ou 🗂 Datasets : source, cible, début, fin) sert seulement à
    repérer les flux d'attaque que le modèle a **manqués**, et à donner le score par attaque.
 
 L'agent bénin de la source est suspendu pendant son attaque, comme dans un dataset, puis relancé à la fin : sans
@@ -450,7 +438,7 @@ consultés le 6 novembre 2026.*
 | ------ | ----- | ------ | ------ |
 | Interface | React + React Flow | Packet Tracer, GNS3 | intégrée au pipeline ML ; Packet Tracer n'exécute pas de vrais logiciels |
 | Moteur | Python, FastAPI, SDK Docker | Node.js | même langage que scikit-learn |
-| Machines | conteneurs Docker | VM, Mininet, Kubernetes | dizaines de machines en quelques secondes sur un portable |
+| Machines | conteneurs Docker, topologies en Docker Compose | VM, Mininet, Kubernetes, topologie dessinée | dizaines de machines en quelques secondes ; Compose est l'outil standard (vu en cours), et des topologies figées n'ont rien à vérifier |
 | Port miroir | bridge en hub | Open vSwitch, sonde en coupure | inclus dans Docker, sonde hors du chemin |
 | Services | vrais démons | bannières | vraies sessions |
 | Trafic bénin | agent maison, vrais clients | rejeu de pcap | un pcap rejoué ne correspond pas aux adresses de la topologie |
@@ -475,13 +463,13 @@ cd code && npm run build    # l'interface compile
 
 | Fichier | Vérifie |
 | ------- | ------- |
-| `test_planner.py`, `test_examples.py` | topologie → plan ; pour chaque exemple, toute machine joint toute autre |
 | `test_cicflowmeter.py` | découpage d'un pcap en fenêtres, remplissage de la colonne Label |
 | `test_datasets.py` | programmes, variantes, étiquetage par fenêtres |
-| `test_training.py` | features, découpages, entraînement, métriques |
+| `test_training.py` | features, entraînement, métriques |
 | `test_detection.py` | fenêtres, verdicts, vérité terrain |
-| `test_benign.py` | type d'un service, nom DNS, sessions de l'agent, requête DNS |
-| `test_settings.py` | origines autorisées ; chaque rôle a son Dockerfile |
+| `test_benign.py` | sessions possibles de l'agent bénin |
+| `test_settings.py` | origines autorisées ; chaque topologie a son `docker-compose.yml` et son `topology.json` |
+| `test_traffic_pause.py` | pause de l'agent bénin de la source pendant une attaque |
 
 ---
 
@@ -494,21 +482,19 @@ cd code && npm run build    # l'interface compile
 | `uvicorn: command not found` | activer l'environnement : `source .venv/bin/activate` |
 | `address already in use` | un moteur tourne déjà sur le port 8000 |
 | « le moteur a refusé la connexion » | moteur lancé avant une mise à jour, sans `--reload` : le relancer |
-| Premier déploiement très long | téléchargement et construction des images, une seule fois |
-| « … déjà utilisé sur la machine hôte » | le réseau d'un switch chevauche un réseau Docker existant : le changer |
+| Premier démarrage très long | téléchargement et construction des images, une seule fois |
+| `docker compose a échoué : … Pool overlaps` | un autre réseau Docker utilise déjà ce sous-réseau : le supprimer (`docker network ls`) |
 | Vite refuse de démarrer | Node trop ancien : `cd code && nvm install && nvm use` |
 | Import introuvable au build, `@rolldown/binding-…` | `node_modules` périmé : `npm ci` |
-| Un service ne répond pas juste après la validation | MySQL met quelques secondes à démarrer |
-| Un outil ajouté à un Dockerfile est absent | les images sont reconstruites au déploiement : ■ Arrêter puis ✔ Valider |
-| `curl: (60)` en HTTPS | certificat auto-signé : `-k` |
-| Service « simulé » dans le journal du serveur | son nom n'est pas l'un des 8 services réels, ou son démarrage a échoué |
+| Un outil ajouté à un Dockerfile est absent | les images sont reconstruites au démarrage : ■ Arrêter puis ▶ Démarrer |
+| Un service ne répond pas | journal du serveur : `docker logs idslab-server-1-1` |
 | Aucun flux d'attaque dans un dataset | la sonde ne surveille pas le switch traversé par l'attaque |
 
 Nettoyage manuel complet, moteur arrêté :
 
 ```bash
 docker rm -f $(docker ps -aq --filter label=idslab.managed=true)
-docker network rm $(docker network ls -q --filter label=idslab.managed=true)
+docker compose -p idslab down
 docker image rm $(docker image ls -q 'idslab/*')
 ```
 
@@ -533,22 +519,22 @@ docker image rm $(docker image ls -q 'idslab/*')
 
 ## 15. API et formats
 
-Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les trois tâches
-longues (déploiement, dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}`, que
-l'interface redemande toutes les secondes (polling), et s'annulent par `POST /api/jobs/{id}/cancel`. Toute erreur destinée à l'utilisateur est
-une `UserError` (`errors.py`) : réponse `{ "errors": [message…] }` avec son code HTTP (404 ou 409).
+Toutes les routes sont décrites en tête de [`backend/app/main.py`](../backend/app/main.py). Les deux tâches
+longues (dataset, entraînement) se suivent par la même route, `GET /api/jobs/{id}`, que l'interface redemande
+toutes les secondes (polling), et s'annulent par `POST /api/jobs/{id}/cancel`. Une erreur prévue est une
+`HTTPException` : réponse `{ "detail": "message" }` avec son code HTTP.
 
-**Topologie (JSON, version 2)** : l'interface envoie `{ version, nodes, networks, links }`. Exemples complets
-dans `examples/topologies/` ; ajouter un fichier ajoute un exemple au menu, et `test_examples.py` le vérifie.
+**Topologie dessinée** (`topologies/<id>/topology.json`) : les identifiants et adresses sont ceux du
+`docker-compose.yml`.
 
 ```json
-{ "version": 2,
-  "nodes": [{ "id": "pc-1", "type": "pc", "name": "PC-1", "position": { "x": 120, "y": 80 }, "config": { "gateway": "10.0.1.1" } }],
-  "networks": [{ "id": "switch-1", "name": "Switch-1", "position": { "x": 120, "y": 240 }, "subnet": "10.0.1.0/24" }],
-  "links": [{ "id": "link-1", "node": "pc-1", "network": "switch-1", "interface": "eth0", "port": "Fa0/1", "ip": "10.0.1.10", "mask": "255.255.255.0" }] }
+{ "name": "Petit LAN", "description": "…",
+  "nodes": [{ "id": "pc-1", "type": "pc", "name": "PC-1", "x": 300, "y": -140 },
+            { "id": "switch-1", "type": "switch", "name": "Switch-1", "subnet": "10.0.1.0/24", "x": 0, "y": 0 }],
+  "links": [{ "node": "pc-1", "switch": "switch-1", "ip": "10.0.1.11" }] }
 ```
 
-Types de nœuds : `pc`, `server` (`config.services`), `router` (`config.routes`), `ids` (`config.monitoredSegment`).
+Types : `pc`, `server`, `router`, `ids`, `switch`.
 
 **Dataset sauvegardé** : `backend/data/datasets/<id>/` avec `flows.csv` (une ligne par flux, colonnes CICFlowMeter,
 colonne `Label`), `capture.pcap` et `meta.json` (programme, fenêtres des attaques, décompte des étiquettes).

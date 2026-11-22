@@ -2,8 +2,7 @@ import re
 
 import pytest
 
-from app.planner import TYPE_LABELS
-from app.settings import DOCKER_DIR, LOCAL_ORIGIN_REGEX
+from app.settings import LOCAL_ORIGIN_REGEX, TOPOLOGIES_DIR
 
 
 def origin_allowed(origin):
@@ -21,6 +20,9 @@ def test_other_origins_refused(origin):
     assert not origin_allowed(origin)
 
 
-@pytest.mark.parametrize("role", [*TYPE_LABELS, "toolbox"])
-def test_every_role_has_a_dockerfile(role):
-    assert (DOCKER_DIR / role / "Dockerfile").is_file()
+def test_every_topology_has_a_compose_file_and_a_drawing():
+    folders = [d for d in TOPOLOGIES_DIR.iterdir() if d.is_dir()]
+    assert len(folders) == 3
+    for folder in folders:
+        assert (folder / "docker-compose.yml").is_file()
+        assert (folder / "topology.json").is_file()
