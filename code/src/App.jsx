@@ -37,17 +37,6 @@ export default function App() {
   const [datasetsOpen, setDatasetsOpen] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
 
-  // Détection : équipements impliqués dans une alerte des 15 dernières secondes
-  // (source et cible, entourés de rouge sur le schéma) et sonde en cours d'analyse.
-  const nodeByIp = new Map(topology.links.map((l) => [l.ip, l.node]));
-  const alertIds = new Set();
-  for (const ev of detection.events) {
-    if (ev.outcome === 'alert' && ev.time > Date.now() / 1000 - 15) {
-      [ev.src, ev.dst].forEach((ip) => nodeByIp.has(ip) && alertIds.add(nodeByIp.get(ip)));
-    }
-  }
-  const watchingIds = new Set(detection.running && detection.ids ? [detection.ids.node] : []);
-
   return (
     <div className="app">
       <Toolbar
@@ -70,7 +59,7 @@ export default function App() {
 
       <main className="workspace">
         <div className="workspace__center">
-          <TopologyCanvas topology={topology} onlineIds={lab.onlineIds} alertIds={alertIds} watchingIds={watchingIds} />
+          <TopologyCanvas topology={topology} onlineIds={lab.onlineIds} />
           <p className="workspace__description">{topology.description}</p>
         </div>
 

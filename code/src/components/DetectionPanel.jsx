@@ -6,6 +6,7 @@ import { devicesOf, namesByIp } from '../utils/topology.js';
 // Issue d'un verdict comparé à la vérité terrain (voir backend/app/detection.py).
 const OUTCOMES = {
   alert: { icon: '✔', label: 'Attaque détectée', className: 'det-event--detected' },
+  false_alarm: { icon: '⚠', label: 'Fausse alerte', className: 'det-event--false' },
   missed: { icon: '✕', label: 'Manquée', className: 'det-event--missed' },
 };
 
@@ -94,7 +95,11 @@ export default function DetectionPanel({ detection, models, topology, onClose })
           <div className="det-kpis">
             <div className="det-kpi">
               <span className="det-kpi__value">{stats.alerts}</span>
-              <span className="det-kpi__label">flux détectés comme attaque</span>
+              <span className="det-kpi__label">attaques détectées</span>
+            </div>
+            <div className="det-kpi">
+              <span className="det-kpi__value det-kpi__value--warn">{stats.false_alarms ?? 0}</span>
+              <span className="det-kpi__label">fausses alertes (bénin flagué attaque)</span>
             </div>
             <div className="det-kpi">
               <span className="det-kpi__value">{stats.missed}</span>
@@ -116,8 +121,10 @@ export default function DetectionPanel({ detection, models, topology, onClose })
             </ul>
           )}
           <p className="field__hint">
-            « Manqué » n'est possible que pour les attaques lancées depuis ⚡ Simulation ou 🗂 Datasets : le moteur ne connaît
-            pas celles tapées dans un terminal. Le taux de fausses alertes se lit dans le rapport du modèle (🧠 IDS).
+            Le modèle ne voit que les paquets, jamais les étiquettes : il devine. Une <strong>fausse alerte</strong> est
+            du trafic bénin (lancé depuis ⚡ Simulation) qu'il a classé « attaque » à tort. « Manqué » et « fausse alerte »
+            ne sont connus que pour le trafic lancé depuis l'interface ; une attaque tapée dans un terminal reste affichée
+            « attaque détectée ».
           </p>
         </section>
       )}

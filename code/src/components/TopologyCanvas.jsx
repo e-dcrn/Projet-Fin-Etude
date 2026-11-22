@@ -13,14 +13,13 @@ function linesOf(topology, node) {
 }
 
 /**
- * Schéma de la topologie (en lecture seule) : les équipements, les câbles, et
- * pendant la détection les équipements en alerte (entourés de rouge).
- * `onlineIds`, `alertIds`, `watchingIds` : ensembles d'identifiants d'équipements.
+ * Schéma de la topologie (en lecture seule) : les équipements et les câbles.
+ * `onlineIds` : identifiants des équipements allumés.
  *
  * Un clic sur un équipement (hors switch) ouvre une petite popup avec la commande
  * `docker exec` pour ouvrir un terminal dessus.
  */
-export default function TopologyCanvas({ topology, onlineIds, alertIds, watchingIds }) {
+export default function TopologyCanvas({ topology, onlineIds }) {
   const [selected, setSelected] = useState(null); // équipement cliqué, pour la popup terminal
   const flowRef = useRef(null);  // instance React Flow (pour recadrer)
   const wrapRef = useRef(null);  // conteneur, observé pour recadrer à chaque redimensionnement
@@ -44,8 +43,6 @@ export default function TopologyCanvas({ topology, onlineIds, alertIds, watching
       name: n.name,
       lines: linesOf(topology, n),
       online: onlineIds.has(n.id),
-      alert: alertIds.has(n.id),
-      watching: watchingIds.has(n.id),
     },
   }));
   const edges = topology.links.map((l) => ({

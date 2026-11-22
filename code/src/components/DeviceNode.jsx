@@ -8,15 +8,14 @@ import { DEVICE_TYPES } from '../config/deviceTypes.js';
  * place deux, invisibles, au centre de l'icône.
  *
  * `data` (préparé par TopologyCanvas) : type, name, lines (adresses ou réseau),
- * online (conteneur allumé), alert (impliqué dans une alerte récente), watching
- * (sonde IDS en cours d'analyse).
+ * online (conteneur allumé).
  */
 export default function DeviceNode({ data }) {
   const { color, Icon, description } = DEVICE_TYPES[data.type];
 
   return (
     <div
-      className={`device-node${data.alert ? ' device-node--alert' : ''}${data.watching ? ' device-node--watching' : ''}`}
+      className="device-node"
       style={{ '--device-color': color }}
       title={description}
     >

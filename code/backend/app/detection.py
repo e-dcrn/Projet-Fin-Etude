@@ -14,11 +14,13 @@ Chaîne de détection, par fenêtres de WINDOW_SEC secondes :
   2. chaque fenêtre terminée est convertie en flux par un conteneur
      CICFlowMeter permanent (mêmes features que les datasets) ;
   3. le modèle classe chaque flux (bénin / attaque) ;
-  4. tout flux classé ATTACK est une alerte, que l'attaque soit connue ou non
-     (un nmap tapé dans un terminal en est une comme une autre). La VÉRITÉ TERRAIN
-     (attaques lancées depuis l'interface : source, cible, fenêtre de temps) sert
-     seulement à repérer ce que le modèle a manqué. Le taux de fausses alertes se
-     mesure à l'entraînement, sur des données étiquetées.
+  4. le modèle ne voit QUE les paquets (jamais les étiquettes) : il devine. La VÉRITÉ
+     TERRAIN (ce qui a été lancé depuis l'interface : attaques avec source/cible/fenêtre,
+     et PC émettant du trafic bénin) sert à qualifier son verdict après coup :
+       - flux classé ATTACK correspondant à une attaque lancée  → attaque détectée ;
+       - flux classé ATTACK sur du trafic bénin lancé depuis l'UI → FAUSSE ALERTE ;
+       - flux classé ATTACK d'origine inconnue (terminal)        → affiché comme détecté ;
+       - flux classé BÉNIN correspondant à une attaque lancée     → attaque manquée.
 
 Limite connue : un flux à cheval sur deux fenêtres est vu en deux morceaux
 (features un peu différentes de celles d'un flux complet). Les flux courts
@@ -53,10 +55,19 @@ WINDOW_DIR = "/tmp/ids"
 WINDOW_RE = re.compile(r"^w-(\d+)\.pcap$")
 
 
-def outcome_of(predicted_attack: bool, truly_attack: bool) -> str:
-    """Issue d'un flux : le verdict du modèle prime ; la vérité terrain ne révèle que les attaques manquées."""
+def outcome_of(predicted_attack: bool, truly_attack: bool, known_benign: bool) -> str:
+    """Issue d'un flux, en croisant le verdict du modèle et la vérité terrain.
+
+    - modèle = attaque, attaque réellement lancée      → « alert »        (vraie détection)
+    - modèle = attaque, trafic bénin lancé depuis l'UI → « false_alarm »  (fausse alerte)
+    - modèle = attaque, origine inconnue (terminal)    → « alert »        (on ne peut pas prouver que c'est faux)
+    - modèle = bénin,  attaque réellement lancée       → « missed »       (attaque manquée)
+    - modèle = bénin,  reste                            → « benign »
+    """
     if predicted_attack:
-        return "alert"
+        if truly_attack:
+            return "alert"
+        return "false_alarm" if known_benign else "alert"
     return "missed" if truly_attack else "benign"
 
 
@@ -76,12 +87,13 @@ class Session:
     running: bool = True
     error: Optional[str] = None
     stats: Dict[str, int] = field(default_factory=lambda: {
-        "flows": 0, "alerts": 0, "missed": 0, "benign": 0,
+        "flows": 0, "alerts": 0, "false_alarms": 0, "missed": 0, "benign": 0,
     })
     by_attack: Dict[str, Dict[str, int]] = field(default_factory=dict)  # flux détectés / manqués, par type d'attaque
     events: Deque[dict] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
     attacks: Dict[str, AttackRun] = field(default_factory=dict)  # vérité terrain, par conteneur d'attaque
     finished: set = field(default_factory=set)                   # attaques terminées (fenêtre définitive)
+    benign_ips: set = field(default_factory=set)                 # IP des PC avec un agent bénin lancé (trafic « bénin connu »)
 
 
 class DetectionManager:
@@ -172,8 +184,8 @@ class DetectionManager:
         """
         events = list(reversed(session.events))
         missed = [e for e in events if e["outcome"] == "missed"][:limit // 2]
-        alerts = [e for e in events if e["outcome"] == "alert"][:limit - len(missed)]
-        return sorted(missed + alerts, key=lambda e: e["time"] or 0, reverse=True)
+        flagged = [e for e in events if e["outcome"] in ("alert", "false_alarm")][:limit - len(missed)]
+        return sorted(missed + flagged, key=lambda e: e["time"] or 0, reverse=True)
 
     # ------------------------------------------------------------------ boucle d'analyse
 
@@ -234,15 +246,20 @@ class DetectionManager:
         predicted = model.predict(features)
         confidence = model.predict_proba(features).max(axis=1)
         runs = self._known_attacks(session)
+        benign_ips = self._benign_ips(session)
 
         stats = session.stats
         for row, label, conf in zip(frame.to_dict("records"), predicted, confidence):
             src, dst = str(row.get("Src IP", "")), str(row.get("Dst IP", ""))
             moment = parse_timestamp(str(row.get("Timestamp", "")))
             truth = next((r.subcategory for r in runs if r.matches(src, dst, moment)), BENIGN)
-            outcome = outcome_of(label != BENIGN, truth != BENIGN)
+            # Trafic « bénin connu » : un flux dont une extrémité est un PC où tourne
+            # (ou a tourné) un agent bénin lancé depuis le panneau Simulation.
+            known_benign = src in benign_ips or dst in benign_ips
+            outcome = outcome_of(label != BENIGN, truth != BENIGN, known_benign)
             stats["flows"] += 1
-            stats[{"alert": "alerts", "missed": "missed", "benign": "benign"}[outcome]] += 1
+            stats[{"alert": "alerts", "false_alarm": "false_alarms",
+                   "missed": "missed", "benign": "benign"}[outcome]] += 1
             if truth != BENIGN:
                 counters = session.by_attack.setdefault(truth, {"detected": 0, "missed": 0})
                 counters["detected" if outcome == "alert" else "missed"] += 1
@@ -281,6 +298,19 @@ class DetectionManager:
                 if helper.status != "running":
                     session.finished.add(helper.id)
         return list(session.attacks.values())
+
+    def _benign_ips(self, session: Session) -> set:
+        """IP des PC où un agent bénin a été lancé depuis l'interface (trafic « bénin connu »).
+
+        On accumule sur toute la session : même si l'agent est mis en pause le temps
+        d'une attaque, son IP reste connue comme source de trafic bénin.
+        """
+        for helper in self.lab.helpers("traffic"):
+            device = self.lab.find_device(helper.labels.get(f"{PREFIX}.attached", ""))
+            ip = self.traffic.device_ip(device) if device is not None else ""
+            if ip:
+                session.benign_ips.add(ip)
+        return session.benign_ips
 
     @staticmethod
     def _cleanup(session: Session) -> None:
