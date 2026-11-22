@@ -59,9 +59,6 @@ export const stopBenign = (node) =>
 export const runScenario = (source, attack, target, speed = 'fast') =>
   request('/lab/scenarios', { method: 'POST', body: JSON.stringify({ source, attack, target, speed }) });
 
-/** Résultat (sortie) d'un scénario terminé ou en cours. */
-export const fetchScenarioLogs = (id) => request(`/lab/scenarios/${encodeURIComponent(id)}/logs`);
-
 /** Interrompt un scénario en cours (id), ou tous les scénarios en cours (sans id). */
 export const stopScenarios = (id) =>
   request(`/lab/scenarios/stop${id ? `?id=${encodeURIComponent(id)}` : ''}`, { method: 'POST' });

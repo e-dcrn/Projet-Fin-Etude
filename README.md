@@ -14,7 +14,7 @@ Réseau et vrais services → Trafic bénin et attaques → Datasets étiquetés
 
 **État** : la chaîne ci-dessus fonctionne. Première attaque contre le modèle implémentée : **évasion**, en deux
 variantes — par temporisation (inefficace contre un détecteur par-flux) et par mimétisme du trafic bénin
-(efficace : la force brute FTP furtive tombe à 11,5 % de détection). Voir
+(efficace : la force brute FTP furtive tombe à 9,4 % de détection). Voir
 [`code/docs/rapports/rapport_evasion.md`](code/docs/rapports/rapport_evasion.md).
 
 ## Organisation du dépôt
@@ -79,8 +79,9 @@ Les boutons sont dans la barre d'outils. Un bouton reste jaune tant que ce qu'il
 5. **Trafic bénin** : **⚡ Simulation** → **▶ Démarrer** (section Trafic bénin). Les flux analysés augmentent,
    avec peu ou pas d'alertes.
 6. **Attaque** : **⚡ Simulation** → source, attaque, cible, vitesse → **⚡ Lancer l'attaque**. Chaque flux classé
-   attaque s'affiche comme détecté, les flux manqués sont signalés, et les équipements impliqués sont entourés
-   de rouge. Quand l'attaque se termine, sa carte affiche le **résultat de l'attaque** (vert si elle a abouti) :
+   attaque s'affiche comme détecté et les flux manqués sont signalés ; un flux bénin classé attaque à tort
+   apparaît en **fausse alerte** (ambre), avec son compteur dans le bilan de détection. Quand l'attaque se
+   termine, sa carte affiche le **résultat de l'attaque** (vert si elle a abouti) :
    mot de passe trouvé, ports ouverts ou machines actives. Ce résultat est **indépendant de la détection** :
    une attaque peut réussir tout en passant inaperçue — c'est tout l'intérêt d'une évasion.
 7. **Évasions** (la cible est le Serveur, qui expose un FTP) :

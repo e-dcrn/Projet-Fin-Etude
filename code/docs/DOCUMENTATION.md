@@ -260,7 +260,7 @@ du bon : une erreur isolée n'est pas une force brute, et le modèle doit le sav
 | Identification des services | `nmap -sV --top-ports 100` | service-detection |
 | Scan approfondi | `nmap -A` | aggressive-scan |
 | Force brute SSH, FTP | `hydra -l labuser -P <liste> -f` | ssh-patator, ftp-patator |
-| **Force brute FTP (furtive, évasion)** | `ftplib` + commandes de remplissage, cadence humaine | ftp-patator-stealth |
+| **Force brute FTP (furtive, évasion)** | `ftplib` + commandes de remplissage (flux maquillés) | ftp-patator-stealth |
 
 La dernière ligne est une **attaque d'évasion par mimétisme** (Okada) : au lieu de hydra, elle utilise le même
 client FTP que le trafic bénin (`ftplib`) et **étoffe chaque essai** avec des commandes FTP autorisées avant
@@ -389,20 +389,23 @@ l'attaque la plus volumineuse et peut masquer une attaque ratée.
 1. `tcpdump` tourne sur la sonde et écrit un fichier par fenêtre de 5 s ;
 2. chaque fenêtre terminée passe dans un conteneur CICFlowMeter permanent ;
 3. le modèle classe chaque flux ;
-4. tout flux classé `ATTACK` est affiché comme **attaque détectée**, que le moteur connaisse l'attaque ou non ;
-5. la vérité terrain (attaques lancées depuis ⚡ Simulation ou 🗂 Datasets : source, cible, début, fin) sert seulement à
-   repérer les flux d'attaque que le modèle a **manqués**, et à donner le score par attaque.
+4. le modèle ne voit que les paquets (jamais les étiquettes) : il devine bénin / attaque ;
+5. la vérité terrain (ce qui est lancé depuis ⚡ Simulation ou 🗂 Datasets : attaques avec source/cible/fenêtre,
+   et PC émettant du trafic bénin) qualifie le verdict après coup :
+   - flux classé `ATTACK` correspondant à une attaque lancée → **attaque détectée** ;
+   - flux classé `ATTACK` sur du trafic bénin lancé depuis l'UI → **fausse alerte** ;
+   - flux classé `ATTACK` d'origine inconnue (terminal) → affiché **attaque détectée** (on ne peut pas prouver que c'est faux) ;
+   - flux classé bénin correspondant à une attaque lancée → attaque **manquée**.
 
 L'agent bénin de la source est suspendu pendant son attaque, comme dans un dataset, puis relancé à la fin : sans
 cela, ses sessions seraient comptées comme des attaques manquées.
 
-Le modèle ne reconnaît que ce qu'il a appris : le panneau signale une attaque absente de l'entraînement.
+Le modèle ne reconnaît que ce qu'il a appris : une attaque jamais vue à l'entraînement peut passer inaperçue.
 
-Une attaque lancée en dehors de l'interface (par exemple `docker exec`) apparaît donc normalement si elle est repérée, mais ne peut pas être comptée comme
-manquée. Le taux de fausses alertes se mesure dans le rapport d'entraînement, sur des données étiquetées.
+Les **fausses alertes** (trafic bénin classé attaque) apparaissent en direct, avec leur compteur dans le bilan ;
+le taux global se mesure aussi dans le rapport d'entraînement, sur des données étiquetées.
 
 Le bilan compte des **flux**, pas des attaques : une attaque de 200 flux dont 190 sont reconnus donne 190/200.
-Les équipements impliqués dans une alerte récente sont entourés de rouge.
 
 Le rapport d'entraînement donne des chiffres reproductibles, la détection montre le comportement en direct.
 

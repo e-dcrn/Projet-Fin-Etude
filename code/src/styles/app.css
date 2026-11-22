@@ -253,10 +253,6 @@ body { background: var(--bg); }
 .scenario--running { background: #fee2e2; color: #991b1b; }
 .scenario--done { background: #e2e8f0; color: #475569; }
 .scenario__meta { margin: 3px 0 6px; font-size: 11px; color: var(--text-muted); }
-.scenario__log {
-  margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto;
-  background: #0f172a; color: #e2e8f0; border-radius: 6px; font: 11px/1.5 var(--mono); white-space: pre;
-}
 
 /* Décompte des flux par étiquette (datasets) */
 .flow-counts { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -340,7 +336,7 @@ body { background: var(--bg); }
    ========================================================================== */
 .det-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; }
 .det-status .traffic-dot { margin-top: 5px; }
-.det-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.det-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .det-kpi { display: flex; flex-direction: column; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fafc; }
 .det-kpi__value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .det-kpi__label { font-size: 11px; color: var(--text-muted); }

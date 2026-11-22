@@ -121,7 +121,8 @@ taille d'une session bénigne : avant (et après) l'essai de mot de passe, le cl
 autorisées sans authentification — les unes portant une **grande ligne d'arguments** (`NOOP <~120–500 octets>`,
 octets dans le sens aller), les autres recevant une **réponse longue** (`HELP`, `FEAT`, octets dans le sens
 retour). Les features de taille du flux montent alors dans la zone bénigne. Code : `ftp-bruteforce-stealth` dans
-`backend/app/traffic.py` (fonction `pad`). On garde `ftplib` et la cadence humaine entre les essais.
+`backend/app/traffic.py` (fonction `pad`). On garde `ftplib` ; les essais s'enchaînent sans pause entre eux (le
+délai *entre* les flux n'entre pas dans les features par-flux du modèle, seule compte la forme de chaque flux).
 
 **Protocole.** Topologie « Petit LAN ». Deux datasets (sans variantes) :
 - **Entraînement** : bénin (HTTP/SSH/FTP/ICMP, soutenu) + scan de ports + force brute FTP **normale** (hydra) ;
@@ -144,8 +145,9 @@ Fausses alertes sur le bénin = **0,26 %**.
 La différence ne tient ni à la cible, ni au protocole, ni au nombre d'essais, mais uniquement à la **forme des
 flux dans les features utilisées par le modèle** — exactement l'évasion Okada réalisée en problem-space.
 
-**Coût de l'attaque.** Lenteur (cadence humaine, ~1 essai / 2,5 s au lieu d'une rafale) et octets de remplissage
-en plus à chaque tentative. On ne « casse » pas le modèle : on reste sous son seuil en ressemblant au bénin.
+**Coût de l'attaque.** Des octets de remplissage en plus à chaque tentative, et une exécution séquentielle (un
+flux par essai, là où hydra teste en parallèle). On ne « casse » pas le modèle : on reste sous son seuil en
+ressemblant au bénin.
 
 ## Conclusion
 

@@ -9,7 +9,6 @@ API HTTP du moteur de simulation.
   POST   /api/lab/traffic/benign          démarre le trafic de fond sur un équipement
   DELETE /api/lab/traffic/benign          arrête le trafic de fond (tous, ou ?node=)
   POST   /api/lab/scenarios               lance une attaque → description du scénario
-  GET    /api/lab/scenarios/{id}/logs     résultat (sortie) d'un scénario
   POST   /api/lab/scenarios/stop          interrompt les scénarios en cours (?id=… pour un seul)
   DELETE /api/lab/scenarios               supprime les scénarios terminés
 
@@ -176,11 +175,6 @@ def run_scenario(req: ScenarioRequest):
 @app.post("/api/lab/scenarios/stop")
 def stop_scenarios(id: Optional[str] = None):
     return {"stopped": traffic.stop_scenarios(id)}
-
-
-@app.get("/api/lab/scenarios/{scenario_id}/logs")
-def scenario_logs(scenario_id: str):
-    return {"logs": traffic.scenario_logs(scenario_id)}
 
 
 @app.delete("/api/lab/scenarios")

@@ -27,7 +27,6 @@ export default function DetectionPanel({ detection, models, topology, onClose })
   const { busy, error, act: guard } = useAction();
 
   const chosenModel = model || models[0]?.id || '';
-  const modelMeta = models.find((m) => m.id === (detection.running ? detection.model?.id : chosenModel));
   const name = (ip) => ipNames.get(ip) ?? ip;
 
   const { running, stats } = detection;
@@ -115,16 +114,12 @@ export default function DetectionPanel({ detection, models, topology, onClose })
               {detection.byAttack.map((a) => (
                 <li key={a.label}>
                   <strong>{a.label}</strong> : {a.detected}/{a.detected + a.missed} flux détectés
-                  {modelMeta?.train?.attacks && !modelMeta.train.attacks[a.label] && ' (attaque absente de l\'entraînement)'}
                 </li>
               ))}
             </ul>
           )}
           <p className="field__hint">
-            Le modèle ne voit que les paquets, jamais les étiquettes : il devine. Une <strong>fausse alerte</strong> est
-            du trafic bénin (lancé depuis ⚡ Simulation) qu'il a classé « attaque » à tort. « Manqué » et « fausse alerte »
-            ne sont connus que pour le trafic lancé depuis l'interface ; une attaque tapée dans un terminal reste affichée
-            « attaque détectée ».
+            Le modèle ne voit que les paquets, jamais les étiquettes : il devine.
           </p>
         </section>
       )}

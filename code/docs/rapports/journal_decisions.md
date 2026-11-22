@@ -163,6 +163,10 @@ des fichiers Docker Compose écrits à la main.
 | 94 | **Démarrage du réseau synchrone** (`POST /api/lab` exécute `docker compose up`) au lieu d'une tâche de fond suivie étape par étape. | Les tâches de fond restent pour les datasets et l'entraînement, vraiment longs. | décision de l'équipe | ✅ |
 | 95 | **Entraînement : random forest seul, test sur datasets séparés seulement** (plus de choix d'algorithme ni de découpage temporel). | Une seule option réelle ; les variantes sont l'évaluation de référence. | décision de l'équipe | ✅ |
 | 96 | **Erreurs : `HTTPException` de FastAPI** au lieu des classes `UserError` / `NotFoundError`. | Un mécanisme standard de moins à expliquer. | `main.py` | ✅ |
+| 97 | **Résultat de l'attaque** affiché sur chaque scénario terminé (mot de passe trouvé, ports ouverts, machines actives), **indépendant de la détection**. Le bouton « Voir le résultat » (sortie brute) est retiré, devenu inutile. | Montrer qu'une attaque peut réussir tout en étant furtive : réussite ≠ détection. | `traffic.py`, `SimulationPanel.jsx` | ✅ |
+| 98 | **Détection : les fausses alertes sont distinguées en direct.** Le trafic bénin lancé depuis ⚡ Simulation sert aussi de vérité terrain ; un flux bénin classé attaque est une **fausse alerte** (et non « attaque détectée »). Compteur dédié dans le bilan. | Lever la confusion « je ne lance rien et il voit une attaque » : le modèle devine à partir des paquets seuls. | `detection.py`, `DetectionPanel.jsx` | ✅ |
+| 99 | **Attaque furtive accélérée** : liste de mots de passe réduite (15) et plus de pause entre les essais. | Le délai *entre* les flux n'entre pas dans les features par-flux : l'évasion est intacte, la démo passe de ~500 s à ~1 min. | `traffic.py` | ✅ |
+| 100 | **Simplifications d'interface** : overlays rouge/bleu sur le schéma retirés, message « attaque absente de l'entraînement » retiré, clic sur un équipement → popup avec la commande `docker exec` pour ouvrir un terminal. | Garder à l'écran ce qui sert à la démo. | `src/components/` | ✅ |
 
 ## 7. Questions encore ouvertes
 

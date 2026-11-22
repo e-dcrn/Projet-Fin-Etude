@@ -37,7 +37,6 @@ export default function SimulationPanel({ traffic, topology, onClose }) {
   const [attackId, setAttackId] = useState('');
   const [target, setTarget] = useState('');
   const [speed, setSpeed] = useState('fast');
-  const [log, setLog] = useState(null);
 
   const { busy, error, act } = useAction();
   const attack = traffic.attacks.find((a) => a.id === attackId);
@@ -46,12 +45,6 @@ export default function SimulationPanel({ traffic, topology, onClose }) {
   const startBenign = () =>
     act(() => Promise.all([...emitters].map((id) =>
       traffic.startBenign(id, profile, benignTargets(topology, id), 'toutes les machines', [...kinds]))));
-
-  const showLog = (id) =>
-    act(async () => {
-      const { logs } = await traffic.fetchLogs(id);
-      setLog({ id, text: logs || '(aucune sortie pour le moment)' });
-    });
 
   return (
     <aside className="traffic-panel" aria-label="Simulation">
@@ -102,7 +95,9 @@ export default function SimulationPanel({ traffic, topology, onClose }) {
         </label>
 
         <div className="traffic-actions">
-          <button type="button" className="btn btn--primary" onClick={startBenign} disabled={busy || emitters.size === 0 || kinds.size === 0}>
+          <button type="button" className="btn btn--primary" onClick={startBenign}
+            disabled={busy || emitters.size === 0 || kinds.size === 0 || traffic.benign.length > 0}
+            title={traffic.benign.length > 0 ? 'Trafic bénin déjà en cours (arrêtez-le d\'abord)' : undefined}>
             ▶ Démarrer
           </button>
           <button type="button" className="btn" onClick={() => act(() => traffic.stopBenign())} disabled={busy || traffic.benign.length === 0}>
@@ -195,17 +190,13 @@ export default function SimulationPanel({ traffic, topology, onClose }) {
                   </div>
                 )}
                 {s.command && <code className="scenario__cmd">{s.command}</code>}
-                <div className="scenario__actions">
-                  {s.status === 'running' && (
+                {s.status === 'running' && (
+                  <div className="scenario__actions">
                     <button type="button" className="btn btn--xs" onClick={() => act(() => traffic.stopScenarios(s.id))} disabled={busy}>
                       ■ Arrêter
                     </button>
-                  )}
-                  <button type="button" className="btn btn--light btn--xs" onClick={() => showLog(s.id)} disabled={busy}>
-                    Voir le résultat
-                  </button>
-                </div>
-                {log?.id === s.id && <pre className="scenario__log">{log.text}</pre>}
+                  </div>
+                )}
               </li>
             );
           })}

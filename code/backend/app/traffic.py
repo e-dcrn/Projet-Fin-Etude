@@ -51,6 +51,10 @@ TARGET_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$")
 # Assez longue pour produire des dizaines de flux, de quoi entraîner un modèle.
 _COMMON = ["admin", "123456", "root", "toor", "qwerty", "password", "letmein", "welcome", "dragon", "monkey"]
 WORDLIST = [*_COMMON, *(f"{w}{n}" for w in _COMMON for n in (1, 12, 2026, 99, 7)), LAB_PASSWORD]
+# Liste réduite pour la version FURTIVE : elle est séquentielle (un flux par essai),
+# donc une liste courte garde la démo rapide. Le vrai mot de passe reste en dernier ;
+# l'évasion se juge sur la FORME des flux, pas sur leur nombre.
+STEALTH_WORDLIST = [*WORDLIST[:14], LAB_PASSWORD]
 
 # Vitesses d'attaque. Faire varier le rythme diversifie les flux d'un dataset.
 #   nmap  : modèle de temporisation -T (parfois --scan-delay / --max-rate) ;
@@ -111,7 +115,8 @@ def _hydra_cmd(service):
 # d'arguments (plusieurs centaines d'octets) et d'autres (HELP, FEAT) reçoivent une réponse
 # longue : la taille moyenne des paquets et le débit du flux montent dans la zone bénigne.
 # Le modèle par flux ne le distingue plus d'une session normale. On garde le même client que
-# l'agent bénin (ftplib) et une cadence humaine entre les tentatives.
+# l'agent bénin (ftplib). Les essais s'enchaînent sans pause : seule la forme de chaque flux
+# compte pour le modèle, pas le délai entre eux.
 _FTP_STEALTH = r'''
 import ftplib, random, sys, time
 TARGET = sys.argv[1]
@@ -164,7 +169,8 @@ for pw in WORDLIST:
     if attempt(pw):
         found = pw
         break
-    think(1.0, 4.0)  # cadence humaine, pas une rafale hydra
+    # Pas de pause entre les essais : le délai ENTRE les flux n'a aucun effet sur
+    # les features par-flux dont dépend l'évasion (seule compte la forme de chaque flux).
 # Verdict lu par le backend (attack_result) pour afficher si l'attaque a abouti.
 if found:
     print("RESULTAT: OK", USER, found)
@@ -174,8 +180,8 @@ else:
 
 
 def _ftp_stealth_cmd(target, speed):
-    """Force brute FTP mimant le client bénin (la vitesse est ignorée : cadence « humaine »)."""
-    script = _FTP_STEALTH.replace("%USER%", repr(LAB_USER)).replace("%WORDLIST%", repr(list(WORDLIST)))
+    """Force brute FTP mimant le client bénin (la vitesse est ignorée ; liste réduite)."""
+    script = _FTP_STEALTH.replace("%USER%", repr(LAB_USER)).replace("%WORDLIST%", repr(list(STEALTH_WORDLIST)))
     return ["python3", "-c", script, target]
 
 
@@ -222,7 +228,7 @@ ATTACKS = {
     "ftp-bruteforce-stealth": {
         "name": "Force brute FTP (furtive, évasion)", "needs": "ip", "tool": "python-ftp", "service": "ftp",
         "description": ("Force brute FTP qui donne à chaque essai la forme d'une session bénigne "
-                        "(client ftplib, commandes de remplissage, cadence humaine) : le modèle par flux "
+                        "(client ftplib, commandes de remplissage) : le modèle par flux "
                         "ne la distingue plus du trafic normal (évasion inspirée d'Okada)."),
         "label": ("force-brute", "ftp-patator-stealth"), "command": _ftp_stealth_cmd,
     },
@@ -236,7 +242,7 @@ def command_preview(attack_id, speed, target="<cible>"):
         return (f"hydra -l {LAB_USER} -P <{len(WORDLIST)} mots de passe> {SPEEDS[speed]['hydra']} "
                 f"-f {attack['service']}://{target}")
     if attack["tool"] == "python-ftp":
-        return f"python3 ftp_stealth.py {target}  # {len(WORDLIST)} essais à cadence humaine"
+        return f"python3 ftp_stealth.py {target}  # {len(STEALTH_WORDLIST)} essais, flux maquillés"
     return " ".join(attack["command"](target, speed))
 
 
@@ -401,13 +407,6 @@ class TrafficManager:
         threading.Thread(target=self._resume_after, args=(helper, source_id), daemon=True).start()
         log.info("Scénario « %s » lancé depuis %s vers %s", attack_id, self.name_of(device), target)
         return self._scenario_info(helper)
-
-    def scenario_logs(self, scenario_id):
-        """Sortie d'un scénario (le résultat du scan), pour l'afficher dans l'interface."""
-        for helper in self.lab.helpers("scenario"):
-            if helper.id.startswith(scenario_id):
-                return helper.logs().decode(errors="replace")
-        raise HTTPException(404, "Scénario introuvable (le réseau a peut-être été arrêté).")
 
     def list_scenarios(self):
         scenarios = [self._scenario_info(h) for h in self.lab.helpers("scenario")]

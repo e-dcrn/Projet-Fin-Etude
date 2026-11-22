@@ -72,6 +72,5 @@ export function useTraffic(active) {
     runScenario,
     stopScenarios,
     clearScenarios,
-    fetchLogs: api.fetchScenarioLogs,
   };
 }
