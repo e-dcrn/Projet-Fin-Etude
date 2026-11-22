@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls } from '@xyflow/react';
 import DeviceNode from './DeviceNode.jsx';
 import TerminalPopup from './TerminalPopup.jsx';
@@ -22,6 +22,18 @@ function linesOf(topology, node) {
  */
 export default function TopologyCanvas({ topology, onlineIds, alertIds, watchingIds }) {
   const [selected, setSelected] = useState(null); // équipement cliqué, pour la popup terminal
+  const flowRef = useRef(null);  // instance React Flow (pour recadrer)
+  const wrapRef = useRef(null);  // conteneur, observé pour recadrer à chaque redimensionnement
+
+  // Recentre la topologie quand le canvas change de taille (ex. ouverture d'un
+  // panneau latéral) pour qu'elle ne finisse jamais cachée hors du cadre.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => flowRef.current?.fitView({ padding: 0.15 }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const nodes = topology.nodes.map((n) => ({
     id: n.id,
@@ -51,9 +63,10 @@ export default function TopologyCanvas({ topology, onlineIds, alertIds, watching
   };
 
   return (
-    <div className="canvas">
+    <div className="canvas" ref={wrapRef}>
       <ReactFlow
         key={topology.id} // nouvelle topologie : on recadre la vue
+        onInit={(instance) => { flowRef.current = instance; }}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -63,8 +76,14 @@ export default function TopologyCanvas({ topology, onlineIds, alertIds, watching
         elementsSelectable={false}
         onNodeClick={onNodeClick}
         fitView
+        fitViewOptions={{ padding: 0.15 }}
         minZoom={0.3}
-        zoomOnScroll={false}      // molette / trackpad : ne zoome pas (sinon la topologie « disparaît »)
+        // Vue verrouillée : la topologie est fixe, on empêche tout déplacement /
+        // zoom accidentel (glissement, molette, double-clic) qui la ferait « disparaître ».
+        panOnDrag={false}
+        panOnScroll={false}
+        zoomOnScroll={false}
+        zoomOnPinch={false}
         zoomOnDoubleClick={false}
         preventScrolling={false}  // laisse la page défiler normalement
         proOptions={{ hideAttribution: true }}
