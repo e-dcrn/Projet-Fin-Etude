@@ -35,6 +35,10 @@ variantes — par temporisation (inefficace contre un détecteur par-flux) et pa
 Prérequis : **Docker** démarré, avec **Docker Compose v2** (`docker compose`), **Python 3.9+**, **Node.js 20.19+ ou 22.12+**, Git, et Internet au
 premier déploiement. Sous Linux, l'utilisateur doit être dans le groupe `docker`.
 
+> **Docker Compose v2 est obligatoire.** Sans lui, « Démarrer le réseau » échoue avec
+> `unknown shorthand flag: 'p' in -p`. Vérifier avec `docker compose version` ; sous Ubuntu/Debian,
+> l'installer avec `sudo apt install docker-compose-v2` (l'ancien `docker-compose` 1.x ne convient pas).
+
 ```bash
 git clone https://github.com/e-dcrn/Projet-Fin-Etude.git
 cd Projet-Fin-Etude/code

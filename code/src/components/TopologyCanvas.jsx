@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls } from '@xyflow/react';
 import DeviceNode from './DeviceNode.jsx';
 import TerminalPopup from './TerminalPopup.jsx';
@@ -34,7 +34,10 @@ export default function TopologyCanvas({ topology, onlineIds }) {
     return () => observer.disconnect();
   }, []);
 
-  const nodes = topology.nodes.map((n) => ({
+  // Mémorisés : sans ça, chaque rafraîchissement de l'app (toutes les 2 s quand le
+  // réseau tourne) recréerait les nœuds, que React Flow masque alors jusqu'à les
+  // remesurer. Si cette mesure tarde (onglet en arrière-plan…), le schéma disparaît.
+  const nodes = useMemo(() => topology.nodes.map((n) => ({
     id: n.id,
     type: 'device',
     position: { x: n.x, y: n.y },
@@ -44,14 +47,14 @@ export default function TopologyCanvas({ topology, onlineIds }) {
       lines: linesOf(topology, n),
       online: onlineIds.has(n.id),
     },
-  }));
-  const edges = topology.links.map((l) => ({
+  })), [topology, onlineIds]);
+  const edges = useMemo(() => topology.links.map((l) => ({
     id: `${l.node}-${l.switch}`,
     source: l.node,
     target: l.switch,
     type: 'straight',
     className: 'cable',
-  }));
+  })), [topology]);
 
   // Un switch n'est pas un conteneur : pas de terminal à ouvrir dessus.
   const onNodeClick = (_event, node) => {
