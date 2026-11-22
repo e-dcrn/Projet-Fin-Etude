@@ -78,10 +78,9 @@ export default function TopologyCanvas({ topology, onlineIds, alertIds, watching
         fitView
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.3}
-        // Vue verrouillée : la topologie est fixe, on empêche tout déplacement /
-        // zoom accidentel (glissement, molette, double-clic) qui la ferait « disparaître ».
-        panOnDrag={false}
-        panOnScroll={false}
+        // On peut déplacer la topologie au glissement, mais on désactive le zoom à la
+        // molette / au pincement / au double-clic : c'est lui qui la réduisait en un point
+        // (« disparition »). Le zoom reste possible via les boutons +/- et le recentrage.
         zoomOnScroll={false}
         zoomOnPinch={false}
         zoomOnDoubleClick={false}
