@@ -1,0 +1,417 @@
+\documentclass[aspectratio=169,11pt,xcolor=table]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{listings}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{babel,positioning,arrows.meta}
+
+% Réunion d'avancement du 23 novembre 2026.
+% Sources locales : slides_9_nov.tex ; ../code/docs/DOCUMENTATION.md (section 8) ;
+% ../code/docs/rapports/rapport_scan_manuel.md ; ../code/docs/rapports/rapport_ids.md ;
+% ../code/docs/rapports/journal_decisions.md (n° 57 à 100) ; ../code/backend/app/training.py ;
+% ../code/backend/app/detection.py ; scikit-learn 1.9.1 (tree/_tree.pyx, ensemble/_forest.py).
+% Lignes de code : fichiers .py, .js, .jsx, .css de code/backend/app et code/src,
+% au commit 0a78707 (9 novembre) et au commit 16272cd (22 novembre).
+% Volontairement absent : les attaques contre le modèle (évasion, empoisonnement).
+\definecolor{projectblue}{HTML}{17365D}
+\definecolor{projectteal}{HTML}{087E8B}
+\definecolor{benin}{HTML}{BFDCC6}
+\definecolor{attaque}{HTML}{E58B74}
+\definecolor{capture}{HTML}{C9D6E6}
+\definecolor{codebg}{HTML}{F4F6F8}
+\definecolor{codecomment}{HTML}{6A737D}
+\usetheme{Madrid}
+\setbeamercolor{structure}{fg=projectblue}
+\setbeamercolor{frametitle}{bg=projectblue,fg=white}
+\setbeamercolor{block title}{bg=projectteal,fg=white}
+\setbeamercolor{block body}{bg=projectteal!7}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.84\paperwidth,ht=2.7ex,dp=1.2ex,leftskip=1em]{author in head/foot}%
+      VAP SSR 2026--2027 \hfill Point d'avancement -- 23 novembre 2026
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.16\paperwidth,ht=2.7ex,dp=1.2ex,center]{date in head/foot}%
+      \insertframenumber/\inserttotalframenumber
+    \end{beamercolorbox}}%
+}
+\newcommand{\espacement}{\setlength{\itemsep}{.7em}}
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{projectblue}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{projectteal},
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{projectblue!30},
+  framesep=3pt, xleftmargin=4pt, xrightmargin=4pt,
+  columns=fullflexible, keepspaces=true, showstringspaces=false,
+  literate={é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {à}{{\`a}}1 {ù}{{\`u}}1
+           {ç}{{\c{c}}}1 {É}{{\'E}}1 {î}{{\^i}}1 {œ}{{\oe}}1 {ô}{{\^o}}1 {→}{{$\rightarrow$}}1
+           {«}{{\guillemotleft}}1 {»}{{\guillemotright}}1,
+}
+\title[Démonstrateur ML-NIDS]{Démonstrateur d'attaques contre un ML-NIDS}
+\subtitle{Questions en suspens et reprise en main du code}
+\author{Projet VAP SSR 2026--2027}
+\institute{Réunion avec Grégory Blanc}
+\date{23 novembre 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Depuis la réunion du 9 novembre}
+  \begin{enumerate}\espacement
+    \item \textbf{Deux questions restées sans réponse}
+      \begin{itemize}
+        \item Comment est calculée l'importance des features ?
+        \item Pourquoi l'IDS affichait-il « fausse alerte » sur de vraies attaques ?
+      \end{itemize}
+    \item \textbf{Un code simplifié pour le reprendre en main}
+      \begin{itemize}
+        \item Ce qu'on a retiré, et pourquoi.
+        \item Ce qu'on a gardé, et pourquoi.
+      \end{itemize}
+  \end{enumerate}
+  \vfill
+  \begin{block}{Résultat}
+    Le code passe de \textbf{13\,400 à 5\,300 lignes} ($-61\,\%$), sans toucher à la chaîne\\
+    réseau $\rightarrow$ données $\rightarrow$ entraînement $\rightarrow$ détection.
+  \end{block}
+\end{frame}
+
+% ============================================================== importance des features
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\fontsize{28}{36}\selectfont\bfseries\color{projectblue} L'importance des features\par}
+  \vspace{.8em}
+  {\large Question du 9 novembre\par}
+  \vfill
+\end{frame}
+
+\begin{frame}[fragile]{Comment est calculée l'importance ?}
+  \textbf{Chez nous} (\texttt{training.py}) : scikit-learn la calcule, on trie et on garde les 15 premières.
+\begin{lstlisting}
+importances = sorted(zip(x_train.columns, model.feature_importances_),
+                     key=lambda kv: kv[1], reverse=True)
+\end{lstlisting}
+  \vspace{.3em}
+
+  \begin{columns}[T]
+    \begin{column}{.5\linewidth}
+      \textbf{Le principe, en pseudo-code}
+\begin{lstlisting}[language={},mathescape=true,basicstyle=\ttfamily\small]
+score[f] = 0 pour chaque feature f
+pour chaque arbre :
+    pour chaque nœud de décision :
+        f = feature du nœud
+        score[f] += $N\,G - N_g\,G_g - N_d\,G_d$
+score = score / somme(score)
+\end{lstlisting}
+      \vspace{.2em}
+      \small
+      $G = 1 - p_{\text{bénin}}^2 - p_{\text{attaque}}^2$ : impureté de Gini du nœud\\
+      $N$ : nombre de flux du nœud ; $g$, $d$ : ses deux enfants
+    \end{column}
+    \begin{column}{.46\linewidth}
+      \begin{itemize}\espacement
+        \item Chaque nœud d'un arbre pose une question sur \textbf{une} feature.
+        \item Le gain est la baisse d'impureté : grand si le nœud trie bien bénin et attaque, sur beaucoup de flux.
+        \item Une feature utilisée \textbf{plusieurs fois} cumule ses gains.
+        \item Le total vaut \textbf{100\,\%}.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \note{Le gain d'une question est la baisse d'impureté de Gini, pondérée par le nombre de flux qui arrivent à ce nœud (Mean Decrease in Impurity). On fait la somme par feature dans chaque arbre, puis la moyenne sur les 100 arbres.}
+\end{frame}
+
+\begin{frame}{Ce qu'affiche l'application}
+  \begin{columns}[c]
+    \begin{column}{.55\linewidth}
+      \centering
+      \begin{tikzpicture}[x=.27cm,y=.5cm]
+        \foreach \val/\name [count=\i] in {
+            16.8/{Bwd RST Flags}, 11.8/{RST Flag Count}, 10.1/{Bwd Packets/s}, 9.3/{Flow IAT Max},
+            8.6/{Flow Packets/s}, 7.4/{Fwd Seg Size Min}, 6.8/{Fwd Packets/s}} {
+          \node[anchor=east,font=\scriptsize] at (0,-\i) {\name};
+          \fill[projectteal] (.3,-\i-.32) rectangle (.3+\val,-\i+.32);
+          \node[anchor=west,font=\scriptsize] at (.5+\val,-\i) {\pgfmathprintnumber[use comma,fixed,precision=1]{\val}\,\%};
+        }
+        \node[anchor=east,font=\scriptsize\itshape,color=codecomment] at (0,-8) {\dots\ jusqu'à 15};
+      \end{tikzpicture}\\[.3em]
+      {\scriptsize Exemple réel : modèle « Simple », 9 novembre.}
+    \end{column}
+    \begin{column}{.43\linewidth}
+      \textbf{Comment la lire :} plus la barre est longue, plus le modèle s'est servi de cette feature pour séparer le bénin des attaques.
+      \vspace{.8em}
+
+      \textbf{Ici :} les flags \texttt{RST} (connexions refusées par un scan) et le débit de paquets.
+      \vspace{.8em}
+
+      \textbf{Attention :} elle dit ce que le modèle a \textbf{utilisé}, pas ce qu'il perdrait sans cette feature.
+    \end{column}
+  \end{columns}
+  \note{Valeurs du modèle Simple (rapport\_scan\_manuel.md). La valeur est calculée sur le jeu d'entraînement ; entre deux features qui disent la même chose (Flow Packets/s et Fwd Packets/s), le partage est arbitraire. Pour mesurer ce que perdrait le modèle sans une feature : importance par permutation sur le test, pas encore dans l'application.}
+\end{frame}
+
+% ============================================================== fausses alertes
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\fontsize{28}{36}\selectfont\bfseries\color{projectblue} Les fausses alertes\par}
+  \vspace{.8em}
+  {\large Question du 9 novembre\par}
+  \vfill
+\end{frame}
+
+\begin{frame}{Le 9 novembre : un vrai scan affiché « fausse alerte »}
+  \textbf{Même scan \texttt{nmap}, mêmes flux, même verdict du modèle :}
+  \vspace{.6em}
+
+  \centering
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    & \textbf{Terminal} & \textbf{Bouton Scénario} \\
+    \midrule
+    Affichage & \textbf{199 fausses alertes} & \textbf{199 détectées} \\
+    \bottomrule
+  \end{tabular}
+  \vspace{1em}
+
+  \raggedright
+  \begin{block}{Cause : la vérité terrain, pas le modèle}
+    Le moteur ne connaissait que les attaques \textbf{qu'il lance lui-même}.\\
+    Attaque prédite + aucune attaque connue $\Rightarrow$ fausse alerte.
+  \end{block}
+  \note{Source : rapport\_scan\_manuel.md (3 essais alternés, 402 paquets dans chaque mode). Le modèle détectait correctement : seul le libellé était faux. Symétrique : une attaque manuelle non détectée n'apparaissait nulle part (bénin).}
+\end{frame}
+
+\begin{frame}[fragile]{Aujourd'hui : la fausse alerte n'est déclarée que si on le sait}
+  \small
+  Le moteur connaît aussi le \textbf{trafic bénin} qu'il lance : les IP des PC où tourne un agent bénin.
+  \vfill
+  \centering
+  \begin{minipage}{.62\linewidth}
+\begin{lstlisting}[basicstyle=\ttfamily\small]
+def outcome_of(predicted_attack, truly_attack,
+               known_benign):
+    if predicted_attack:
+        if truly_attack:
+            return "alert"        # détectée
+        if known_benign:
+            return "false_alarm"  # bénin connu
+        return "alert"            # inconnue
+    if truly_attack:
+        return "missed"           # manquée
+    return "benign"
+\end{lstlisting}
+  \end{minipage}
+  \vfill
+  \note{Code de detection.py, commentaires abrégés. known\_benign = la source ou la destination du flux est l'IP d'un PC dont l'agent bénin a été lancé depuis le panneau Simulation (accumulé sur toute la session). Le terminal web a été retiré le 21 novembre : une attaque manuelle passe désormais par docker exec.}
+\end{frame}
+
+% ============================================================== simplification
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\fontsize{28}{36}\selectfont\bfseries\color{projectblue} Reprendre le contrôle du code\par}
+  \vspace{.8em}
+  {\large Simplifications du 9 au 22 novembre\par}
+  \vfill
+\end{frame}
+
+\begin{frame}{Le plus gros changement : plus d'éditeur de topologie}
+  \begin{columns}[T]
+    \begin{column}{.47\linewidth}
+      \begin{block}{Avant : un réseau dessiné à la volée}
+        \begin{itemize}
+          \item Palette, câbles, propriétés, routes.
+          \item Adressage automatique (IPAM).
+          \item Validation côté interface \textbf{et} moteur.
+          \item Planificateur + déployeur Docker maison.
+        \end{itemize}
+        Une topologie quelconque peut échouer de mille façons : tout ce code servait à l'éviter.
+      \end{block}
+    \end{column}
+    \begin{column}{.49\linewidth}
+      \begin{block}{Maintenant : trois topologies prêtes}
+        \begin{itemize}
+          \item \textbf{Petit LAN} : 3 PC, 1 serveur, 1 sonde.
+          \item \textbf{LAN + DMZ} : un routeur, 2 serveurs.
+          \item \textbf{Trois réseaux} : 2 routeurs, sonde sur le transit.
+        \end{itemize}
+        Chacune = un \texttt{docker-compose.yml} écrit à la main + un \texttt{topology.json} pour le dessin.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \textbf{Pourquoi :} une topologie figée n'a rien à vérifier ; si elle a marché une fois, elle marche toujours. Docker Compose est connu des enseignants et lisible sans notre code.
+  \note{Démarrage : POST /api/lab lance docker compose up, de façon synchrone. Le schéma reste affiché (React Flow), en lecture seule. Décision n° 91 du journal. Commit 0bbc090 : environ −4 300 lignes nettes.}
+\end{frame}
+
+\begin{frame}{Ce qu'on a retiré : l'interface}
+  \small
+  \renewcommand{\arraystretch}{1.22}
+  \begin{tabularx}{\linewidth}{@{}p{.36\linewidth}X@{}}
+    \toprule
+    \textbf{Retiré} & \textbf{Pourquoi} \\
+    \midrule
+    Éditeur de topologie (+ 6 exemples) & remplacé par 3 topologies fixes (slide précédente) \\
+    Animation des paquets & aucun lien avec la chaîne ML ; un \texttt{tcpdump} de plus par équipement \\
+    Terminal web et capture live (vue Wireshark) & toute la pile WebSocket ($\approx -2\,400$ lignes) ; remplacés par \texttt{docker exec} et le pcap des datasets, ouvrable dans Wireshark \\
+    Panneaux Trafic et Scénarios séparés, presets, choix des destinataires & fusionnés en un panneau « Simulation » : un seul endroit pour générer le trafic \\
+    Champ VLAN des switches & validé et affiché, mais sans aucun effet sur le réseau \\
+    Volets à glisser-déposer, overlays du schéma & confort d'interface sans lien avec le sujet \\
+    \bottomrule
+  \end{tabularx}
+  \note{Le clic sur un équipement ouvre maintenant une popup avec la commande docker exec à copier. Décisions n° 58, 75, 79, 89, 93, 100.}
+\end{frame}
+
+\begin{frame}{Ce qu'on a retiré : le moteur et les données}
+  \small
+  \renewcommand{\arraystretch}{1.18}
+  \begin{tabularx}{\linewidth}{@{}p{.36\linewidth}X@{}}
+    \toprule
+    \textbf{Retiré} & \textbf{Pourquoi} \\
+    \midrule
+    Exporteur de flux interne & colonnes différentes de CICFlowMeter : inutilisable par le modèle \\
+    Dossier ConCap, mode multiclasse & non utilisés ; le détail par type d'attaque reste dans le rapport \\
+    Découpage temporel, choix d'algorithme & une seule option réelle : random forest, test sur variantes \\
+    Export des flux d'un scénario, empreinte de topologie & doublon des datasets ; ne servait qu'à un avertissement \\
+    HTTPS, Telnet, SMTP, DNS, MySQL, ports simulés & serveurs réduits à \textbf{HTTP, SSH, FTP} : les seuls utiles à nos scénarios \\
+    Server-Sent Events & remplacés par un polling \texttt{GET /api/jobs/\{id\}} chaque seconde \\
+    7 classes d'erreur, traductions des erreurs Docker & \texttt{HTTPException} de FastAPI ; l'erreur Docker remonte telle quelle \\
+    Validations en double, code mort (Docker $<$ 28…) & le front valide déjà ; ces cas n'arrivent pas dans le lab \\
+    \bottomrule
+  \end{tabularx}
+  \note{Décisions n° 59 à 61, 76, 77, 81, 82, 86, 88, 90, 92, 95, 96. Conséquence de la réduction des services : les anciens datasets et modèles sont à régénérer.}
+\end{frame}
+
+\begin{frame}{Ce qu'on a gardé, et pourquoi}
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{@{}p{.34\linewidth}X@{}}
+    \toprule
+    \textbf{Gardé} & \textbf{Pourquoi} \\
+    \midrule
+    Vrais services, agent bénin à sessions réelles & une bannière ou un rejeu ferait apprendre des artefacts du lab \\
+    Pause de l'agent bénin de l'attaquant & rend l'étiquetage exact, en dataset \textbf{et} en direct \\
+    Sonde passive, CICFlowMeter, fenêtres de 5 s & même point de vue et mêmes flux à l'entraînement et en détection \\
+    Datasets + variantes de test & évaluation sur des données jamais vues, sans découpage aléatoire \\
+    Random forest, score par type d'attaque & un score global masquait une classe ratée \\
+    Détection en direct + vérité terrain & mesurer en conditions réelles, distinguer les erreurs \\
+    Tâches de fond (datasets, entraînement) & vraiment longues : il faut voir l'avancement \\
+    Choix du modèle dans la détection & d'autres modèles sont prévus \\
+    \bottomrule
+  \end{tabularx}
+  \note{Tout ce qui est gardé est sur la chaîne réseau → données → entraînement → détection. Le schéma de la topologie est aussi conservé, en lecture seule. Le flux du moteur est documenté dans code/docs/schema\_flux\_backend.md.}
+\end{frame}
+
+% ============================================================== premières attaques
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\fontsize{28}{36}\selectfont\bfseries\color{projectblue} Attaquer le modèle\par}
+  \vspace{.8em}
+  {\large Premiers essais d'évasion\par}
+  \vfill
+\end{frame}
+
+\begin{frame}{Deux idées pour tromper un modèle déjà entraîné}
+  \textbf{Rappel :} l'IDS décide \textbf{par flux} (une connexion), sur la \textbf{forme} de chaque flux : nombre de paquets, taille moyenne, octets échangés. Pas sur le rythme auquel les flux arrivent.
+  \vspace{.6em}
+
+  \begin{columns}[T]
+    \begin{column}{.48\linewidth}
+      \begin{block}{1. Ralentir l'attaque}
+        On lance le scan et la force brute au ralenti : de longues pauses entre chaque paquet et chaque essai de mot de passe.\\[.4em]
+        Mais ralentir change \textbf{quand} les flux arrivent, pas \textbf{à quoi} chaque flux ressemble. Un flux de scan reste minuscule : \textbf{détecté à 100\,\%}.
+      \end{block}
+    \end{column}
+    \begin{column}{.48\linewidth}
+      \begin{block}{2. Camoufler l'attaque}
+        On donne à chaque flux d'attaque la \textbf{forme} d'un flux normal.\\[.4em]
+        La fiche de statistiques de l'attaque ressemble alors à celle d'une session bénigne : elle \textbf{passe sous le seuil} du modèle.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \note{Temporisation : nmap -T2 --scan-delay 250ms, hydra -t 1 -W 1. Mesuré : scan connect 100\,\% détecté en Rapide (0,1 s) comme en furtif (50,7 s). C'est l'enseignement de l'état de l'art : TrafficManipulator et TANTRA visent KitNET, un détecteur fenêtré au niveau de l'hôte, sensible au rythme ; notre extracteur est par flux. La robustesse dépend du couple modèle + extracteur de features.}
+\end{frame}
+
+\begin{frame}{Camoufler : le même essai de mot de passe, habillé}
+  \small Deux \textbf{vraies captures} d'un flux FTP, même essai \texttt{admin / 123456} rejeté. Le cœur (blanc) est identique ; le furtif ajoute des commandes FTP qui \textbf{gonflent les octets échangés} — \texttt{NOOP} bourrés d'arguments, \texttt{HELP}/\texttt{FEAT} à longue réponse (\textcolor{benin!55!black}{\textbf{vert}}) — et retire le \texttt{QUIT} (\textcolor{attaque}{\textbf{rouge}}).
+  \vspace{.4em}
+
+  \ttfamily\scriptsize
+  \setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.22}
+  \begin{tabular}{@{}p{.455\linewidth}@{\hspace{6pt}}p{.455\linewidth}@{}}
+    \multicolumn{1}{@{}l}{\normalfont\scriptsize\color{attaque}$\bullet$ Classique (hydra)} &
+    \multicolumn{1}{l@{}}{\normalfont\scriptsize\color{benin!55!black}$\bullet$ Furtif (flux habillé)} \\[2pt]
+    S$\to$C 220 FTP ready                 & S$\to$C 220 FTP ready \\
+                                          & \cellcolor{benin!45}+ C$\to$S NOOP + 260 octets \\
+                                          & \cellcolor{benin!45}+ S$\to$C 214 HELP: ABOR ALLO\dots \\
+                                          & \cellcolor{benin!45}+ C$\to$S NOOP + 167 o … SITE \\
+    C$\to$S USER admin                    & C$\to$S USER admin \\
+    S$\to$C 331 send password             & S$\to$C 331 send password \\
+    C$\to$S PASS 123456                   & C$\to$S PASS 123456 \\
+    S$\to$C 530 Auth failed               & S$\to$C 530 Auth failed \\
+    \cellcolor{attaque!30}\textminus\ C$\to$S QUIT        & \\
+    \cellcolor{attaque!30}\textminus\ S$\to$C 221 Goodbye & \\
+                                          & \cellcolor{benin!45}+ C$\to$S NOOP + 336 o, + 292 o \\
+                                          & \cellcolor{benin!45}+ C$\to$S FEAT $\to$ 211 Features\dots \\
+  \end{tabular}
+  \vspace{.3em}
+
+  \normalfont\scriptsize Résultat : \textbf{×32} d'octets applicatifs dans le flux (134 o $\rightarrow$ 4\,328 o) $\Rightarrow$ il passe pour une session normale.
+  \note{Captures réelles : docs/pcap\_diff\_flux/ (flux\_classique.pcap, flux\_furtif.pcap, ouvrables dans Wireshark). Le bourrage passe le flux de « pauvre » (zone attaque) à « riche » (zone session normale) sur les features de taille que le modèle utilise. On ne change ni l'outil, ni la cible, ni le rythme : seulement la forme du flux.}
+\end{frame}
+
+\begin{frame}{Résultat : la même force brute, détectée ou non}
+  \centering
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    \textbf{Force brute FTP} (jeu de test) & \textbf{Flux} & \textbf{Détectés} & \textbf{Rappel} \\
+    \midrule
+    \rowcolor{attaque!20} Classique (hydra) & 31 & 27 & \textbf{87,1\,\%} \\
+    \rowcolor{benin!35} Furtive (flux habillés) & 32 & 3 & \textbf{9,4\,\%} \\
+    \bottomrule
+  \end{tabular}
+  \vspace{1em}
+
+  \begin{itemize}\espacement
+    \item Même serveur, mêmes mots de passe, même nombre d'essais.
+    \item La seule différence : la \textbf{forme des flux} dans les features que le modèle regarde.
+    \item Fausses alertes ajoutées sur le bénin : \textbf{0,26\,\%}.
+  \end{itemize}
+  \vfill
+  \textbf{Leçon :} pour évader un IDS \textbf{par flux}, changer le rythme ne suffit pas ; il faut rendre les \textbf{flux} eux-mêmes semblables au trafic normal.
+  \note{Modèle 9483ed0c, 21 novembre 2026, topologie Petit LAN. Imiter seulement le client (ftplib) sans étoffer les flux : ~45–56\,\% de rappel, insuffisant. Détail : rapport\_evasion.md. C'est l'évasion Okada (XAI-driven) réalisée en problem-space.}
+\end{frame}
+
+\begin{frame}{La suite}
+  \begin{enumerate}\espacement
+    \item \textbf{Ajouter d'autres attaques} au banc d'essai.
+    \item \textbf{Ajouter d'autres modèles} (KitNET, MLP) et tester le \textbf{transfert} d'une évasion d'un modèle à l'autre.
+    \item \textbf{Pour finir : l'empoisonnement} — corrompre les données d'entraînement plutôt que tromper un modèle déjà entraîné.
+  \end{enumerate}
+  \vfill
+  \centering
+  {\large\bfseries\color{projectblue} Questions ?}
+\end{frame}
+
+\end{document}
