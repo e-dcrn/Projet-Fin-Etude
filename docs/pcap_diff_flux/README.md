@@ -31,40 +31,65 @@ changé la **forme** du flux.
 
 ## Le diff (niveau commande FTP)
 
-Le cœur de l'attaque — `USER duhan` → `331` → `PASS 123456` → `530` — est **identique** dans les
-deux flux (lignes alignées au centre). Tout ce qui est marqué `>` est le **bourrage** ajouté par
-l'attaque furtive : des `NOOP` portant une grande ligne d'arguments (beaucoup d'octets *vers* le
-serveur) et des `HELP` / `FEAT` qui déclenchent de longues réponses (octets *de retour*).
+Les deux traces `tshark` côte à côte (`C→S` = client vers serveur, `S→C` = serveur vers client).
+Le cœur de l'attaque — `USER duhan` → `331` → `PASS 123456` → `530` — est **identique** (lignes
+blanches, alignées). En **vert** le **bourrage** ajouté par l'attaque furtive (`NOOP` à grosse
+ligne d'arguments, `HELP` / `FEAT` à longue réponse) ; en **rouge** ce qu'elle retire (le
+`QUIT`/`221` propre du classique).
 
-```
-flux CLASSIQUE                              flux FURTIF
-<-- 220  IDS-Lab demo FTP ready             <-- 220  IDS-Lab demo FTP ready
-                                          > --> NOOP la session consulte… (260 o)
-                                          > <-- 501  Syntax error…
-                                          > --> NOOP la session consulte… (172 o)
-                                          > <-- 501  Syntax error…
-                                          > --> HELP
-                                          > <-- 214  The following commands…
-                                          > <-- 214  Help command successful.
-                                          > --> NOOP la session consulte… (167 o)
-                                          > <-- 501  Syntax error…
-                                          > --> HELP SITE
-                                          > <-- 214  Syntax: SITE…
---> USER   duhan                      ===   --> USER   duhan
-<-- 331    Username ok, send password ===   <-- 331    Username ok, send password
---> PASS   123456                     ===   --> PASS   123456
-<-- 530    Authentication failed.     ===   <-- 530    Authentication failed.
---> QUIT                                   > --> NOOP la session consulte… (123 o)
-<-- 221    Goodbye.                        > <-- 501  Syntax error…
-                                          > --> NOOP la session consulte… (336 o)
-                                          > … (HELP, FEAT, NOOP jusqu'à ~440 o) …
+![Diff côte à côte des deux flux](diff_side_by_side.svg)
+
+<details><summary>Même diff en version texte unifiée (copiable)</summary>
+
+```diff
+  S→C  220    IDS-Lab demo FTP ready
++ C→S  NOOP   la session consulte le catalogue e…(260o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  NOOP   la session consulte le catalogue e…(172o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  HELP
++ S→C  214    The following commands are recognized:
++ S→C          ABOR   ALLO   APPE   CDUP   CWD    DELE…
++ S→C  214    Help command successful.
++ C→S  NOOP   la session consulte le catalogue e…(167o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  HELP   SITE
++ S→C  214    Syntax: SITE <SP> site-command (execute …
+  C→S  USER   duhan
+  S→C  331    Username ok, send password.
+  C→S  PASS   123456
+  S→C  530    Authentication failed.
+- C→S  QUIT
+- S→C  221    Goodbye.
++ C→S  NOOP   la session consulte le catalogue e…(123o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  NOOP   la session consulte le catalogue e…(336o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  NOOP   la session consulte le catalogue e…(292o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  NOOP   la session consulte le catalogue e…(303o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  HELP
++ S→C  214    The following commands are recognized:
++ S→C          ABOR   ALLO   APPE   CDUP   CWD    DELE…
++ S→C  214    Help command successful.
++ C→S  NOOP   la session consulte le catalogue e…(313o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  NOOP   la session consulte le catalogue e…(441o)
++ S→C  501    Syntax error: command does not accept ar…
++ C→S  FEAT
++ S→C  211    Features supported:
++ S→C          EPRT
++ S→C  211    End FEAT.
 ```
 
-Diff complet et traces brutes : [`diff_cote_a_cote.txt`](diff_cote_a_cote.txt),
+</details>
+
+Diff brut et traces : [`unified.diff`](unified.diff),
 [`trace_classique.txt`](trace_classique.txt), [`trace_furtif.txt`](trace_furtif.txt).
 
-> **Lecture.** Les 4 lignes alignées (`===`) sont l'attaque réelle, bit pour bit la même. Le
-> furtif ne « cache » pas l'essai de mot de passe : il le **noie** dans assez de vrai trafic FTP
+> **Lecture.** Les lignes non colorées sont l'attaque réelle, bit pour bit la même. Le furtif ne
+> « cache » pas l'essai de mot de passe : il le **noie** dans assez de vrai trafic FTP (le vert)
 > pour que la fiche de statistiques du flux ressemble à celle d'une session bénigne.
 
 ---

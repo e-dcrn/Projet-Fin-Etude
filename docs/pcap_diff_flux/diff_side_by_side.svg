@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="784" height="807" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="784" height="807" fill="#ffffff"/>
+<rect x="0" y="0" width="378" height="38" fill="#f6f8fa"/>
+<rect x="406" y="0" width="378" height="38" fill="#f6f8fa"/>
+<text x="10" y="25" fill="#cf222e" font-weight="bold">flux CLASSIQUE  (ftp-patator)</text>
+<text x="416" y="25" fill="#1a7f37" font-weight="bold">flux FURTIF  (ftp-patator-stealth)</text>
+<rect x="0" y="52" width="378" height="19" fill="#ffffff"/>
+<rect x="406" y="52" width="378" height="19" fill="#ffffff"/>
+<text x="10" y="66" fill="#24292f" xml:space="preserve">  S→C  220    IDS-Lab demo FTP ready</text>
+<text x="416" y="66" fill="#24292f" xml:space="preserve">  S→C  220    IDS-Lab demo FTP ready</text>
+<rect x="0" y="71" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="71" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="85" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="85" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(260o)</text>
+<rect x="0" y="90" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="90" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="104" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="104" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="109" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="109" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="123" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="123" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(172o)</text>
+<rect x="0" y="128" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="128" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="142" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="142" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="147" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="147" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="161" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="161" fill="#116329" xml:space="preserve">+ C→S  HELP</text>
+<rect x="0" y="166" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="166" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="180" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="180" fill="#116329" xml:space="preserve">+ S→C  214    The following commands are recognized:</text>
+<rect x="0" y="185" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="185" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="199" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="199" fill="#116329" xml:space="preserve">+ S→C          ABOR   ALLO   APPE   CDUP   CWD    DELE…</text>
+<rect x="0" y="204" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="204" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="218" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="218" fill="#116329" xml:space="preserve">+ S→C  214    Help command successful.</text>
+<rect x="0" y="223" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="223" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="237" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="237" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(167o)</text>
+<rect x="0" y="242" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="242" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="256" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="256" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="261" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="261" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="275" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="275" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(133o)</text>
+<rect x="0" y="280" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="280" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="294" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="294" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="299" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="299" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="313" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="313" fill="#116329" xml:space="preserve">+ C→S  HELP   SITE</text>
+<rect x="0" y="318" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="318" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="332" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="332" fill="#116329" xml:space="preserve">+ S→C  214    Syntax: SITE &lt;SP&gt; site-command (execute …</text>
+<rect x="0" y="337" width="378" height="19" fill="#ffffff"/>
+<rect x="406" y="337" width="378" height="19" fill="#ffffff"/>
+<text x="10" y="351" fill="#24292f" xml:space="preserve">  C→S  USER   duhan</text>
+<text x="416" y="351" fill="#24292f" xml:space="preserve">  C→S  USER   duhan</text>
+<rect x="0" y="356" width="378" height="19" fill="#ffffff"/>
+<rect x="406" y="356" width="378" height="19" fill="#ffffff"/>
+<text x="10" y="370" fill="#24292f" xml:space="preserve">  S→C  331    Username ok, send password.</text>
+<text x="416" y="370" fill="#24292f" xml:space="preserve">  S→C  331    Username ok, send password.</text>
+<rect x="0" y="375" width="378" height="19" fill="#ffffff"/>
+<rect x="406" y="375" width="378" height="19" fill="#ffffff"/>
+<text x="10" y="389" fill="#24292f" xml:space="preserve">  C→S  PASS   123456</text>
+<text x="416" y="389" fill="#24292f" xml:space="preserve">  C→S  PASS   123456</text>
+<rect x="0" y="394" width="378" height="19" fill="#ffffff"/>
+<rect x="406" y="394" width="378" height="19" fill="#ffffff"/>
+<text x="10" y="408" fill="#24292f" xml:space="preserve">  S→C  530    Authentication failed.</text>
+<text x="416" y="408" fill="#24292f" xml:space="preserve">  S→C  530    Authentication failed.</text>
+<rect x="0" y="413" width="378" height="19" fill="#ffd7d5"/>
+<rect x="406" y="413" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="427" fill="#b31d28" xml:space="preserve">- C→S  QUIT</text>
+<text x="416" y="427" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(123o)</text>
+<rect x="0" y="432" width="378" height="19" fill="#ffd7d5"/>
+<rect x="406" y="432" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="446" fill="#b31d28" xml:space="preserve">- S→C  221    Goodbye.</text>
+<text x="416" y="446" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="451" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="451" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="465" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="465" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(336o)</text>
+<rect x="0" y="470" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="470" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="484" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="484" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="489" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="489" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="503" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="503" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(292o)</text>
+<rect x="0" y="508" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="508" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="522" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="522" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="527" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="527" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="541" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="541" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(303o)</text>
+<rect x="0" y="546" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="546" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="560" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="560" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="565" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="565" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="579" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="579" fill="#116329" xml:space="preserve">+ C→S  HELP</text>
+<rect x="0" y="584" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="584" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="598" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="598" fill="#116329" xml:space="preserve">+ S→C  214    The following commands are recognized:</text>
+<rect x="0" y="603" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="603" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="617" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="617" fill="#116329" xml:space="preserve">+ S→C          ABOR   ALLO   APPE   CDUP   CWD    DELE…</text>
+<rect x="0" y="622" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="622" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="636" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="636" fill="#116329" xml:space="preserve">+ S→C  214    Help command successful.</text>
+<rect x="0" y="641" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="641" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="655" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="655" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(313o)</text>
+<rect x="0" y="660" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="660" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="674" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="674" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="679" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="679" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="693" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="693" fill="#116329" xml:space="preserve">+ C→S  NOOP   la session consulte le catalogue e…(441o)</text>
+<rect x="0" y="698" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="698" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="712" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="712" fill="#116329" xml:space="preserve">+ S→C  501    Syntax error: command does not accept ar…</text>
+<rect x="0" y="717" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="717" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="731" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="731" fill="#116329" xml:space="preserve">+ C→S  FEAT</text>
+<rect x="0" y="736" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="736" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="750" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="750" fill="#116329" xml:space="preserve">+ S→C  211    Features supported:</text>
+<rect x="0" y="755" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="755" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="769" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="769" fill="#116329" xml:space="preserve">+ S→C          EPRT</text>
+<rect x="0" y="774" width="378" height="19" fill="#ccffd8"/>
+<rect x="406" y="774" width="378" height="19" fill="#ccffd8"/>
+<text x="10" y="788" fill="#116329" xml:space="preserve">  </text>
+<text x="416" y="788" fill="#116329" xml:space="preserve">+ S→C  211    End FEAT.</text>
+</svg>
