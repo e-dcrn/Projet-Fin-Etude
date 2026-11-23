@@ -80,12 +80,12 @@
         \item Ce qu'on a retiré, et pourquoi.
         \item Ce qu'on a gardé, et pourquoi.
       \end{itemize}
+    \item \textbf{Les premières attaques contre le modèle}
+      \begin{itemize}
+        \item Évasion par temporisation, et par camouflage des flux.
+        \item Ce qui marche, ce qui ne marche pas, et pourquoi.
+      \end{itemize}
   \end{enumerate}
-  \vfill
-  \begin{block}{Résultat}
-    Le code passe de \textbf{13\,400 à 5\,300 lignes} ($-61\,\%$), sans toucher à la chaîne\\
-    réseau $\rightarrow$ données $\rightarrow$ entraînement $\rightarrow$ détection.
-  \end{block}
 \end{frame}
 
 % ============================================================== importance des features
@@ -339,16 +339,20 @@ def outcome_of(predicted_attack, truly_attack,
     \begin{column}{.48\linewidth}
       \begin{block}{1. Ralentir l'attaque}
         On lance le scan et la force brute au ralenti : de longues pauses entre chaque paquet et chaque essai de mot de passe.\\[.4em]
-        Mais ralentir change \textbf{quand} les flux arrivent, pas \textbf{à quoi} chaque flux ressemble. Un flux de scan reste minuscule : \textbf{détecté à 100\,\%}.
+        Mais ralentir change \textbf{quand} les flux arrivent, pas \textbf{à quoi} chaque flux ressemble. Un flux de scan reste minuscule : \textbf{détecté à 100\,\%}.\\[.4em]
+        {\footnotesize\color{projectblue}Han 2021 (TrafficManipulator), Sharon 2022 (TANTRA)}
       \end{block}
     \end{column}
     \begin{column}{.48\linewidth}
       \begin{block}{2. Camoufler l'attaque}
         On donne à chaque flux d'attaque la \textbf{forme} d'un flux normal.\\[.4em]
-        La fiche de statistiques de l'attaque ressemble alors à celle d'une session bénigne : elle \textbf{passe sous le seuil} du modèle.
+        La fiche de statistiques de l'attaque ressemble alors à celle d'une session bénigne : elle \textbf{passe sous le seuil} du modèle.\\[.4em]
+        {\footnotesize\color{projectblue}Okada 2025 (XAI-driven black-box)}
       \end{block}
     \end{column}
   \end{columns}
+  \vfill
+  \centering\footnotesize Articles de notre état de l'art (\texttt{docs/}, n\textsuperscript{os}~1, 2 et 3).
   \note{Temporisation : nmap -T2 --scan-delay 250ms, hydra -t 1 -W 1. Mesuré : scan connect 100\,\% détecté en Rapide (0,1 s) comme en furtif (50,7 s). C'est l'enseignement de l'état de l'art : TrafficManipulator et TANTRA visent KitNET, un détecteur fenêtré au niveau de l'hôte, sensible au rythme ; notre extracteur est par flux. La robustesse dépend du couple modèle + extracteur de features.}
 \end{frame}
 
