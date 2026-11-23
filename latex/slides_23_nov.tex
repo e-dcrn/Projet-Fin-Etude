@@ -164,64 +164,6 @@ score = score / somme(score)
   \note{Valeurs du modèle Simple (rapport\_scan\_manuel.md). La valeur est calculée sur le jeu d'entraînement ; entre deux features qui disent la même chose (Flow Packets/s et Fwd Packets/s), le partage est arbitraire. Pour mesurer ce que perdrait le modèle sans une feature : importance par permutation sur le test, pas encore dans l'application.}
 \end{frame}
 
-% ============================================================== fausses alertes
-
-\begin{frame}[plain]
-  \centering
-  \vfill
-  {\fontsize{28}{36}\selectfont\bfseries\color{projectblue} Les fausses alertes\par}
-  \vspace{.8em}
-  {\large Question du 9 novembre\par}
-  \vfill
-\end{frame}
-
-\begin{frame}{Le 9 novembre : un vrai scan affiché « fausse alerte »}
-  \textbf{Même scan \texttt{nmap}, mêmes flux, même verdict du modèle :}
-  \vspace{.6em}
-
-  \centering
-  \renewcommand{\arraystretch}{1.25}
-  \begin{tabular}{@{}lcc@{}}
-    \toprule
-    & \textbf{Terminal} & \textbf{Bouton Scénario} \\
-    \midrule
-    Affichage & \textbf{199 fausses alertes} & \textbf{199 détectées} \\
-    \bottomrule
-  \end{tabular}
-  \vspace{1em}
-
-  \raggedright
-  \begin{block}{Cause : la vérité terrain, pas le modèle}
-    Le moteur ne connaissait que les attaques \textbf{qu'il lance lui-même}.\\
-    Attaque prédite + aucune attaque connue $\Rightarrow$ fausse alerte.
-  \end{block}
-  \note{Source : rapport\_scan\_manuel.md (3 essais alternés, 402 paquets dans chaque mode). Le modèle détectait correctement : seul le libellé était faux. Symétrique : une attaque manuelle non détectée n'apparaissait nulle part (bénin).}
-\end{frame}
-
-\begin{frame}[fragile]{Aujourd'hui : la fausse alerte n'est déclarée que si on le sait}
-  \small
-  Le moteur connaît aussi le \textbf{trafic bénin} qu'il lance : les IP des PC où tourne un agent bénin.
-  \vfill
-  \centering
-  \begin{minipage}{.62\linewidth}
-\begin{lstlisting}[basicstyle=\ttfamily\small]
-def outcome_of(predicted_attack, truly_attack,
-               known_benign):
-    if predicted_attack:
-        if truly_attack:
-            return "alert"        # détectée
-        if known_benign:
-            return "false_alarm"  # bénin connu
-        return "alert"            # inconnue
-    if truly_attack:
-        return "missed"           # manquée
-    return "benign"
-\end{lstlisting}
-  \end{minipage}
-  \vfill
-  \note{Code de detection.py, commentaires abrégés. known\_benign = la source ou la destination du flux est l'IP d'un PC dont l'agent bénin a été lancé depuis le panneau Simulation (accumulé sur toute la session). Le terminal web a été retiré le 21 novembre : une attaque manuelle passe désormais par docker exec.}
-\end{frame}
-
 % ============================================================== simplification
 
 \begin{frame}[plain]
@@ -291,8 +233,6 @@ def outcome_of(predicted_attack, truly_attack,
       \end{block}
     \end{column}
   \end{columns}
-  \vfill
-  \centering\footnotesize Articles de notre état de l'art (\texttt{docs/}, n\textsuperscript{os}~1, 2 et 3).
   \note{Temporisation : nmap -T2 --scan-delay 250ms, hydra -t 1 -W 1. Mesuré : scan connect 100\,\% détecté en Rapide (0,1 s) comme en furtif (50,7 s). C'est l'enseignement de l'état de l'art : TrafficManipulator et TANTRA visent KitNET, un détecteur fenêtré au niveau de l'hôte, sensible au rythme ; notre extracteur est par flux. La robustesse dépend du couple modèle + extracteur de features.}
 \end{frame}
 
