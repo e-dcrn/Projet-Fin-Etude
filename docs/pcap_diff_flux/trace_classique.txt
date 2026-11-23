@@ -1,0 +1,7 @@
+<-- 220    IDS-Lab demo FTP ready
+--> USER   duhan
+<-- 331    Username ok, send password.
+--> PASS   123456
+<-- 530    Authentication failed.
+--> QUIT   
+<-- 221    Goodbye.
