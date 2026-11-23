@@ -401,3 +401,11 @@ body { background: var(--bg); }
 .compare-drill__verdict td { font-weight: 600; }
 .verdict--attack { color: var(--danger); }
 .verdict--benign { color: var(--success); }
+/* Teintes des deux côtés (A classique / B furtif) de la vue Comparer */
+.compare-attacks { margin-bottom: 4px; }
+.compare-tint--a { color: var(--primary); }
+.compare-tint--b { color: #7c3aed; }
+.compare-card--a { border-left: 3px solid var(--primary); }
+.compare-card--b { border-left: 3px solid #7c3aed; }
+.compare-select--a { border-color: var(--primary); }
+.compare-select--b { border-color: #7c3aed; }
