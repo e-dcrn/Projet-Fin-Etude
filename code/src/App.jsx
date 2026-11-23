@@ -5,6 +5,7 @@ import SimulationPanel from './components/SimulationPanel.jsx';
 import DetectionPanel from './components/DetectionPanel.jsx';
 import DatasetDialog from './components/DatasetDialog.jsx';
 import ModelDialog from './components/ModelDialog.jsx';
+import CompareDialog from './components/CompareDialog.jsx';
 import { useLab } from './hooks/useLab.js';
 import { useTraffic } from './hooks/useTraffic.js';
 import { useDatasets } from './hooks/useDatasets.js';
@@ -36,6 +37,7 @@ export default function App() {
   const [panel, setPanel] = useState(null); // panneau de droite : 'simulation', 'detection' ou null
   const [datasetsOpen, setDatasetsOpen] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   return (
     <div className="app">
@@ -53,6 +55,7 @@ export default function App() {
         }}
         onOpenDatasets={() => setDatasetsOpen(true)}
         onOpenModels={() => setModelsOpen(true)}
+        onOpenCompare={() => setCompareOpen(true)}
       />
 
       {lab.error && <div className="lab-error" role="alert">{lab.error}</div>}
@@ -80,6 +83,7 @@ export default function App() {
         onClose={() => setDatasetsOpen(false)}
       />
       <ModelDialog open={modelsOpen} models={models} datasets={datasets.datasets} onClose={() => setModelsOpen(false)} />
+      <CompareDialog open={compareOpen} datasets={datasets.datasets} models={models.models} onClose={() => setCompareOpen(false)} />
     </div>
   );
 }

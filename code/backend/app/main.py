@@ -44,6 +44,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .compare import score_dataset
 from .datasets import FILES as DATASET_FILES, DatasetBuilder, DatasetStore
 from .detection import DetectionManager
 from .jobs import JobRegistry
@@ -228,6 +229,12 @@ def create_dataset(req: DatasetRequest):
 def dataset_file(dataset_id: str, name: str):
     path = datasets.file_path(dataset_id, name)
     return FileResponse(path, media_type=DATASET_FILES[name], filename=f"dataset-{dataset_id}-{name}")
+
+
+@app.get("/api/datasets/{dataset_id}/scored")
+def dataset_scored(dataset_id: str, model: str):
+    """Rejoue un modèle sur les flux stockés d'un run (pour la vue « Comparer »)."""
+    return score_dataset(datasets, models, dataset_id, model)
 
 
 @app.delete("/api/datasets/{dataset_id}")

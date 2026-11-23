@@ -120,6 +120,10 @@ export const deleteDataset = (id) => request(`/datasets/${encodeURIComponent(id)
 /** URL de téléchargement d'un fichier d'un dataset (flows.csv, capture.pcap, meta.json). */
 export const datasetFileUrl = (id, name) => `${API_BASE_URL}/datasets/${encodeURIComponent(id)}/files/${name}`;
 
+/** Rejoue un modèle sur les flux stockés d'un run → décision par flux + rappel par étiquette (vue Comparer). */
+export const fetchScored = (datasetId, modelId) =>
+  request(`/datasets/${encodeURIComponent(datasetId)}/scored?model=${encodeURIComponent(modelId)}`);
+
 // --- Modèles ML-IDS (voir backend/app/training.py) -------------------------
 
 /** Modèles entraînés : { models: [meta…], job: id de l'entraînement en cours ou null } */

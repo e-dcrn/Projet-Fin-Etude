@@ -374,3 +374,30 @@ body { background: var(--bg); }
 .model-report .metrics-table { margin-bottom: 4px; }
 
 .det-attacks { margin: 10px 0; padding-left: 16px; font-size: 12px; }
+
+/* ==========================================================================
+   Vue « Comparer deux runs » (CompareDialog)
+   ========================================================================== */
+.compare-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+.compare-pick .field { flex: 1 1 200px; }
+.compare-result { margin-top: 8px; }
+.compare-focus { max-width: 260px; margin-bottom: 10px; }
+.compare-band { grid-template-columns: repeat(2, 1fr); }
+.compare-card .kpi__value { color: var(--primary); }
+.compare-scatters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 10px 0; }
+.compare-scatter { margin: 0; }
+.compare-scatter figcaption { font-size: 12px; margin-bottom: 4px; }
+.compare-scatter svg { width: 100%; height: auto; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); }
+.compare-scatter__frame { fill: #fff; stroke: var(--border); }
+.compare-scatter__benign { fill: #94a3b8; opacity: 0.35; }
+.compare-scatter__detected { fill: var(--danger); opacity: 0.85; }
+.compare-scatter__missed { fill: var(--success); opacity: 0.9; }
+.compare-scatter__axis { font-size: 9px; fill: var(--text-muted); text-anchor: middle; }
+.compare-legend { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 3px 0 6px; vertical-align: middle; }
+.compare-legend--detected { background: var(--danger); }
+.compare-legend--missed { background: var(--success); }
+.compare-legend--benign { background: #94a3b8; }
+.compare-drill td:nth-child(2), .compare-drill td:nth-child(3) { font-variant-numeric: tabular-nums; text-align: right; }
+.compare-drill__verdict td { font-weight: 600; }
+.verdict--attack { color: var(--danger); }
+.verdict--benign { color: var(--success); }

@@ -15,7 +15,7 @@ const LAB_STATUS = {
  * `panel` : panneau de droite ouvert ('simulation', 'detection' ou null).
  * `active` : ce qui tourne en ce moment { simulation, detection, dataset, training }.
  */
-export default function Toolbar({ lab, topologyId, onChooseTopology, panel, onTogglePanel, active, onOpenDatasets, onOpenModels }) {
+export default function Toolbar({ lab, topologyId, onChooseTopology, panel, onTogglePanel, active, onOpenDatasets, onOpenModels, onOpenCompare }) {
   const status = LAB_STATUS[lab.status];
   const running = lab.status === 'running';
   const online = lab.status !== 'offline';
@@ -63,6 +63,12 @@ export default function Toolbar({ lab, topologyId, onChooseTopology, panel, onTo
           <button type="button" className={buttonClass(active.training)} onClick={onOpenModels}
             title="Entraîner et évaluer un modèle ML-IDS sur les datasets">
             🧠 IDS{active.training ? ' (entraînement…)' : ''}
+          </button>
+        )}
+        {online && (
+          <button type="button" className="btn" onClick={onOpenCompare}
+            title="Comparer deux runs enregistrés (ex. attaque classique vs furtive) : rejoue un modèle sur leurs flux">
+            ⚖ Comparer
           </button>
         )}
       </div>
