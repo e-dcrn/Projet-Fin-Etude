@@ -253,71 +253,11 @@ def outcome_of(predicted_attack, truly_attack,
           \item \textbf{LAN + DMZ} : un routeur, 2 serveurs.
           \item \textbf{Trois réseaux} : 2 routeurs, sonde sur le transit.
         \end{itemize}
-        Chacune = un \texttt{docker-compose.yml} écrit à la main + un \texttt{topology.json} pour le dessin.
+        Chacune = un \texttt{docker-compose.yml} + un \texttt{topology.json} pour le dessin.
       \end{block}
     \end{column}
   \end{columns}
-  \vfill
-  \textbf{Pourquoi :} une topologie figée n'a rien à vérifier ; si elle a marché une fois, elle marche toujours. Docker Compose est connu des enseignants et lisible sans notre code.
   \note{Démarrage : POST /api/lab lance docker compose up, de façon synchrone. Le schéma reste affiché (React Flow), en lecture seule. Décision n° 91 du journal. Commit 0bbc090 : environ −4 300 lignes nettes.}
-\end{frame}
-
-\begin{frame}{Ce qu'on a retiré : l'interface}
-  \small
-  \renewcommand{\arraystretch}{1.22}
-  \begin{tabularx}{\linewidth}{@{}p{.36\linewidth}X@{}}
-    \toprule
-    \textbf{Retiré} & \textbf{Pourquoi} \\
-    \midrule
-    Éditeur de topologie (+ 6 exemples) & remplacé par 3 topologies fixes (slide précédente) \\
-    Animation des paquets & aucun lien avec la chaîne ML ; un \texttt{tcpdump} de plus par équipement \\
-    Terminal web et capture live (vue Wireshark) & toute la pile WebSocket ($\approx -2\,400$ lignes) ; remplacés par \texttt{docker exec} et le pcap des datasets, ouvrable dans Wireshark \\
-    Panneaux Trafic et Scénarios séparés, presets, choix des destinataires & fusionnés en un panneau « Simulation » : un seul endroit pour générer le trafic \\
-    Champ VLAN des switches & validé et affiché, mais sans aucun effet sur le réseau \\
-    Volets à glisser-déposer, overlays du schéma & confort d'interface sans lien avec le sujet \\
-    \bottomrule
-  \end{tabularx}
-  \note{Le clic sur un équipement ouvre maintenant une popup avec la commande docker exec à copier. Décisions n° 58, 75, 79, 89, 93, 100.}
-\end{frame}
-
-\begin{frame}{Ce qu'on a retiré : le moteur et les données}
-  \small
-  \renewcommand{\arraystretch}{1.18}
-  \begin{tabularx}{\linewidth}{@{}p{.36\linewidth}X@{}}
-    \toprule
-    \textbf{Retiré} & \textbf{Pourquoi} \\
-    \midrule
-    Exporteur de flux interne & colonnes différentes de CICFlowMeter : inutilisable par le modèle \\
-    Dossier ConCap, mode multiclasse & non utilisés ; le détail par type d'attaque reste dans le rapport \\
-    Découpage temporel, choix d'algorithme & une seule option réelle : random forest, test sur variantes \\
-    Export des flux d'un scénario, empreinte de topologie & doublon des datasets ; ne servait qu'à un avertissement \\
-    HTTPS, Telnet, SMTP, DNS, MySQL, ports simulés & serveurs réduits à \textbf{HTTP, SSH, FTP} : les seuls utiles à nos scénarios \\
-    Server-Sent Events & remplacés par un polling \texttt{GET /api/jobs/\{id\}} chaque seconde \\
-    7 classes d'erreur, traductions des erreurs Docker & \texttt{HTTPException} de FastAPI ; l'erreur Docker remonte telle quelle \\
-    Validations en double, code mort (Docker $<$ 28…) & le front valide déjà ; ces cas n'arrivent pas dans le lab \\
-    \bottomrule
-  \end{tabularx}
-  \note{Décisions n° 59 à 61, 76, 77, 81, 82, 86, 88, 90, 92, 95, 96. Conséquence de la réduction des services : les anciens datasets et modèles sont à régénérer.}
-\end{frame}
-
-\begin{frame}{Ce qu'on a gardé, et pourquoi}
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\linewidth}{@{}p{.34\linewidth}X@{}}
-    \toprule
-    \textbf{Gardé} & \textbf{Pourquoi} \\
-    \midrule
-    Vrais services, agent bénin à sessions réelles & une bannière ou un rejeu ferait apprendre des artefacts du lab \\
-    Pause de l'agent bénin de l'attaquant & rend l'étiquetage exact, en dataset \textbf{et} en direct \\
-    Sonde passive, CICFlowMeter, fenêtres de 5 s & même point de vue et mêmes flux à l'entraînement et en détection \\
-    Datasets + variantes de test & évaluation sur des données jamais vues, sans découpage aléatoire \\
-    Random forest, score par type d'attaque & un score global masquait une classe ratée \\
-    Détection en direct + vérité terrain & mesurer en conditions réelles, distinguer les erreurs \\
-    Tâches de fond (datasets, entraînement) & vraiment longues : il faut voir l'avancement \\
-    Choix du modèle dans la détection & d'autres modèles sont prévus \\
-    \bottomrule
-  \end{tabularx}
-  \note{Tout ce qui est gardé est sur la chaîne réseau → données → entraînement → détection. Le schéma de la topologie est aussi conservé, en lecture seule. Le flux du moteur est documenté dans code/docs/schema\_flux\_backend.md.}
 \end{frame}
 
 % ============================================================== premières attaques
@@ -400,10 +340,7 @@ def outcome_of(predicted_attack, truly_attack,
   \begin{itemize}\espacement
     \item Même serveur, mêmes mots de passe, même nombre d'essais.
     \item La seule différence : la \textbf{forme des flux} dans les features que le modèle regarde.
-    \item Fausses alertes ajoutées sur le bénin : \textbf{0,26\,\%}.
   \end{itemize}
-  \vfill
-  \textbf{Leçon :} pour évader un IDS \textbf{par flux}, changer le rythme ne suffit pas ; il faut rendre les \textbf{flux} eux-mêmes semblables au trafic normal.
   \note{Modèle 9483ed0c, 21 novembre 2026, topologie Petit LAN. Imiter seulement le client (ftplib) sans étoffer les flux : ~45–56\,\% de rappel, insuffisant. Détail : rapport\_evasion.md. C'est l'évasion Okada (XAI-driven) réalisée en problem-space.}
 \end{frame}
 
